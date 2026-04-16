@@ -62,6 +62,17 @@ make compile
 
 ---
 
+## Sample Output
+
+```
+[EDR Agent] Started — reading bpftrace events from stdin...
+[2026-04-16 18:45:34] ALERT severity=HIGH rule=execution_from_tmp pid=2741463 parent=sh path=/tmp/test_edr_ls
+```
+
+Real output from a GCP VM (Debian 12, kernel 6.1.0-44-cloud-amd64) is in [alerts/alert.log](alerts/alert.log).
+
+---
+
 ## Kernel Code Credit
 
 `kernel/execsnoop.bpf.c` and `execsnoop.h` are from [eunomia-bpf/bpf-developer-tutorial](https://github.com/eunomia-bpf/bpf-developer-tutorial) (src/7-execsnoop), used here for educational purposes.

@@ -1,0 +1,6 @@
+[2026-04-16 18:27:24] ALERT severity=HIGH rule=execution_from_tmp pid=2739884 parent=sh path=/tmp/test_edr_ls
+[2026-04-16 18:27:24] ALERT severity=HIGH rule=execution_from_tmp pid=2739884 parent=sh path=/tmp/test_edr_ls
+[2026-04-16 18:32:24] ALERT severity=HIGH rule=execution_from_tmp pid=2740506 parent=sh path=/tmp/test_edr_ls
+[2026-04-16 18:33:29] ALERT severity=HIGH rule=execution_from_tmp pid=2740584 parent=sh path=/tmp/test_edr_ls
+[2026-04-16 18:45:34] ALERT severity=HIGH rule=execution_from_tmp pid=2741463 parent=sh path=/tmp/test_edr_ls
+[2026-04-16 18:45:40] ALERT severity=HIGH rule=execution_from_tmp pid=2741473 parent=sh path=/tmp/test_edr_ls
