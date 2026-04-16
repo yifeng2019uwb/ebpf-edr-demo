@@ -1,4 +1,4 @@
-alerts/alert.log
+# alert.log is committed to show real generated output
 kernel/*.bpf.o
 __pycache__/
 *.pyc

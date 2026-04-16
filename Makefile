@@ -15,7 +15,7 @@ compile:
 
 # Run the full EDR pipeline: bpftrace kernel monitor → Python agent
 run:
-	sudo bpftrace -e 'tracepoint:syscalls:sys_enter_execve { printf("{\"pid\":%d,\"parent\":\"%s\",\"path\":\"%s\"}\n", pid, comm, str(args->filename)); }' | python3 agent/main.py
+	bash scripts/monitor.sh
 
 # Trigger a test alert — run this in a second terminal while 'make run' is active
 test:
