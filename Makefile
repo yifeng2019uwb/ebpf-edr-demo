@@ -8,25 +8,25 @@ BPF_OBJ    = $(KERNEL_DIR)/execsnoop.bpf.o
 compile:
 	clang -O2 -g -target bpf -D__TARGET_ARCH_x86 \
 		-I/usr/include/bpf \
-		-I../bpf-developer-tutorial/third_party/vmlinux/x86 \
+		-I./kernel \
 		-c $(BPF_SRC) -o $(BPF_OBJ)
 	@echo "Compiled: $(BPF_OBJ)"
 	@file $(BPF_OBJ)
 
 # Run the full EDR pipeline: bpftrace kernel monitor → Python agent
 run:
-	sudo bpftrace -f json -e ' \
-	tracepoint:syscalls:sys_enter_execve { \
-		printf("{\"pid\":%d,\"parent\":\"%s\",\"path\":\"%s\"}\n", \
-			pid, comm, str(args->filename)); \
-	}' | python3 agent/main.py
+	sudo bpftrace -e 'tracepoint:syscalls:sys_enter_execve { printf("{\"pid\":%d,\"parent\":\"%s\",\"path\":\"%s\"}\n", pid, comm, str(args->filename)); }' | python3 agent/main.py
 
-# Trigger a test alert by executing a binary from /tmp
+# Trigger a test alert — starts pipeline, fires test event, shows alert, stops
 test:
+	@echo "Starting EDR pipeline in background..."
+	@sudo bpftrace -e 'tracepoint:syscalls:sys_enter_execve { printf("{\"pid\":%d,\"parent\":\"%s\",\"path\":\"%s\"}\n", pid, comm, str(args->filename)); }' | python3 agent/main.py &
+	@sleep 2
 	@echo "Triggering test alert: execution from /tmp..."
-	cp /bin/ls /tmp/test_edr_ls
-	/tmp/test_edr_ls /tmp
-	rm /tmp/test_edr_ls
-	@echo "Check alerts/alert.log for the triggered alert."
+	@cp /bin/ls /tmp/test_edr_ls && /tmp/test_edr_ls /tmp && rm /tmp/test_edr_ls
+	@sleep 1
+	@echo "--- Alert Log ---"
+	@cat alerts/alert.log 2>/dev/null || echo "No alerts generated"
+	@sudo pkill -f bpftrace || true
 
 .PHONY: compile run test
