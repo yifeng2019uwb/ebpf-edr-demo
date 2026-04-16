@@ -1,0 +1,5 @@
+alerts/alert.log
+kernel/*.bpf.o
+__pycache__/
+*.pyc
+.DS_Store
