@@ -17,17 +17,10 @@ compile:
 run:
 	sudo bpftrace -e 'tracepoint:syscalls:sys_enter_execve { printf("{\"pid\":%d,\"parent\":\"%s\",\"path\":\"%s\"}\n", pid, comm, str(args->filename)); }' | python3 agent/main.py
 
-# Trigger a test alert — starts pipeline, fires test event, shows alert, stops
+# Trigger a test alert — run this in a second terminal while 'make run' is active
 test:
-	@rm -f alerts/alert.log
-	@echo "Starting EDR pipeline in background..."
-	@sudo bpftrace -e 'tracepoint:syscalls:sys_enter_execve { printf("{\"pid\":%d,\"parent\":\"%s\",\"path\":\"%s\"}\n", pid, comm, str(args->filename)); }' | python3 agent/main.py &
-	@sleep 2
 	@echo "Triggering test alert: execution from /tmp..."
 	@cp /bin/ls /tmp/test_edr_ls && /tmp/test_edr_ls > /dev/null && rm /tmp/test_edr_ls
-	@sleep 1
-	@echo "--- Alert Log ---"
-	@cat alerts/alert.log 2>/dev/null || echo "No alerts generated"
-	@sudo pkill -f bpftrace || true
+	@echo "Check Terminal 1 for the alert."
 
 .PHONY: compile run test
