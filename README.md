@@ -1,89 +1,42 @@
 # ebpf-edr-demo
 
-A simple EDR (Endpoint Detection and Response) pipeline using eBPF for kernel-level process monitoring.
-
-Built as a learning project to demonstrate how eBPF works as the data collection layer in an EDR system.
+eBPF-based runtime security monitor for containerized services, built for endpoint security and EDR (Endpoint Detection and Response) research.
 
 ---
 
-## How It Works
+## Background
 
-```
-Linux Kernel (execve syscall)
-        │
-        ▼
-   bpftrace hook  →  JSON events
-        │
-        ▼
-   Python agent  →  match rules  →  alerts
-```
+This project monitors [cloud-native-order-processor](https://github.com/yifeng2019uwb/cloud-native-order-processor) — a production-style microservices platform deployed on a GCP VM (Debian 12, kernel 6.1).
 
-bpftrace attaches to the `execve` syscall and emits a JSON event every time a process spawns. The Python agent reads that stream, applies detection rules, and generates structured alerts.
+The order processor runs 8 Docker containers:
 
----
+| Container | Role |
+|-----------|------|
+| `gateway` | Go API gateway, port 8080 |
+| `auth_service` | Python/uvicorn, JWT authentication |
+| `user_service` | Python/uvicorn, balance and portfolio |
+| `inventory_service` | Python/uvicorn, asset catalog |
+| `order_service` | Python/uvicorn, trade execution |
+| `insights_service` | Python/uvicorn, AI portfolio insights |
+| `redis` | Rate limiting, IP blocking, distributed locks |
+| `localstack` | DynamoDB (local AWS emulation) |
 
-## Detection Rules
-
-| Rule | Severity |
-|------|----------|
-| Shell spawned from server process (nginx, apache, python3) | CRITICAL |
-| Binary executed from `/tmp` | HIGH |
-| Binary executed from `/dev/shm` | HIGH |
-
-Rules and baseline suppression are configured in `rules/rules.yaml`.
+The goal: attach eBPF probes to the running kernel on the GCP VM, observe all 8 services at the syscall and network level, and generate security alerts — without modifying any service code.
 
 ---
 
-## Usage
+## Projects
 
-**Run the pipeline:**
-```bash
-make run
-```
+### New — Go + cilium/ebpf monitor (this directory)
 
-**Trigger a test alert:**
-```bash
-make test
-```
+Container-aware runtime security monitor for the cloud-native order processor.
+Uses [cilium/ebpf](https://github.com/cilium/ebpf) to load BPF programs from Go,
+maps kernel events to Docker containers via cgroup IDs, and generates structured alerts.
 
-**Compile the eBPF kernel C program:**
-```bash
-make compile
-```
+> Work in progress.
 
----
+### Legacy — bpftrace + Python EDR demo
 
-## Requirements
+Original learning project: bpftrace hooks `execve`, Python agent applies detection rules.
 
-- Linux kernel 4.18+
-- bpftrace v0.17.0+
-- Python 3.8+, `pip install pyyaml`
-- For compile: `clang`, `libbpf-dev`
-
----
-
-## Screenshots
-
-| | |
-|---|---|
-| ![vmlinux.h generated from kernel](screenshots/Screenshot%202026-04-16%20at%2011.02.23%20AM.png) | ![BPF bytecode disassembly](screenshots/execsnoop.bpf.o_typecode.png) |
-| Generating `vmlinux.h` from running kernel via `bpftool` | Compiled BPF bytecode (`llvm-objdump`) |
-| ![make compile + make run](screenshots/Screenshot%202026-04-16%20at%2011.15.20%20AM.png) | ![live alerts firing](screenshots/Screenshot%202026-04-16%20at%2011.33.49%20AM.png) |
-| `make compile` succeeds + pipeline starts | Live alerts firing in Terminal 1 while `make test` runs in Terminal 2 |
-
----
-
-## Sample Output
-
-```
-[EDR Agent] Started — reading bpftrace events from stdin...
-[2026-04-16 18:45:34] ALERT severity=HIGH rule=execution_from_tmp pid=2741463 parent=sh path=/tmp/test_edr_ls
-```
-
-Real output from a GCP VM (Debian 12, kernel 6.1.0-44-cloud-amd64) is in [alerts/alert.log](alerts/alert.log).
-
----
-
-## Kernel Code Credit
-
-`kernel/execsnoop.bpf.c` and `execsnoop.h` are from [eunomia-bpf/bpf-developer-tutorial](https://github.com/eunomia-bpf/bpf-developer-tutorial) (src/7-execsnoop), used here for educational purposes.
+See [legacy/](legacy/) for code and usage.
