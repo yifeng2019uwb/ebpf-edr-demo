@@ -1,0 +1,2 @@
+*.bpf.c linguist-language=C
+agent/*.py linguist-language=Python

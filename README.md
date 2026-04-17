@@ -62,6 +62,17 @@ make compile
 
 ---
 
+## Screenshots
+
+| | |
+|---|---|
+| ![vmlinux.h generated from kernel](screenshots/Screenshot%202026-04-16%20at%2011.02.23%20AM.png) | ![BPF bytecode disassembly](screenshots/execsnoop.bpf.o_typecode.png) |
+| Generating `vmlinux.h` from running kernel via `bpftool` | Compiled BPF bytecode (`llvm-objdump`) |
+| ![make compile + make run](screenshots/Screenshot%202026-04-16%20at%2011.15.20%20AM.png) | ![live alerts firing](screenshots/Screenshot%202026-04-16%20at%2011.33.49%20AM.png) |
+| `make compile` succeeds + pipeline starts | Live alerts firing in Terminal 1 while `make test` runs in Terminal 2 |
+
+---
+
 ## Sample Output
 
 ```
