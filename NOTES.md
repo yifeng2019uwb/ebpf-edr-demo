@@ -8,6 +8,17 @@
 - `execsnoop.bpf.c` + `main.go` working, capturing execve events
 - Confirmed running via snapshot
 
+---
+
+## 2026-04-18 — Day 2 Plan
+
+- [ ] Understand and run remaining 3 BPF programs (opensnoop, tcpconnlat, kprobe/fentry)
+- [ ] Migrate all to ring buffer — consistent pattern across all monitors
+- [ ] Add detection rules — alert on suspicious behavior
+- [ ] Test against CNOP — validate with real services
+
+---
+
 ### TASK_COMM_LEN: 16 → 128
 Changed `#define TASK_COMM_LEN 16` to `128` in `execsnoop.bpf.c` to capture full executable paths instead of truncated 16-char names.
 Must match the Go struct field size — `Comm [128]byte` in `main.go`.

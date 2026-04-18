@@ -15,9 +15,10 @@ Personal learning project to practice eBPF and EDR concepts using a real running
 Build a working EDR agent that monitors containerized services using Go + cilium/ebpf.
 
 ### What we build
-- eBPF programs to capture process, network, and file events from containers
+- 2 detection monitors: process monitor (execsnoop) + file monitor (opensnoop)
+- 1 enforcement hook: lsm-connect (block suspicious connections at kernel level)
 - Go userspace agent that reads events, matches detection rules, and emits JSON alerts
-- Optional enforce mode that kills a matching process
+- Each monitor validated against real container behavior before moving on
 
 ### Out of scope
 - Production hardening, scalability, dashboards
@@ -73,11 +74,14 @@ ssh -L 8080:localhost:8080 <user>@<GCP_VM_IP>
 ┌─────────────────────────────────────────────────┐
 │  KERNEL  (.bpf.c programs)                      │
 │                                                 │
-│  process_monitor    network_monitor  file_monitor│
-│  sys_enter_execve   tcp_v4_connect   sys_enter_  │
-│                                     openat       │
-│         │                │               │      │
-│         └────────────────┼───────────────┘      │
+│  process_monitor         file_monitor             │
+│  sys_enter_execve        sys_enter_openat         │
+│  (detect)                (detect)                 │
+│                                                  │
+│  lsm/socket_connect                              │
+│  (block — returns -EPERM)                        │
+│         │                    │                   │
+│         └────────────────────┘                   │
 │                          │                      │
 │               BPF Ring Buffer                   │
 └──────────────────────────┼──────────────────────┘
@@ -107,21 +111,19 @@ ssh -L 8080:localhost:8080 <user>@<GCP_VM_IP>
 
 **What to learn for each part (from [bpf-developer-tutorial](https://github.com/eunomia-bpf/bpf-developer-tutorial)):**
 
-Batch 1 — build the kernel plane + event transport first:
+Batch 1 — detection monitors:
 
 | Lesson | Topic | Covers |
 |--------|-------|--------|
-| 04 | opensnoop | file_monitor — `openat` hook |
 | 07 | execsnoop | process_monitor — `execve` hook |
-| 08 | ringbuf | ring buffer — how kernel sends events to Go agent |
+| 04 | opensnoop | file_monitor — `openat` hook |
+| 08 | ringbuf | migrate both to ring buffer |
 
-Batch 2 — add network monitor + enforce mode:
+Batch 2 — enforcement:
 
 | Lesson | Topic | Covers |
 |--------|-------|--------|
-| 02/03 | kprobe / fentry | hook pattern needed for network_monitor |
-| 13 | tcpconnlat | network_monitor — `tcp_v4_connect` |
-| 19 | lsm-connect | enforce mode — block at kernel level instead of SIGKILL |
+| 19 | lsm-connect | block connections at kernel level — no TOCTOU gap |
 
 ### Why these 3 monitors
 
@@ -135,8 +137,8 @@ So any of these happening at runtime is suspicious:
 | If we see... | Monitor | What it likely means |
 |---|---|---|
 | `auth_service` spawns `bash` or `nc` | process_monitor | Code execution — attacker got in |
-| `order_service` connects to external IP | network_monitor | Exfiltration or C2 callback |
 | Any service reads `/etc/shadow` or `*.key` | file_monitor | Credential theft attempt |
+| Service connects to blocked IP | lsm-connect | Exfiltration attempt — blocked at kernel level |
 
 ### What file_monitor watches
 - Credential files, private keys, environment secrets, Docker socket
@@ -162,14 +164,14 @@ So any of these happening at runtime is suspicious:
 ## 5. Implementation Plan
 
 **Day 1**
-- [ ] Phase 1 — Process monitor
-- [ ] Phase 2 — Container correlation
-- [ ] Phase 3 — Network + file monitors
+- [x] Phase 1 — Process monitor (execsnoop) — done
+- [ ] Phase 2 — File monitor (opensnoop) + migrate both to ring buffer
+- [ ] Phase 3 — Detection rules + JSON alerts
 
 **Day 2**
-- [ ] Phase 4 — Detection engine + JSON alerts
-- [ ] Phase 5 — Enforce mode (if time allows)
-- [ ] Phase 6 — Validation
+- [ ] Phase 4 — Container correlation
+- [ ] Phase 5 — lsm-connect enforcement (if time allows)
+- [ ] Phase 6 — Validation against CNOP
 
 ## 6. Validation
 <!-- How to verify it works -->
