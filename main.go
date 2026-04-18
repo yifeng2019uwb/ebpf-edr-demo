@@ -15,12 +15,14 @@ import (
 	"github.com/cilium/ebpf/rlimit"
 )
 
+const TaskCommLen = 128
+
 // Must match execsnoop.h struct event
 type Event struct {
 	Pid  int32
 	Ppid int32
 	Uid  int32
-	Comm [16]byte
+	Comm [TaskCommLen]byte
 }
 
 func main() {

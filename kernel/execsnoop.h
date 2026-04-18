@@ -2,7 +2,8 @@
 #ifndef __EXECSNOOP_H
 #define __EXECSNOOP_H
 
-#define TASK_COMM_LEN 16
+// show pull path, 4 + 4 + 4 + 128 = 140 bytes with in eBPF stack limit of 512 bytes
+#define TASK_COMM_LEN 128
 
 struct event {
 	int pid;
