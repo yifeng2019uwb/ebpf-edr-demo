@@ -39,8 +39,10 @@ ls *.go *.o
 ```
 
 ## Build and Run
+// add main.go
 
 ```bash
+go mod tidy
 go build
 sudo ./ebpf-edr-demo
 ```
