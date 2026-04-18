@@ -10,16 +10,16 @@ This project monitors [cloud-native-order-processor](https://github.com/yifeng20
 
 The order processor runs 8 Docker containers:
 
-| Container | Role |
-|-----------|------|
-| `gateway` | Go API gateway, port 8080 |
-| `auth_service` | Python/uvicorn, JWT authentication |
-| `user_service` | Python/uvicorn, balance and portfolio |
-| `inventory_service` | Python/uvicorn, asset catalog |
-| `order_service` | Python/uvicorn, trade execution |
-| `insights_service` | Python/uvicorn, AI portfolio insights |
-| `redis` | Rate limiting, IP blocking, distributed locks |
-| `localstack` | DynamoDB (local AWS emulation) |
+| Container             | Role                                      |
+|-----------------------|-------------------------------------------|
+| `gateway`             | Go API gateway, port 8080                 |
+| `auth_service`        | Python/uvicorn, JWT authentication        |
+| `user_service`        | Python/uvicorn, balance and portfolio     |
+| `inventory_service`   | Python/uvicorn, asset catalog             |
+| `order_service`       | Python/uvicorn, trade execution           |
+| `insights_service`    | Python/uvicorn, AI portfolio insights     |
+| `redis`               | Rate limiting, IP blocking, distributed locks |
+| `localstack`          | DynamoDB (local AWS emulation)            |
 
 The goal: attach eBPF probes to the running kernel on the GCP VM, observe all 8 services at the syscall and network level, and generate security alerts — without modifying any service code.
 
