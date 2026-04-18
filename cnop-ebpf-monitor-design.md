@@ -139,26 +139,20 @@ So any of these happening at runtime is suspicious:
 | Any service reads `/etc/shadow` or `*.key` | file_monitor | Credential theft attempt |
 
 ### What file_monitor watches
-
-| Path | Why it matters |
-|------|----------------|
-| `/etc/passwd`, `/etc/shadow` | Credential dumping |
-| `*.key`, `*.pem`, `id_rsa` | Private key access |
-| `/proc/*/environ` | Environment variables often hold JWT secrets, DB passwords |
-| `/var/run/docker.sock` | Container escape — access to this socket = control of the Docker daemon |
+- Credential files, private keys, environment secrets, Docker socket
+- Specific paths TBD during implementation
 
 ### Container Correlation
-- Map each event to its container using mount namespace ID (`mnt_ns`)
-- Details TBD during implementation
+- Distinguish host processes from container processes using mount namespace ID (`mnt_ns`)
+- TBD during implementation
 
 ### Detection Engine
-- Rules evaluated in Go userspace against each event
-- Each rule: ID, severity, MITRE technique, match condition
-- Details TBD during implementation
+- Rules in Go userspace: ID, severity, MITRE technique, match condition
+- TBD during implementation
 
 ### Response Mode
-- Phase 1–4: Audit only — print JSON alert to stdout
-- Phase 5 (future): Enforce mode — requires whitelist validation first
+- Phase 1–4: Audit only — JSON alert to stdout
+- Phase 5 (if time allows): narrow enforce demo only
 
 ## 4. Threat Model
 <!-- What we detect and why -->
@@ -166,12 +160,15 @@ So any of these happening at runtime is suspicious:
 - [ ] Known false positives / whitelists
 
 ## 5. Implementation Plan
-<!-- Phase by phase, each with a done condition -->
-- [ ] Phase 1 — Process monitor end-to-end
+
+**Day 1**
+- [ ] Phase 1 — Process monitor
 - [ ] Phase 2 — Container correlation
 - [ ] Phase 3 — Network + file monitors
+
+**Day 2**
 - [ ] Phase 4 — Detection engine + JSON alerts
-- [ ] Phase 5 — Enforce mode
+- [ ] Phase 5 — Enforce mode (if time allows)
 - [ ] Phase 6 — Validation
 
 ## 6. Validation
