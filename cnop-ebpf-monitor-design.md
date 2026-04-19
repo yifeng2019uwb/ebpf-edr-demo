@@ -74,14 +74,14 @@ ssh -L 8080:localhost:8080 <user>@<GCP_VM_IP>
 ┌─────────────────────────────────────────────────┐
 │  KERNEL  (.bpf.c programs)                      │
 │                                                 │
-│  process_monitor         file_monitor             │
-│  sys_enter_execve        sys_enter_openat         │
-│  (detect)                (detect)                 │
-│                                                  │
-│  lsm/socket_connect                              │
-│  (block — returns -EPERM)                        │
-│         │                    │                   │
-│         └────────────────────┘                   │
+│  process_monitor         file_monitor           │
+│  sys_enter_execve        sys_enter_openat       │
+│  (detect)                (detect)               │
+│                                                 │
+│  lsm/socket_connect                             │
+│  (block — returns -EPERM)                       │
+│         │                    │                  │
+│         └────────────────────┘                  │
 │                          │                      │
 │               BPF Ring Buffer                   │
 └──────────────────────────┼──────────────────────┘
@@ -113,11 +113,11 @@ ssh -L 8080:localhost:8080 <user>@<GCP_VM_IP>
 
 Batch 1 — detection monitors:
 
-| Lesson | Topic | Covers |
-|--------|-------|--------|
-| 07 | execsnoop | process_monitor — `execve` hook |
-| 04 | opensnoop | file_monitor — `openat` hook |
-| 08 | ringbuf | migrate both to ring buffer |
+| Lesson | Topic    | Covers                          |
+|--------|----------|---------------------------------|
+| 07    | execsnoop | process_monitor — `execve` hook |
+| 04    | opensnoop | file_monitor — `openat` hook |
+| 08    | ringbuf   | migrate both to ring buffer |
 
 Batch 2 — enforcement:
 
