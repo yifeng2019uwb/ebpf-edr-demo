@@ -1,2 +1,14 @@
-*.bpf.c linguist-language=C
-agent/*.py linguist-language=Python
+# Mark generated files as non-primary languages
+*_bpfeb.go linguist-generated=true
+*_bpfel.go linguist-generated=true
+*.o linguist-binary=true
+
+# Mark kernel C files correctly but exclude from stats
+kernel/*.c linguist-language=C
+kernel/*.h linguist-language=C
+
+# Mark Go files as primary
+*.go linguist-language=Go
+main.go linguist-detectable=true
+rules.go linguist-detectable=true
+alert.go linguist-detectable=true
