@@ -54,6 +54,50 @@ Ran full integration test suite while monitor was running — all tests passed.
 Confirms no false positives during normal order processor operation.
 Snapshot: `2026-04-17 at 10.04.14 PM`, `10.16.10 PM`
 
+---
+
+## 2026-04-19 — Day 3 plan
+
+### Tomorrow's work
+
+**Priority 1 — Container Correlation (mnt_ns)**
+
+Use BPF CO-RE to read mount namespace ID from kernel task_struct in `execsnoop.bpf.c`:
+
+```c
+// Add to event struct
+__u64 mnt_ns_id;
+
+// In tracepoint handler
+struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+e->mnt_ns_id = BPF_CORE_READ(task, nsproxy, mnt_ns, ns.inum);
+```
+
+In Go, update event struct to add `MntNsId uint64`.
+Write `container.go` — scan `/proc/*/ns/mnt` at startup, build `mnt_ns_id → container_name` map.
+Alert output will gain `container=order-processor-auth_service`.
+
+Why this approach over /proc/cgroup:
+- Reads namespace ID at kernel level — more accurate
+- Shows CO-RE knowledge (BPF_CORE_READ from task_struct)
+- Kernel 6.1 has full BTF/CO-RE support — safe to use
+
+**Priority 2 — opensnoop rewrite (ring buffer)**
+- Rewrite `opensnoop.bpf.c` with ring buffer + full event struct (filename, pid, ppid, uid, comm, mnt_ns_id)
+- Add file access detection rules in Go
+
+**Priority 3 — lsm-connect rewrite (ring buffer)**
+- Rewrite `lsm-connect.bpf.c` with ring buffer so Go can read blocked connection events
+- Add to main.go goroutine alongside execsnoop/exitsnoop
+- "Security guard not camera" — blocks action before it happens
+
+**Priority 4 — Final validation**
+- Run all integration tests while monitor active
+- Trigger all detection rules (shell spawn, curl, file access, blocked connection)
+- Capture evidence screenshots
+
+---
+
 ### Perf Buffer vs Ring Buffer
 Current `execsnoop.bpf.c` uses `BPF_MAP_TYPE_PERF_EVENT_ARRAY` (perf buffer, older).
 Ring buffer (`BPF_MAP_TYPE_RINGBUF`) is newer, more efficient, lower overhead — preferred for production EDR.
