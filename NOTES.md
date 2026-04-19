@@ -26,7 +26,7 @@
 - Screenshot: `legacy/screenshots/ebpf-alert1.png`
 - ⚠️ Bug in alert.log output: `comm=%!s(int32=...)` — format string mismatch in `alert.go Send()`
   - Format has `pid=%d comm=%s msg=%s` but passes `Pid, Ppid, Uid, Comm, Message`
-  - Fix: `pid=%d ppid=%d uid=%d comm=%s msg=%s`
+  - Fix: `pid=%d ppid=%d uid=%d comm=%s msg=%s` ✅ fixed and confirmed working
 
 ### rules.go — detection rules added
 - Whitelist: `sshd`, `runc`, `dockerd`, `containerd` — never alert

@@ -169,7 +169,8 @@ So any of these happening at runtime is suspicious:
 
 **Day 2**
 - [x] Phase 2 — Validate current monitors against CNOP — `curl_from_container` alert confirmed
-- [ ] Phase 3 — Fix alert.go format string bug, then modify .bpf.c to add mnt_ns
+- [x] Phase 3 — Fix alert.go format string bug ✅ confirmed clean output
+- [ ] Phase 3b — Modify .bpf.c to add mnt_ns for container correlation
 - [ ] Phase 4 — lsm-connect compile + test (if time allows)
 
 ## 6. Validation
