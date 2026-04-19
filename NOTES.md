@@ -15,9 +15,18 @@
 - [x] Added exitsnoop alongside execsnoop — both running concurrently in main.go
 - [x] exitsnoop uses ring buffer, execsnoop uses perf buffer — good side-by-side comparison before migration
 - [x] Integration tests pass while monitor runs — no false positives confirmed (snapshot: PrintProcess&Exit.png)
-- [ ] Validate detection against CNOP — trigger known events, confirm alerts fire
+- [x] Validate detection against CNOP — trigger known events, confirm alerts fire
 - [ ] Modify existing .bpf.c files to capture additional fields (mnt_ns, container info)
 - [ ] lsm-connect — compile and test (CONFIG_BPF_LSM=y confirmed)
+
+### Manual validation — alert confirmed working
+- Triggered `curl` inside container → `[ALERT] level=MEDIUM rule=curl_from_container` fired correctly
+- Alert written to stdout and `alerts/alert.log`
+- Integration tests running simultaneously — no false positives from normal test traffic
+- Screenshot: `legacy/screenshots/ebpf-alert1.png`
+- ⚠️ Bug in alert.log output: `comm=%!s(int32=...)` — format string mismatch in `alert.go Send()`
+  - Format has `pid=%d comm=%s msg=%s` but passes `Pid, Ppid, Uid, Comm, Message`
+  - Fix: `pid=%d ppid=%d uid=%d comm=%s msg=%s`
 
 ### rules.go — detection rules added
 - Whitelist: `sshd`, `runc`, `dockerd`, `containerd` — never alert

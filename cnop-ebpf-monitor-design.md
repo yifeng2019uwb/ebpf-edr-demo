@@ -168,8 +168,8 @@ So any of these happening at runtime is suspicious:
 - [x] Ring buffer pattern learned via exitsnoop
 
 **Day 2**
-- [ ] Phase 2 — Validate current monitors against CNOP (trigger → confirm alert)
-- [ ] Phase 3 — Modify .bpf.c to capture additional fields (mnt_ns, container info)
+- [x] Phase 2 — Validate current monitors against CNOP — `curl_from_container` alert confirmed
+- [ ] Phase 3 — Fix alert.go format string bug, then modify .bpf.c to add mnt_ns
 - [ ] Phase 4 — lsm-connect compile + test (if time allows)
 
 ## 6. Validation

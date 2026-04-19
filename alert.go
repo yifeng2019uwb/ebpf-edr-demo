@@ -41,7 +41,7 @@ func NewAlertHandler(path string) (*AlertHandler, error) {
 // TODO: add Slack webhook notification
 // TODO: add email via SMTP
 func (h *AlertHandler) Send(alert Alert) {
-	line := fmt.Sprintf("[%s] ALERT level=%s rule=%s pid=%d comm=%s msg=%s\n",
+	line := fmt.Sprintf("[%s] ALERT level=%s rule=%s pid=%d ppid=%d uid=%d comm=%s msg=%s\n",
 		time.Now().Format("2006-01-02 15:04:05"),
 		alert.Level, alert.Rule,
 		alert.Pid, alert.Ppid, alert.Uid,
