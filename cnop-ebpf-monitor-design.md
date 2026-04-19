@@ -164,14 +164,13 @@ So any of these happening at runtime is suspicious:
 ## 5. Implementation Plan
 
 **Day 1**
-- [x] Phase 1 — Process monitor (execsnoop) — done
-- [ ] Phase 2 — File monitor (opensnoop) + migrate both to ring buffer
-- [ ] Phase 3 — Detection rules + JSON alerts
+- [x] Phase 1 — Process monitor (execsnoop) + exit monitor (exitsnoop) running together
+- [x] Ring buffer pattern learned via exitsnoop
 
 **Day 2**
-- [ ] Phase 4 — Container correlation
-- [ ] Phase 5 — lsm-connect enforcement (if time allows)
-- [ ] Phase 6 — Validation against CNOP
+- [ ] Phase 2 — Validate current monitors against CNOP (trigger → confirm alert)
+- [ ] Phase 3 — Modify .bpf.c to capture additional fields (mnt_ns, container info)
+- [ ] Phase 4 — lsm-connect compile + test (if time allows)
 
 ## 6. Validation
 <!-- How to verify it works -->

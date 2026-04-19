@@ -10,12 +10,29 @@
 
 ---
 
-## 2026-04-18 — Day 2 Plan
+## 2026-04-18 — Day 2
 
-- [ ] Understand and run remaining 3 BPF programs (opensnoop, tcpconnlat, kprobe/fentry)
-- [ ] Migrate all to ring buffer — consistent pattern across all monitors
-- [ ] Add detection rules — alert on suspicious behavior
-- [ ] Test against CNOP — validate with real services
+- [x] Added exitsnoop alongside execsnoop — both running concurrently in main.go
+- [x] exitsnoop uses ring buffer, execsnoop uses perf buffer — good side-by-side comparison before migration
+- [x] Integration tests pass while monitor runs — no false positives confirmed (snapshot: PrintProcess&Exit.png)
+- [ ] Validate detection against CNOP — trigger known events, confirm alerts fire
+- [ ] Modify existing .bpf.c files to capture additional fields (mnt_ns, container info)
+- [ ] lsm-connect — compile and test (CONFIG_BPF_LSM=y confirmed)
+
+### rules.go — detection rules added
+- Whitelist: `sshd`, `runc`, `dockerd`, `containerd` — never alert
+- Shell rule: alert only on uid=0 shells (uid=1000 = your SSH session, skip)
+- Network rule: `nc`, `ncat`, `wget` from uid=0
+- `curl` handled separately — MEDIUM alert, TODO for container name check in Phase 2
+- `checkExitRules`: short-lived process with non-zero exit code → LOW alert
+- `networkPolicy` map: intent per container (inventory allowed CoinGecko, others no external)
+
+### alert.go — Alert struct updated
+- Added `Ppid` and `Uid` fields to `Alert` struct
+- ⚠️ Bug: `Send()` format string missing `ppid=%d uid=%d` — fix before running:
+  ```
+  fmt.Sprintf("... pid=%d ppid=%d uid=%d comm=%s msg=%s\n", ...)
+  ```
 
 ---
 
