@@ -194,26 +194,28 @@ No blocking. Safe for a live demo environment.
 - [x] Hybrid namespace strategy — unknown-ns CRITICAL, host overlay CRITICAL, immediate rescan on miss
 - [x] Network monitor — lsm-connect (socket_connect LSM hook, ring buffer, audit mode) ✅ validated
 - [x] Network rules — RFC 1918 filter, externalAllowedContainers allowlist, unauthorized external HIGH
-- [x] Named constants — shortLivedThresholdMs, nsRefreshInterval, externalAllowedContainers
+- [x] Named constants — `nsRefreshInterval`, `externalAllowedContainers`
 - [x] Validation suite — VALIDATION.md + validate.sh, 7 test cases, concurrent integration traffic ✅
-- [x] Noise fixes — host filter in checkExitRules, `id` in fileCommWhitelist, runc in exitWhitelist ✅
+- [x] Noise fixes — fileCommWhitelist (`id`, `bash`, `systemd-logind`), drop `short_lived_failure` rule ✅
 - [x] Restore .pem rule with path exception for `/site-packages/` and `/certifi/` ✅
 
 ## 6. Validation
 
 See `VALIDATION.md` for full test procedure and `validate.sh` for automated execution.
 
-### Manual test scenarios — all confirmed ✅
+### Manual test scenarios
 
 | Test | Command | Expected | Result |
 |------|---------|----------|--------|
 | T1 Shell spawn | `docker exec auth_service bash -c "id"` | CRITICAL `shell_spawn_container` | ✅ |
-| T2 Network tool | `docker exec auth_service wget http://1.1.1.1` | HIGH `network_tool_container` | ✅ |
+| T2 Network tool | `docker exec auth_service nc/wget ...` | HIGH `network_tool_container` | ⚠️ infra* |
 | T3 Shadow file | `docker exec auth_service cat /etc/shadow` | HIGH `sensitive_file_access` | ✅ |
 | T4 SSH key | `docker exec auth_service cat /root/.ssh/id_rsa` | CRITICAL `sensitive_file_access` | ✅ |
 | T5 Unauthorized connect | python3 socket to 8.8.8.8:80 from auth_service | HIGH `unauthorized_external_connect` | ✅ |
 | T6 Authorized connect | inventory_service → CoinGecko | LOW `external_connect_allowed` | ✅ |
 | T7 Host reads container FS | `cat /var/lib/docker/overlay2/.../etc/hostname` | CRITICAL `host_reads_container_fs` | ✅ |
+
+*T2: `nc`/`ncat`/`wget` not installed in Python uvicorn container; `apt-get` fails with permission denied on `/var/lib/apt/lists/partial`. Detection rule is correct — pre-installing the binary would confirm it.
 
 ### Integration test validation ✅
 
@@ -223,6 +225,6 @@ See `VALIDATION.md` for full test procedure and `validate.sh` for automated exec
 
 ### Evidence
 - `snapshots/validateTest200950.png` — full validate.sh terminal output
-- `alerts/alert.log` — all 7 alerts confirmed in real output
+- `alerts/alert.log` — 6/7 alerts confirmed in real output (T2 blocked by container infra)
 
 
