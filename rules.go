@@ -125,7 +125,7 @@ var exitWhitelist = []string{
 	"https",   // GCP guest agent helper
 }
 
-func checkExitRules(event ExitEvent) *Alert {
+func checkExitRules(event ExitEvent, container string, ppid uint32) *Alert {
 	comm := cstring(event.Comm[:])
 
 	for _, w := range exitWhitelist {
@@ -143,8 +143,9 @@ func checkExitRules(event ExitEvent) *Alert {
 			Rule:      "short_lived_failure",
 			Message:   "Process exited quickly with error — possible failed exploit",
 			Pid:       int32(event.Pid),
+			Ppid:      int32(ppid),
 			Comm:      comm,
-			Container: "unknown", // exit events don't carry mnt_ns — fix: pid→container cache
+			Container: container,
 		}
 	}
 
@@ -155,12 +156,17 @@ func checkExitRules(event ExitEvent) *Alert {
 // File access rules
 // ─────────────────────────────────────────────
 
-// Container runtime processes that legitimately read /etc/passwd during startup.
-// runc reads passwd to resolve user IDs before exec — fires on every container start.
+// Processes that legitimately read /etc/passwd or other system files as part of
+// normal startup — suppress to avoid noise on every container start or HTTP request.
+//
+// runc:[2:INIT] / runc:[1:CHILD] / runc — read /etc/passwd to resolve user IDs
+// curl — calls getpwuid() to find home directory before looking up ~/.curlrc
+//        curl detection (destination-aware) is handled in lsm-connect, not here
 var fileCommWhitelist = []string{
 	"runc:[2:INIT]",
 	"runc:[1:CHILD]",
 	"runc",
+	"curl",
 }
 
 // Sensitive file paths — severity reflects actual risk.
@@ -185,7 +191,8 @@ var highFilePrefixes = []string{
 
 var highFileSuffixes = []string{
 	".key",       // private keys
-	".pem",       // certificates / private keys
+	// .pem intentionally excluded — too broad: Python certifi, CA bundles, cert chains
+	// all use .pem extension. Private keys are caught by .key and id_* names below.
 	"id_rsa",     // SSH private key
 	"id_ed25519", // SSH private key
 	".env",       // environment secrets

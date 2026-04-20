@@ -91,9 +91,18 @@ int handle_enter(struct trace_event_raw_sys_enter *ctx)
 	return 0;
 }
 
-// sys_exit_openat — emit event ONLY if the open succeeded.
-// ctx->ret >= 0: valid fd returned, file was actually opened → emit alert.
-// ctx->ret <  0: syscall failed (ENOENT, EACCES, …) → drop silently.
+// sys_exit_openat — emit on success OR on permission-denied attempts.
+//
+// ret >= 0          file opened successfully                      → emit
+// ret == -EACCES    file EXISTS, OS blocked access (uid mismatch) → emit
+// ret == -EPERM     operation not permitted on existing file      → emit
+// ret == -ENOENT    file does not exist — probing only            → drop
+// other negative    benign errors (ENOTDIR, ELOOP, …)            → drop
+//
+// WHY: "cat /etc/shadow" as uid=1000 returns -EACCES.
+// Dropping all negative returns silently misses this attack.
+// The attempt against an existing sensitive file IS the signal,
+// whether the OS allowed it or not.
 SEC("tracepoint/syscalls/sys_exit_openat")
 int handle_exit(struct trace_event_raw_sys_exit *ctx)
 {
@@ -107,8 +116,9 @@ int handle_exit(struct trace_event_raw_sys_exit *ctx)
 	// always delete — whether we emit or not, entry is done
 	bpf_map_delete_elem(&pending_opens, &tid);
 
-	// file was not opened — ENOENT, EACCES, etc.  No real access occurred.
-	if (ctx->ret < 0)
+	// drop only if file does not exist — harmless config file probing
+	// keep if open succeeded OR if OS denied access to an existing file
+	if (ctx->ret < 0 && ctx->ret != -EACCES && ctx->ret != -EPERM)
 		return 0;
 
 	struct file_event *e = bpf_ringbuf_reserve(&rb, sizeof(*e), 0);

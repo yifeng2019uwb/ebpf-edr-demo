@@ -281,6 +281,12 @@ func main() {
 			comm := cstring(event.Comm[:])
 
 			container := resolveContainer(event.MntNsId)
+
+			// cache pid → container + ppid so exit events can resolve them
+			// exit events arrive after the process is gone from /proc,
+			// and real_parent may have changed to init due to reparenting
+			cachePid(event.Pid, PidInfo{Container: container, Ppid: event.Ppid})
+
 			log.Printf("[PROCESS] pid=%-6d ppid=%-6d uid=%-6d mnt_ns=%-10d container=%-40s path=%s",
 				event.Pid, event.Ppid, event.Uid, event.MntNsId, container, comm)
 
@@ -313,10 +319,19 @@ func main() {
 			comm := cstring(event.Comm[:])
 			durationMs := event.DurationNs / 1_000_000 // convert ns to ms
 
-			log.Printf("[EXIT]    pid=%-6d ppid=%-6d exit_code=%-3d duration=%dms comm=%s",
-				event.Pid, event.Ppid, event.ExitCode, durationMs, comm)
+			// look up container + original ppid from cache populated at exec time
+			// fallback: process started before EDR, or short-lived with no exec event
+			container := "unknown"
+			ppid := event.Ppid
+			if info, ok := lookupAndEvictPid(int32(event.Pid)); ok {
+				container = info.Container
+				ppid = uint32(info.Ppid)
+			}
 
-			if alert := checkExitRules(event); alert != nil {
+			log.Printf("[EXIT]    pid=%-6d ppid=%-6d exit_code=%-3d duration=%dms container=%-40s comm=%s",
+				event.Pid, ppid, event.ExitCode, durationMs, container, comm)
+
+			if alert := checkExitRules(event, container, ppid); alert != nil {
 				alertHandler.Send(*alert)
 			}
 		}

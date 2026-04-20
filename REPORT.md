@@ -4,7 +4,7 @@
 
 A working EDR (Endpoint Detection and Response) agent built with Go + eBPF, monitoring containerized services running on a Linux host. The agent captures security-relevant events from the kernel and emits structured alerts.
 
-Target workload: [cloud-native-order-processor](https://github.com/yifeng2019uwb/cloud-native-order-processor) — 8 Docker containers running on GCP VM (Debian 12, kernel 6.1).
+Target workload: [cloud-native-order-processor](https://github.com/yifeng2019uwb/cloud-native-order-processor) — 8 Docker containers on GCP VM (Debian 12, kernel 6.1).
 
 ---
 
@@ -14,66 +14,91 @@ Target workload: [cloud-native-order-processor](https://github.com/yifeng2019uwb
 
 | Program | Hook | Captures |
 |---------|------|----------|
-| `execsnoop.bpf.c` | `tracepoint/syscalls/sys_enter_execve` | Process execution — pid, ppid, uid, full executable path |
+| `execsnoop.bpf.c` | `tracepoint/syscalls/sys_enter_execve` | Process execution — pid, ppid, uid, mnt_ns_id, executable path |
 | `exitsnoop.bpf.c` | `tracepoint/sched/sched_process_exit` | Process exit — pid, exit code, duration |
+| `opensnoop.bpf.c` | `sys_enter_openat` + `sys_exit_openat` | File access — pid, comm, filename, return code |
 
-Both compiled via `bpf2go` → Go wrappers auto-generated.
+All compiled via `bpf2go` → Go wrappers auto-generated.
+
+**opensnoop uses a two-probe pattern**: entry captures filename and process context into a BPF hash map; exit checks the return value and emits only if `ret >= 0` (success) or `ret == -EACCES/-EPERM` (access denied to existing file). Files that do not exist (`-ENOENT`) are dropped — this eliminates probe noise from curl checking `~/.curlrc` while still catching `cat /etc/shadow` from a non-root user.
 
 ### Go Userspace Agent (`main.go`)
 
 - Loads and attaches all eBPF programs using `cilium/ebpf`
 - Reads process events via **perf buffer** (`execsnoop`)
-- Reads exit events via **ring buffer** (`exitsnoop`) — modern pattern
-- Two concurrent goroutines, one per monitor
+- Reads exit and file events via **ring buffer** (`exitsnoop`, `opensnoop`)
+- Three concurrent goroutines, one per monitor
+- pid→container cache: populated at exec time, consumed at exit time — fixes `container=unknown` in exit alerts
 - Graceful shutdown on `Ctrl+C`
 
 ### Detection Rules (`rules.go`)
+
+**Process rules:**
 
 | Rule | Trigger | Severity |
 |------|---------|----------|
 | `shell_spawn_container` | `bash`, `sh`, `zsh`, `dash` inside any container | CRITICAL |
 | `network_tool_container` | `nc`, `ncat`, `wget` inside any container | HIGH |
-| `curl_from_container` | `curl` from non-allowed container | MEDIUM |
-| `short_lived_failure` | Process exits < 100ms with non-zero code | LOW |
 
-- Whitelist: `sshd`, `runc`, `dockerd`, `containerd` — never alert
+curl intentionally excluded from process rules — health checks, smoke tests, and integrations all use `curl localhost`. Real curl exfiltration detection is in lsm-connect (destination-aware).
+
+**File access rules:**
+
+| Tier | Files / Suffixes | Severity |
+|------|-----------------|----------|
+| CRITICAL | `/root/.ssh/`, `/home/.ssh/` | CRITICAL |
+| HIGH | `/etc/shadow`, `/run/secrets/`, `/proc/1/`, `.key`, `id_rsa`, `id_ed25519`, `.env` | HIGH |
+| MEDIUM | `/etc/passwd`, `/etc/group` | MEDIUM |
+
+**Exit rules:**
+
+| Rule | Trigger | Severity |
+|------|---------|----------|
+| `short_lived_failure` | Non-zero exit + duration < 100ms | LOW |
+
+**Whitelists:**
+- Process: `sshd`, `runc`, `dockerd`, `containerd` — never alert
 - Host processes filtered via `mnt_ns` — no host-level false positives
-- `curlAllowedContainers` list: `inventory_service` allowed (calls CoinGecko). Easy to extend.
-- `allowedMarketAPI = "api.coingecko.com"` reserved for lsm-connect network enforcement
+- File: `runc:[2:INIT]`, `runc:[1:CHILD]`, `curl` — skip `/etc/passwd` (runtime user resolution)
+- Exit: `gpasswd`, `cmp`, `https` — expected non-zero exits
 
 ### Container Correlation (`container.go`)
 
-- Reads `mnt_ns_id` from kernel via `BPF_CORE_READ(task, nsproxy, mnt_ns, ns.inum)`
-- At startup: calls `docker ps --no-trunc` to build container ID → name map
-- Resolves `mnt_ns_id → "order-processor-auth_service"` for every alert
-- Refreshes every 30s to catch new/stopped containers
+- `mnt_ns_id` captured in kernel via `BPF_CORE_READ(task, nsproxy, mnt_ns, ns.inum)` — `__u32`
+- `docker ps --no-trunc` at startup + every 30s builds container ID → name map
+- `/proc/<pid>/cgroup` maps process → container ID → container name
+- Handles both cgroupv1 (`/docker/<id>`) and cgroupv2 (`docker-<id>.scope`) formats
+- Host processes identified by PID 1 namespace — silently skipped
+- `pidCache` (`sync.Map`): caches `pid → {container, ppid}` at exec time for reliable exit event resolution
 
 ### Alert Output (`alert.go`)
 
-- Structured alert format: `timestamp, level, rule, container, pid, ppid, uid, comm, message`
-- Writes to stdout (live monitoring)
-- Writes to `alerts/alert.log` (persistent record)
-- Extensible: TODO slots for Slack webhook and email
+- Structured format: `timestamp, level, rule, container, pid, ppid, uid, comm, message`
+- Writes to stdout (live monitoring) and `alerts/alert.log` (persistent record)
 
 ---
 
 ## Validation
 
-### Detection confirmed working
+### Detections confirmed working
 
-- Triggered `curl` inside `order-processor-auth_service` container
-- Agent fired `curl_from_container` MEDIUM alert within milliseconds
-- Alert correctly logged to `alerts/alert.log` with all fields
+| Attack | Expected Alert | Status |
+|--------|---------------|--------|
+| `docker exec auth_service cat /etc/shadow` | HIGH `sensitive_file_access` | ✅ |
+| `cat /etc/shadow` as uid=1000 (EACCES) | HIGH `sensitive_file_access` | ✅ |
+| Shell spawn inside container | CRITICAL `shell_spawn_container` | ✅ |
+| Container name resolved correctly | `container=order-processor-auth_service` | ✅ |
 
 ### No false positives during normal operation
 
-- Ran full CNOP integration test suite while agent was running
-- All integration tests passed
-- No spurious alerts from normal container-to-container traffic
+- Ran full CNOP integration test suite while agent running — no spurious alerts
+- Health checks (`curl localhost`) — no alert (correctly excluded from process rules)
+- Python `certifi` CA bundle reads — no alert (`.pem` not in suffix list)
+- Container startup (`runc` reading `/etc/passwd`) — no alert (whitelisted)
 
 ### Evidence
 
-- `legacy/screenshots/ebpf-alert1.png` — alert firing alongside integration tests
+- `legacy/screenshots/` — alert firing alongside integration tests
 - `alerts/alert.log` — sample alert output
 
 ---
@@ -83,8 +108,11 @@ Both compiled via `bpf2go` → Go wrappers auto-generated.
 | Decision | Reason |
 |----------|--------|
 | `cilium/ebpf` + `bpf2go` | Production Go eBPF library, type-safe generated wrappers |
-| Ring buffer for exitsnoop | Modern pattern — lower overhead, no per-CPU waste |
-| uid-based filtering (uid=0) | Practical container detection before full `mnt_ns` correlation |
+| Ring buffer for all new programs | Modern pattern — lower overhead, no per-CPU waste |
+| Two-probe pattern for opensnoop | Suppress probe noise (ENOENT) while keeping EACCES detection |
+| curl excluded from process rules | Cannot see destination at execve level — health checks indistinguishable from attacks |
+| Tiered file severity | `/etc/shadow` ≠ `/etc/passwd` risk — different responses needed |
+| pid→container cache | Process gone from /proc by exit time; real_parent may reparent to init |
 | Audit mode only | Safe for personal project — no risk of killing legitimate processes |
 | Rules in separate `rules.go` | Easy to add/remove rules without touching event pipeline |
 
@@ -92,7 +120,8 @@ Both compiled via `bpf2go` → Go wrappers auto-generated.
 
 ## What's Next
 
-- Rewrite `opensnoop.bpf.c` with ring buffer — file access monitoring (credential theft detection)
-- Rewrite `lsm-connect.bpf.c` with ring buffer — network enforcement layer (block + log connections)
+- Restore `.pem` rule with `/site-packages/` path exception
+- `lsm-connect.bpf.c` — network enforcement: only `inventory_service` → `api.coingecko.com`
+- Wire lsm-connect into `main.go`
 - Go unit tests — `rules_test.go`, `container_test.go`
-- Final validation: run all integration tests + trigger all detection rules
+- Final validation — all rules trigger + integration tests pass simultaneously

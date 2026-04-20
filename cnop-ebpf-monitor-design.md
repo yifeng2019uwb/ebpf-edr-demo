@@ -168,9 +168,11 @@ So any of these happening at runtime is suspicious:
 - [x] Process monitor — execsnoop (execve hook, perf buffer)
 - [x] Exit monitor — exitsnoop (sched_process_exit hook, ring buffer)
 - [x] Container correlation — mnt_ns_id via CO-RE, resolved to container name ✅ validated
-- [x] Detection rules — shell spawn, network tools, curl, short-lived exit
+- [x] Detection rules — shell spawn, network tools, tiered file access, short-lived exit
 - [x] Alert output — structured log with container, pid, uid, comm, message
-- [ ] File monitor — opensnoop (openat hook, ring buffer)
+- [x] File monitor — opensnoop (two-probe enter+exit, ring buffer) ✅ validated
+- [x] pid→container cache — fixes unknown container and wrong ppid in exit events
+- [ ] Restore .pem rule with path exception for CA bundles
 - [ ] Network enforcement — lsm-connect (socket_connect LSM hook, ring buffer)
 - [ ] Unit tests — rules, container resolver
 - [ ] Final validation — all rules trigger + integration tests pass
