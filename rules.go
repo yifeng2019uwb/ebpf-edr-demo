@@ -111,49 +111,6 @@ func checkProcessRules(event ProcessEvent, container string) *Alert {
 }
 
 // ─────────────────────────────────────────────
-// Exit rules
-// ─────────────────────────────────────────────
-
-func checkExitRules(event ExitEvent, container string, ppid uint32) *Alert {
-	comm := cstring(event.Comm[:])
-
-	// skip if container is unknown — exit event arrived but exec was never cached
-	// (process started before EDR, or fork without exec). No container context = no reliable signal.
-	if container == "unknown" {
-		return nil
-	}
-
-	// never alert on host processes — mirrors checkProcessRules behavior
-	// host python3/bash from integration tests and SSH sessions exit non-zero constantly
-	if container == "host" {
-		return nil
-	}
-
-	for _, w := range exitWhitelist {
-		if comm == w {
-			return nil
-		}
-	}
-
-	// Alert: process exited with non-zero code AND very short duration
-	// Possible: crash, killed process, failed exploit attempt
-	durationMs := event.DurationNs / 1_000_000
-	if event.ExitCode != 0 && durationMs < shortLivedThresholdMs {
-		return &Alert{
-			Level:     "LOW",
-			Rule:      "short_lived_failure",
-			Message:   "Process exited quickly with error — possible failed exploit",
-			Pid:       int32(event.Pid),
-			Ppid:      int32(ppid),
-			Comm:      comm,
-			Container: container,
-		}
-	}
-
-	return nil
-}
-
-// ─────────────────────────────────────────────
 // File access rules
 // ─────────────────────────────────────────────
 

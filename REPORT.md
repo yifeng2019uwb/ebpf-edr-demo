@@ -15,7 +15,6 @@ Target workload: [cloud-native-order-processor](https://github.com/yifeng2019uwb
 | Program | Hook | Captures |
 |---------|------|----------|
 | `execsnoop.bpf.c` | `tracepoint/syscalls/sys_enter_execve` | Process execution — pid, ppid, uid, mnt_ns_id, executable path |
-| `exitsnoop.bpf.c` | `tracepoint/sched/sched_process_exit` | Process exit — pid, exit code, duration |
 | `opensnoop.bpf.c` | `sys_enter_openat` + `sys_exit_openat` | File access — pid, comm, filename, return code |
 | `lsm-connect.bpf.c` | `lsm/socket_connect` | Outbound connections — pid, comm, dst_ip, dst_port, mnt_ns_id |
 
@@ -29,9 +28,8 @@ All compiled via `bpf2go` → Go wrappers auto-generated.
 
 - Loads and attaches all eBPF programs using `cilium/ebpf`
 - Reads process events via **perf buffer** (`execsnoop`)
-- Reads exit, file, and network events via **ring buffer** (`exitsnoop`, `opensnoop`, `lsm-connect`)
-- Four concurrent goroutines, one per monitor
-- pid→container cache: populated at exec time, consumed at exit time — fixes `container=unknown` in exit alerts
+- Reads file and network events via **ring buffer** (`opensnoop`, `lsm-connect`)
+- Three concurrent goroutines, one per monitor
 - Network byte order conversion for lsm-connect IP/port: IP extracted byte-by-byte, port byte-swapped
 - Graceful shutdown on `Ctrl+C`
 
@@ -58,12 +56,6 @@ curl intentionally excluded from process rules — health checks, smoke tests, a
 
 `host_reads_container_fs` — fires when a host process reads the Docker overlay filesystem directly. This bypasses container isolation and requires no whitelist — dockerd itself does not read overlay2 files at runtime.
 
-**Exit rules:**
-
-| Rule | Trigger | Severity |
-|------|---------|----------|
-| `short_lived_failure` | Non-zero exit + duration < `shortLivedThresholdMs` (100ms) | LOW |
-
 **Network rules:**
 
 | Rule | Trigger | Severity |
@@ -76,8 +68,7 @@ Private IPs (RFC 1918: 10.x, 172.16.x, 192.168.x, 169.254.x) are always allowed 
 **Whitelists:**
 - Process: `sshd`, `runc`, `dockerd`, `containerd` — never alert
 - Host processes filtered via `mnt_ns` — no host-level false positives
-- File: `runc:[2:INIT]`, `runc:[1:CHILD]`, `runc`, `curl` — skip `/etc/passwd` (runtime user resolution)
-- Exit: `gpasswd`, `cmp`, `https` — expected non-zero exits
+- File: `runc:[2:INIT]`, `runc:[1:CHILD]`, `runc`, `curl`, `id`, `bash`, `systemd-logind` — expected system file reads during init/startup
 
 ### Container Correlation (`container.go`)
 
@@ -85,8 +76,6 @@ Private IPs (RFC 1918: 10.x, 172.16.x, 192.168.x, 169.254.x) are always allowed 
 - `docker ps --no-trunc` at startup + every 30s builds container ID → name map
 - `/proc/<pid>/cgroup` maps process → container ID → container name
 - Handles both cgroupv1 (`/docker/<id>`) and cgroupv2 (`docker-<id>.scope`) formats
-- `pidCache` (`sync.Map`): caches `pid → {container, ppid}` at exec time for reliable exit event resolution
-
 **Namespace resolution logic (three-tier):**
 
 | Result | Meaning | Source |
@@ -96,9 +85,6 @@ Private IPs (RFC 1918: 10.x, 172.16.x, 192.168.x, 169.254.x) are always allowed 
 | `unknown-ns` | Not host, not any container after fresh /proc rescan | escape indicator |
 
 On cache miss, `resolveContainer` immediately rescans `/proc` before declaring `unknown-ns` — handles new containers starting within the 30s refresh window.
-
-**Known limitation — exit events for pre-EDR processes:**
-Exit events use the pid cache (populated at exec time). Processes running before the EDR agent started have no cache entry → exit shows `container=unknown`. Not `unknown-ns` — these are a different code path (cache miss vs namespace miss). Proper fix: add `mnt_ns_id` to `exitsnoop.h` and use `resolveContainer` as fallback. Deferred — out of scope for this project.
 
 ### Alert Output (`alert.go`)
 
@@ -130,14 +116,6 @@ All 7 test cases in `VALIDATION.md` were executed via `validate.sh` against live
 - Container startup (`runc` reading `/etc/passwd`) — no alert (whitelisted)
 - inventory_service → CoinGecko during background load — LOW audit log only (not HIGH)
 
-### Known remaining noise (low severity, pending fix)
-
-| Noise | Cause | Fix |
-|-------|-------|-----|
-| LOW `short_lived_failure` for `runc`/`runc:[2:INIT]` on every `docker exec` | Not in `exitWhitelist` | Add to `exitWhitelist` |
-| MEDIUM `sensitive_file_access` for `id` reading `/etc/passwd` on shell spawn | Not in `fileCommWhitelist` | Add `id` to whitelist |
-| LOW `short_lived_failure` for `python3` `container=host` from integration test runner | No host filter in `checkExitRules` | Add `if container == "host" { return nil }` |
-
 ### Evidence
 
 - `snapshots/validateTest200950.png` — full validate.sh run output
@@ -163,9 +141,6 @@ All 7 test cases in `VALIDATION.md` were executed via `validate.sh` against live
 
 ---
 
-## What's Next
+## Key Decision: Exit Monitor Removed
 
-- Add host filter to `checkExitRules` — suppress noise from host python3/bash exit events
-- Add `id` to `fileCommWhitelist` — suppress MEDIUM noise on every shell spawn
-- Add `runc` variants to `exitWhitelist` — suppress LOW noise on every `docker exec`
-- Restore `.pem` rule with `/site-packages/` path exception
+`exitsnoop` and `short_lived_failure` were built and validated, then removed. The rule fired on any process exiting non-zero in < 100ms — normal behavior for any utility that fails (which, mkdir, apt-get, cat denied). The workload runs long-lived Python services where short exits are routine, not suspicious. Rather than grow an indefinite whitelist, the rule was dropped. All real threats are covered by the remaining three monitors.

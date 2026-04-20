@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 )
@@ -20,35 +19,6 @@ var (
 	nsCache   map[uint32]string
 	nsCacheMu sync.RWMutex
 )
-
-// PidInfo stores per-process context captured at exec time.
-// Used to resolve container name and original ppid for exit events,
-// where the process is already gone from /proc and real_parent may
-// have changed to init due to reparenting.
-type PidInfo struct {
-	Container string
-	Ppid      int32
-}
-
-// pidCache maps pid → PidInfo, populated when execsnoop fires (process starts),
-// consumed and deleted when exitsnoop fires (process exits).
-// sync.Map is safe for concurrent access from multiple goroutines.
-var pidCache sync.Map
-
-// cachePid stores process info at exec time so exit events can resolve it later.
-func cachePid(pid int32, info PidInfo) {
-	pidCache.Store(pid, info)
-}
-
-// lookupAndEvictPid retrieves and removes the cached info for a pid.
-// Returns zero-value PidInfo if not found (process started before EDR).
-func lookupAndEvictPid(pid int32) (PidInfo, bool) {
-	val, ok := pidCache.LoadAndDelete(pid)
-	if !ok {
-		return PidInfo{}, false
-	}
-	return val.(PidInfo), true
-}
 
 // StartContainerResolver builds the namespace map once at startup,
 // then refreshes every nsRefreshInterval to catch new/stopped containers.

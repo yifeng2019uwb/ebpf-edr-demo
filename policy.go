@@ -15,10 +15,6 @@ import (
 
 // ── Thresholds ────────────────────────────────────────────────────────────────
 
-// shortLivedThresholdMs is the maximum process duration (in milliseconds) that,
-// combined with a non-zero exit code, is considered suspicious.
-const shortLivedThresholdMs = 100
-
 // nsRefreshInterval is how often the namespace cache is rebuilt to pick up
 // containers that started or stopped since the last scan.
 const nsRefreshInterval = 30 * time.Second
@@ -46,21 +42,6 @@ var shellBinaries = []string{
 // curl intentionally excluded — destination-aware detection in lsm-connect.
 var networkBinaries = []string{
 	"/nc", "/ncat", "/wget",
-}
-
-// ── Exit policy ───────────────────────────────────────────────────────────────
-
-// exitWhitelist — processes that legitimately exit quickly with non-zero codes.
-// Suppresses LOW short_lived_failure noise for known-good tools.
-var exitWhitelist = []string{
-	"gpasswd",        // Docker modifies groups during container startup
-	"cmp",            // file comparison — non-zero means files differ, not an error
-	"https",          // GCP guest agent helper
-	"runc",           // container runtime — exits non-zero during docker exec setup
-	"runc:[1:CHILD]", // runc child process — transient, exits immediately
-	"runc:[2:INIT]",  // runc init process — transient, exits immediately
-	"which",          // exits 1 when binary not found — normal search behavior
-	"mkdir",          // exits non-zero when directory already exists (EEXIST) — expected in scripts
 }
 
 // ── File policy ───────────────────────────────────────────────────────────────

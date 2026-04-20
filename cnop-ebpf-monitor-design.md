@@ -172,7 +172,6 @@ No blocking. Safe for a live demo environment.
 | `unauthorized_external_connect` | lsm-connect | Container connects to external IP — not in allowlist | HIGH |
 | `sensitive_file_access` | opensnoop | `/etc/passwd`, `/etc/group` | MEDIUM |
 | `external_connect_allowed` | lsm-connect | `inventory_service` connects to external IP (CoinGecko audit log) | LOW |
-| `short_lived_failure` | exitsnoop | Non-zero exit + duration < 100ms | LOW |
 
 ### Known False Positives / Whitelists
 
@@ -180,7 +179,6 @@ No blocking. Safe for a live demo environment.
 |-----------|-----------|
 | `whitelistComm` (process) | `sshd`, `runc`, `dockerd`, `containerd` — never alert on process rules |
 | `fileCommWhitelist` | `runc`, `runc:[1:CHILD]`, `runc:[2:INIT]`, `curl` — read `/etc/passwd` during init |
-| `exitWhitelist` | `gpasswd`, `cmp`, `https` — expected non-zero exits |
 | `externalAllowedContainers` | `inventory_service` — only container permitted external API access |
 | Host namespace filter | All `container=host` processes skipped in process and file rules |
 | ENOENT drop in opensnoop | Files that don't exist never emit — suppresses config file probing noise |
@@ -188,12 +186,11 @@ No blocking. Safe for a live demo environment.
 ## 5. Implementation Plan
 
 - [x] Process monitor — execsnoop (execve hook, perf buffer)
-- [x] Exit monitor — exitsnoop (sched_process_exit hook, ring buffer)
+- [x] Exit monitor — exitsnoop built then removed: short_lived_failure too noisy for long-lived service containers
 - [x] Container correlation — mnt_ns_id via CO-RE, resolved to container name ✅ validated
-- [x] Detection rules — shell spawn, network tools, tiered file access, short-lived exit
+- [x] Detection rules — shell spawn, network tools, tiered file access
 - [x] Alert output — structured log with container, pid, uid, comm, message
 - [x] File monitor — opensnoop (two-probe enter+exit, ring buffer) ✅ validated
-- [x] pid→container cache — fixes unknown container and wrong ppid in exit events
 - [x] Hybrid namespace strategy — unknown-ns CRITICAL, host overlay CRITICAL, immediate rescan on miss
 - [x] Network monitor — lsm-connect (socket_connect LSM hook, ring buffer, audit mode) ✅ validated
 - [x] Network rules — RFC 1918 filter, externalAllowedContainers allowlist, unauthorized external HIGH
