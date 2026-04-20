@@ -78,6 +78,21 @@ func checkProcessRules(event ProcessEvent, container string) *Alert {
 		return nil
 	}
 
+	// CRITICAL: process in a namespace that is neither host nor any known container
+	// After immediate /proc rescan still unresolved — strong container escape indicator
+	if container == "unknown-ns" {
+		return &Alert{
+			Level:     "CRITICAL",
+			Rule:      "unknown_namespace_process",
+			Message:   "Process in unrecognized namespace — possible container escape",
+			Pid:       event.Pid,
+			Ppid:      event.Ppid,
+			Uid:       event.Uid,
+			Comm:      comm,
+			Container: container,
+		}
+	}
+
 	// never alert on host processes — only watch containers
 	if container == "host" {
 		return nil
@@ -204,12 +219,33 @@ var mediumFilePrefixes = []string{
 }
 
 func checkFileRules(event FileEvent, container string) *Alert {
-	if container == "host" || container == "" {
+	filename := cstring(event.Filename[:])
+	comm := cstring(event.Comm[:])
+
+	// CRITICAL: host process reading Docker container filesystem directly
+	// /var/lib/docker/overlay2/ is where container filesystems live on disk
+	// No legitimate host process (other than dockerd internals) reads this at runtime
+	// This indicates privilege escalation or an attacker reading container secrets from host
+	if container == "host" {
+		if strings.HasPrefix(filename, "/var/lib/docker/overlay2/") {
+			return &Alert{
+				Level:     "CRITICAL",
+				Rule:      "host_reads_container_fs",
+				Message:   "Host process accessed Docker container filesystem: " + filename,
+				Pid:       event.Pid,
+				Ppid:      event.Ppid,
+				Uid:       int32(event.Uid),
+				Comm:      comm,
+				Container: container,
+			}
+		}
 		return nil
 	}
 
-	filename := cstring(event.Filename[:])
-	comm := cstring(event.Comm[:])
+	// skip truly unresolvable events (should not happen after rescan, defensive only)
+	if container == "" {
+		return nil
+	}
 
 	// skip container runtime — reads /etc/passwd during container init
 	for _, w := range fileCommWhitelist {

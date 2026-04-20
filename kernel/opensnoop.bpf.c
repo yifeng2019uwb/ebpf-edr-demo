@@ -14,6 +14,12 @@
 #include <bpf/bpf_core_read.h>
 #include "opensnoop.h"
 
+// errno constants — not available via errno.h in BPF programs
+// Values are stable Linux ABI (uapi/asm-generic/errno-base.h)
+#define EPERM   1   // operation not permitted
+#define ENOENT  2   // no such file or directory
+#define EACCES  13  // permission denied
+
 char LICENSE[] SEC("license") = "GPL";
 
 // Ring buffer — emits successfully opened file events to Go userspace

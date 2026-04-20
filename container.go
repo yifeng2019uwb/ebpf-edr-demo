@@ -67,14 +67,40 @@ func StartContainerResolver() {
 }
 
 // resolveContainer returns the container name for a given mount namespace ID.
-// Returns "host" if the namespace belongs to the host, or the container name if found.
+//
+// Return values:
+//   "host"         — namespace belongs to the host (PID 1 namespace)
+//   container name — known Docker container namespace
+//   "unknown-ns"   — namespace is neither host nor any known container
+//                    → strong indicator of container escape or rogue process
+//
+// On cache miss: immediately rescans /proc to handle new containers that started
+// after the last 30s refresh. If still not found after rescan → "unknown-ns".
 func resolveContainer(mntNsId uint32) string {
 	nsCacheMu.RLock()
-	defer nsCacheMu.RUnlock()
-	if name, ok := nsCache[mntNsId]; ok {
+	name, ok := nsCache[mntNsId]
+	nsCacheMu.RUnlock()
+	if ok {
 		return name
 	}
-	return fmt.Sprintf("unknown(ns=%d)", mntNsId)
+
+	// cache miss — new container may have started since last refresh
+	// rescan /proc immediately before declaring the namespace unknown
+	m := buildNamespaceMap()
+	nsCacheMu.Lock()
+	nsCache = m
+	nsCacheMu.Unlock()
+
+	nsCacheMu.RLock()
+	name, ok = nsCache[mntNsId]
+	nsCacheMu.RUnlock()
+	if ok {
+		return name
+	}
+
+	// still not found after rescan — not host, not any Docker container
+	// this namespace has no legitimate owner we know about
+	return "unknown-ns"
 }
 
 // buildNamespaceMap scans /proc/<pid>/ns/mnt for every running process.
