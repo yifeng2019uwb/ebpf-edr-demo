@@ -3,6 +3,8 @@
 package main
 
 import (
+	"fmt"
+	"net"
 	"path/filepath"
 	"strings"
 )
@@ -37,12 +39,17 @@ var networkBinaries = []string{
 // Network policy
 // ─────────────────────────────────────────────
 
-// allowedMarketAPI is the only external domain inventory_service may connect to.
-// NOTE: curl detection belongs in lsm-connect, not here.
-// execsnoop sees the binary name but not the destination — it cannot distinguish
-// "curl http://localhost/health" (health check) from "curl https://evil.com" (attack).
-// lsm-connect hooks the network connection and enforces this constant at the IP level.
+// allowedMarketAPI is the only external domain any service may connect to.
+// Enforced in lsm-connect network rules — only containers in externalAllowedContainers
+// may make external connections, and their destination is logged for audit.
 const allowedMarketAPI = "api.coingecko.com"
+
+// externalAllowedContainers — containers permitted to make external network connections.
+// All other containers connecting outside private IP ranges will trigger HIGH alert.
+// Add entries here when a new service needs external API access.
+var externalAllowedContainers = []string{
+	"order-processor-inventory_service", // calls CoinGecko for live market data
+}
 
 // ─────────────────────────────────────────────
 // Helper functions
@@ -133,6 +140,10 @@ func checkProcessRules(event ProcessEvent, container string) *Alert {
 // Exit rules
 // ─────────────────────────────────────────────
 
+// shortLivedThresholdMs is the maximum process duration (in milliseconds) that,
+// combined with a non-zero exit code, is considered suspicious — possible failed exploit.
+const shortLivedThresholdMs = 100
+
 // System tools that legitimately exit quickly with non-zero codes — not suspicious
 var exitWhitelist = []string{
 	"gpasswd", // Docker modifies groups during container startup
@@ -152,7 +163,7 @@ func checkExitRules(event ExitEvent, container string, ppid uint32) *Alert {
 	// Alert: process exited with non-zero code AND very short duration
 	// Possible: crash, killed process, failed exploit attempt
 	durationMs := event.DurationNs / 1_000_000
-	if event.ExitCode != 0 && durationMs < 100 {
+	if event.ExitCode != 0 && durationMs < shortLivedThresholdMs {
 		return &Alert{
 			Level:     "LOW",
 			Rule:      "short_lived_failure",
@@ -315,4 +326,85 @@ func checkFileRules(event FileEvent, container string) *Alert {
 	}
 
 	return nil
+}
+
+// ─────────────────────────────────────────────
+// Network rules
+// ─────────────────────────────────────────────
+
+// privateNets — RFC 1918 + link-local ranges that are always allowed.
+// Initialized once at startup. Loopback (127.x.x.x) is filtered in BPF already.
+var privateNets []*net.IPNet
+
+func init() {
+	for _, cidr := range []string{
+		"10.0.0.0/8",     // RFC 1918 — private class A
+		"172.16.0.0/12",  // RFC 1918 — private class B (includes Docker bridge 172.17.x)
+		"192.168.0.0/16", // RFC 1918 — private class C
+		"169.254.0.0/16", // link-local (APIPA)
+	} {
+		_, n, _ := net.ParseCIDR(cidr)
+		privateNets = append(privateNets, n)
+	}
+}
+
+func isPrivateIP(ip net.IP) bool {
+	for _, n := range privateNets {
+		if n.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+// checkNetworkRules evaluates outbound connection attempts.
+// ip and port are already converted to host byte order by the caller.
+//
+// Policy:
+//   - private/internal IPs → skip (Docker bridge, service mesh, internal traffic)
+//   - inventory_service → external allowed (CoinGecko market data) → LOW audit log
+//   - all other containers → external connection unauthorized → HIGH alert
+//   - host processes → skip (too noisy without full host allowlist)
+func checkNetworkRules(event NetEvent, container string, ip net.IP, port uint16) *Alert {
+	// skip host — no host-level network policy without a full process allowlist
+	if container == "host" {
+		return nil
+	}
+
+	// skip private and internal IP ranges — Docker bridge, inter-service traffic
+	if isPrivateIP(ip) {
+		return nil
+	}
+
+	comm := cstring(event.Comm[:])
+
+	// check if this container is in the external allowlist
+	// allowedMarketAPI is logged for audit — DNS not resolved in BPF,
+	// so we log the destination IP and expected domain for operator review
+	for _, allowed := range externalAllowedContainers {
+		if container == allowed {
+			return &Alert{
+				Level:     "LOW",
+				Rule:      "external_connect_allowed",
+				Message:   fmt.Sprintf("%s external connect to %s:%d (expected: %s)", container, ip, port, allowedMarketAPI),
+				Pid:       event.Pid,
+				Ppid:      event.Ppid,
+				Uid:       int32(event.Uid),
+				Comm:      comm,
+				Container: container,
+			}
+		}
+	}
+
+	// any other container connecting to an external IP is unauthorized
+	return &Alert{
+		Level:     "HIGH",
+		Rule:      "unauthorized_external_connect",
+		Message:   fmt.Sprintf("Container made unauthorized external connection to %s:%d", ip, port),
+		Pid:       event.Pid,
+		Ppid:      event.Ppid,
+		Uid:       int32(event.Uid),
+		Comm:      comm,
+		Container: container,
+	}
 }

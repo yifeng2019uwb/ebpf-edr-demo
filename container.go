@@ -50,12 +50,16 @@ func lookupAndEvictPid(pid int32) (PidInfo, bool) {
 	return val.(PidInfo), true
 }
 
+// nsRefreshInterval is how often the namespace cache is rebuilt to pick up
+// containers that started or stopped since the last scan.
+const nsRefreshInterval = 30 * time.Second
+
 // StartContainerResolver builds the namespace map once at startup,
-// then refreshes every 30 seconds to catch new/stopped containers.
+// then refreshes every nsRefreshInterval to catch new/stopped containers.
 func StartContainerResolver() {
 	nsCache = buildNamespaceMap()
 	go func() {
-		ticker := time.NewTicker(30 * time.Second)
+		ticker := time.NewTicker(nsRefreshInterval)
 		defer ticker.Stop()
 		for range ticker.C {
 			m := buildNamespaceMap()
