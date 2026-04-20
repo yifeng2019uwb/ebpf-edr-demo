@@ -228,4 +228,33 @@ See `VALIDATION.md` for full test procedure and `validate.sh` for automated exec
 - `snapshots/validateTest200950.png` — full validate.sh terminal output
 - `alerts/alert.log` — 6/7 alerts confirmed in real output (T2 blocked by container infra)
 
+---
+
+## 7. Future Direction
+
+### Phase 2 — Multi-VM monitoring
+
+Current scope: one GCP VM running order-processor (8 Docker containers).
+
+Planned expansion:
+- Deploy healthcare-ai-microservices on a **second GCP VM** (migrated from Cloud Run)
+- Extend EDR agent to monitor both VMs simultaneously
+- Each VM runs its own agent instance; alerts can be aggregated centrally
+
+### Per-workload policy
+
+Different services have different threat profiles:
+
+| Workload | Sensitive paths | External connections |
+|----------|----------------|---------------------|
+| order-processor | financial data, trade secrets | CoinGecko only |
+| healthcare-ai | patient records, HIPAA paths (`/data/patients/`, FHIR endpoints) | AI API (TBD) |
+
+Policy config would need to be workload-aware — either per-VM config files or a shared config with workload tags.
+
+### Other possible extensions
+- Unit tests for `pkg/detector` (80%+ coverage target)
+- Central alert aggregation across VMs
+- Per-container network allowlists (currently one global list)
+
 
