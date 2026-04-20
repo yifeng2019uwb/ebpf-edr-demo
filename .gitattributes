@@ -1,14 +1,19 @@
-# Mark generated files as non-primary languages
-*_bpfeb.go linguist-generated=true
+# Generated files — excluded from language stats
 *_bpfel.go linguist-generated=true
-*.o linguist-binary=true
+*_bpfeb.go linguist-generated=true
+go.sum linguist-generated=true
 
-# Mark kernel C files correctly but exclude from stats
-kernel/*.c linguist-language=C
-kernel/*.h linguist-language=C
+# Documentation — excluded from language stats
+*.md linguist-documentation=true
 
-# Mark Go files as primary
-*.go linguist-language=Go
-main.go linguist-detectable=true
-rules.go linguist-detectable=true
-alert.go linguist-detectable=true
+# Language overrides
+kernel/*.bpf.c linguist-language=C
+kernel/*.h     linguist-language=C
+
+# Line endings
+* text=auto
+*.go text eol=lf
+*.c  text eol=lf
+*.h  text eol=lf
+*.sh text eol=lf
+*.yml text eol=lf

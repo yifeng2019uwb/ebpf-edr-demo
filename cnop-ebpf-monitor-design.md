@@ -257,4 +257,39 @@ Policy config would need to be workload-aware — either per-VM config files or 
 - Central alert aggregation across VMs
 - Per-container network allowlists (currently one global list)
 
+---
+
+## 8. Industry Gaps — Known Challenges
+
+Three areas where this project intentionally differs from production EDR tools.
+Documented as learning targets for future work.
+
+### CO-RE (Compile Once, Run Everywhere)
+
+**Industry**: Production agents ship a single pre-compiled `.o` file that works across kernel versions (Debian 12, RHEL 9, Ubuntu 22.04) using BTF (BPF Type Format). The kernel exposes its own type information at runtime, so the BPF program can relocate struct field offsets automatically.
+
+**This project**: BPF programs are compiled against a specific kernel's vmlinux headers (`-I .../vmlinux/x86`). The binary must be recompiled if deployed to a different kernel version. Acceptable for a single-VM demo, but a significant operational gap for any multi-host deployment.
+
+**Path forward**: Compile with `bpftool btf dump` to generate a portable BTF section, or use libbpf's CO-RE relocation support. Requires verifying that all `BPF_CORE_READ` calls in the `.bpf.c` files are correct (this project already uses `BPF_CORE_READ` for `mnt_ns_id` — a good start).
+
+---
+
+### Kubernetes Metadata Enrichment
+
+**Industry**: Tools like Falco and Cilium Tetragon call the Kubernetes API server to translate container IDs into pod names, namespaces, labels, and deployment names. Alerts say "Pod: order-service-v2 / Namespace: production" instead of a container ID.
+
+**This project**: Resolves Docker container names well via `docker ps` + cgroup parsing. Has no K8s awareness — if the workload moved to a K8s cluster, `container=order-processor-auth_service` would become an opaque container ID with no pod/namespace context.
+
+**Path forward**: Add a `pkg/k8s` package that calls the K8s API (or reads the kubelet's local API) to enrich events with pod name, namespace, and labels. The `mnt_ns_id` → container ID mapping already in place is the right foundation — K8s enrichment is an additional lookup layer on top of it.
+
+---
+
+### High-Volume Performance — Drop Policy
+
+**Industry**: At scale (thousands of containers, high syscall rates), the kernel ring buffer can fill faster than userspace reads. Production agents implement drop policies: prioritize CRITICAL/HIGH events, drop LOW/MEDIUM under backpressure, and emit a `drop_count` metric so operators know events were lost.
+
+**This project**: Assumes the Go goroutines keep up with ring buffer throughput — valid for 8 lightly loaded containers, but not for production scale. If the ring buffer fills, the kernel silently drops events with no visibility into the loss.
+
+**Path forward**: Read the `lost_samples` counter from `ringbuf.Reader` after each `Read()` call. Emit a synthetic `ring_buffer_overflow` alert when drops are detected. Longer term: implement BPF-side sampling (emit 1-in-N LOW events under high load) to shed load before the buffer fills.
+
 
