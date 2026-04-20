@@ -148,6 +148,16 @@ func checkProcessRules(event ProcessEvent, container string) *Alert {
 // File access rules
 // ─────────────────────────────────────────────
 
+// Container runtime processes that legitimately read /etc/passwd during startup
+// runc:[2:INIT] — container init process, reads passwd to resolve user IDs
+// runc:[1:CHILD] — intermediate runc process during container creation
+// These fire on every container start — not suspicious
+var fileCommWhitelist = []string{
+	"runc:[2:INIT]",
+	"runc:[1:CHILD]",
+	"runc",
+}
+
 // Sensitive files — access from containers should alert
 // Any service reading these at runtime (not startup) is suspicious
 var sensitiveFilePrefixes = []string{
@@ -174,6 +184,13 @@ func checkFileRules(event FileEvent, container string) *Alert {
 
 	filename := cstring(event.Filename[:])
 	comm := cstring(event.Comm[:])
+
+	// skip container runtime processes — they read /etc/passwd at startup legitimately
+	for _, w := range fileCommWhitelist {
+		if comm == w {
+			return nil
+		}
+	}
 
 	for _, prefix := range sensitiveFilePrefixes {
 		if strings.HasPrefix(filename, prefix) {
