@@ -18,6 +18,8 @@
 - [x] Remove curl from process rules — decision: curl detection belongs in lsm-connect (destination-aware)
 - [x] BPF fix: emit on EACCES/EPERM in addition to success — restores `cat /etc/shadow` detection
 - [x] pid→container cache — fixes `container=unknown` and wrong ppid in exit events
+- [x] Hybrid namespace strategy — `unknown-ns` CRITICAL alert for container escape, host Docker overlay CRITICAL rule
+- [x] resolveContainer: immediate /proc rescan on cache miss before declaring unknown-ns
 
 ---
 
@@ -154,6 +156,67 @@ Learned through real output: not all sensitive files carry the same risk.
 **Implementation**: `sync.Map` in `container.go` — safe for concurrent goroutine access. `LoadAndDelete` atomically retrieves and removes the entry.
 
 **Limitation**: processes that started before the EDR agent launched have no cache entry — these still show `unknown`. This is expected and acceptable.
+
+---
+
+### Hybrid namespace strategy — host vs container vs escape
+
+**Problem**: original design silently skipped ALL host processes in process rules.
+If malware installs on the VM as uid=0, it appears as `container=host` and is never alerted.
+
+**Decision**: Option A (skip all host) is too risky. Option B (full host whitelist) is a rabbit hole.
+Implemented a "hybrid" strategy using mount namespace ID as the boundary:
+
+| Namespace | Label | Action |
+|---|---|---|
+| mnt_ns == PID 1 namespace | `host` | skip most rules |
+| mnt_ns in Docker map | `order-processor-xxx` | full container rules |
+| mnt_ns not found anywhere | `unknown-ns` | CRITICAL escape alert |
+
+**`unknown-ns` detection**:
+After a cache miss, `resolveContainer` immediately rescans `/proc` to handle new containers
+that started within the 30s refresh window. If STILL not found → return `"unknown-ns"`.
+A process in an unrecognized namespace after a fresh rescan has no legitimate explanation —
+it's either a container escape or an unauthorized namespace creation.
+
+**Host-specific file rule**:
+Instead of whitelisting all host processes, one targeted rule:
+`host process + /var/lib/docker/overlay2/ → CRITICAL host_reads_container_fs`
+This catches an attacker on the host reading container filesystems directly (bypasses container
+isolation). No host whitelist needed — dockerd itself doesn't read overlay2 files at runtime.
+
+**errno defines in BPF**:
+`errno.h` is not available in BPF programs. Must define constants manually:
+```c
+#define EPERM   1
+#define ENOENT  2
+#define EACCES  13
+```
+These are stable Linux ABI values (`uapi/asm-generic/errno-base.h`). Never use raw numbers
+in conditions — always define named constants for readability and maintainability.
+
+---
+
+### Known limitation: exit events for pre-EDR processes
+
+Exit events use the pid cache (populated at exec time by execsnoop).
+Processes that were already running when the EDR agent started have no cache entry.
+Their exit events show `container=unknown` — not `unknown-ns`.
+
+**Why `unknown` not `unknown-ns`**:
+- `unknown-ns` comes from `resolveContainer()` — called when execsnoop fires
+- `unknown` comes from the pid cache miss in the exit goroutine
+- Exit events don't call `resolveContainer` — they rely on the cache only
+
+**Real-world impact**:
+- `bash` spawned by `run_all_tests.sh` or Docker health management (ppid=4018865, recurring)
+  shows `container=unknown`, fires LOW `short_lived_failure`
+- These are host scripts that predate EDR — not a real threat
+- The important detections (cat /etc/shadow from auth_service) correctly show container name
+
+**Proper fix (not implemented — out of scope)**:
+Add `mnt_ns_id` to `exitsnoop.h` struct, read it in BPF, call `resolveContainer` as fallback
+when pid cache misses. Requires exitsnoop BPF struct change + Go ExitEvent update.
 
 ---
 

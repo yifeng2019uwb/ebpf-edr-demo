@@ -45,4 +45,6 @@ ls *.go *.o
 go mod tidy
 go build
 sudo ./ebpf-edr-demo
+// sudo ./ebpf-edr-demo > output.txt 2>&1
 ```
+

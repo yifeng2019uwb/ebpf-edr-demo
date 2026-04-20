@@ -172,6 +172,7 @@ So any of these happening at runtime is suspicious:
 - [x] Alert output — structured log with container, pid, uid, comm, message
 - [x] File monitor — opensnoop (two-probe enter+exit, ring buffer) ✅ validated
 - [x] pid→container cache — fixes unknown container and wrong ppid in exit events
+- [x] Hybrid namespace strategy — unknown-ns CRITICAL, host overlay CRITICAL, immediate rescan on miss
 - [ ] Restore .pem rule with path exception for CA bundles
 - [ ] Network enforcement — lsm-connect (socket_connect LSM hook, ring buffer)
 - [ ] Unit tests — rules, container resolver

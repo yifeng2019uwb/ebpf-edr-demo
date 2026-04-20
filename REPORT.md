@@ -37,6 +37,7 @@ All compiled via `bpf2go` → Go wrappers auto-generated.
 
 | Rule | Trigger | Severity |
 |------|---------|----------|
+| `unknown_namespace_process` | Process in namespace that is neither host nor any known container | CRITICAL |
 | `shell_spawn_container` | `bash`, `sh`, `zsh`, `dash` inside any container | CRITICAL |
 | `network_tool_container` | `nc`, `ncat`, `wget` inside any container | HIGH |
 
@@ -46,9 +47,12 @@ curl intentionally excluded from process rules — health checks, smoke tests, a
 
 | Tier | Files / Suffixes | Severity |
 |------|-----------------|----------|
+| HOST | `/var/lib/docker/overlay2/` (host process only) | CRITICAL |
 | CRITICAL | `/root/.ssh/`, `/home/.ssh/` | CRITICAL |
 | HIGH | `/etc/shadow`, `/run/secrets/`, `/proc/1/`, `.key`, `id_rsa`, `id_ed25519`, `.env` | HIGH |
 | MEDIUM | `/etc/passwd`, `/etc/group` | MEDIUM |
+
+`host_reads_container_fs` — fires when a host process reads the Docker overlay filesystem directly. This bypasses container isolation and requires no whitelist — dockerd itself does not read overlay2 files at runtime.
 
 **Exit rules:**
 
@@ -68,8 +72,20 @@ curl intentionally excluded from process rules — health checks, smoke tests, a
 - `docker ps --no-trunc` at startup + every 30s builds container ID → name map
 - `/proc/<pid>/cgroup` maps process → container ID → container name
 - Handles both cgroupv1 (`/docker/<id>`) and cgroupv2 (`docker-<id>.scope`) formats
-- Host processes identified by PID 1 namespace — silently skipped
 - `pidCache` (`sync.Map`): caches `pid → {container, ppid}` at exec time for reliable exit event resolution
+
+**Namespace resolution logic (three-tier):**
+
+| Result | Meaning | Source |
+|---|---|---|
+| `host` | PID 1 mount namespace | nsCache |
+| `order-processor-xxx` | Known Docker container | nsCache via docker ps |
+| `unknown-ns` | Not host, not any container after fresh /proc rescan | escape indicator |
+
+On cache miss, `resolveContainer` immediately rescans `/proc` before declaring `unknown-ns` — handles new containers starting within the 30s refresh window.
+
+**Known limitation — exit events for pre-EDR processes:**
+Exit events use the pid cache (populated at exec time). Processes running before the EDR agent started have no cache entry → exit shows `container=unknown`. Not `unknown-ns` — these are a different code path (cache miss vs namespace miss). Proper fix: add `mnt_ns_id` to `exitsnoop.h` and use `resolveContainer` as fallback. Deferred — out of scope for this project.
 
 ### Alert Output (`alert.go`)
 
@@ -109,10 +125,13 @@ curl intentionally excluded from process rules — health checks, smoke tests, a
 |----------|--------|
 | `cilium/ebpf` + `bpf2go` | Production Go eBPF library, type-safe generated wrappers |
 | Ring buffer for all new programs | Modern pattern — lower overhead, no per-CPU waste |
-| Two-probe pattern for opensnoop | Suppress probe noise (ENOENT) while keeping EACCES detection |
+| Two-probe pattern for opensnoop | Suppress ENOENT probe noise while keeping EACCES/EPERM detection |
+| Emit on EACCES/EPERM not just success | Access attempt against existing file is the signal, even if OS blocked it |
 | curl excluded from process rules | Cannot see destination at execve level — health checks indistinguishable from attacks |
 | Tiered file severity | `/etc/shadow` ≠ `/etc/passwd` risk — different responses needed |
 | pid→container cache | Process gone from /proc by exit time; real_parent may reparent to init |
+| Hybrid namespace strategy | No host whitelist needed — only alert on truly unrecognized namespaces |
+| Immediate /proc rescan on cache miss | Handles containers starting within the 30s refresh window |
 | Audit mode only | Safe for personal project — no risk of killing legitimate processes |
 | Rules in separate `rules.go` | Easy to add/remove rules without touching event pipeline |
 
