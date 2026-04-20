@@ -24,16 +24,27 @@ All compiled via `bpf2go` → Go wrappers auto-generated.
 
 **lsm-connect is audit-only**: always returns `0` — never blocks. The `lsm/socket_connect` hook fires before every `connect()` syscall with no TOCTOU gap. Loopback (127.x.x.x) is filtered in BPF to reduce ring buffer traffic. All other private IP range checks (RFC 1918) are done in Go so policy can change without recompiling BPF.
 
-### Go Userspace Agent (`main.go`)
+### Go Userspace Agent — Package Layout
 
-- Loads and attaches all eBPF programs using `cilium/ebpf`
+```
+cmd/edr-monitor/main.go     entry point — wires packages, runs goroutines
+pkg/bpf/loader.go           BPF loading, kernel attachment, event readers
+pkg/detector/rules.go       detection logic — CheckProcessRules/CheckFileRules/CheckNetworkRules
+pkg/detector/policy.go      policy data — whitelists, file prefixes, network allowlists
+pkg/container/container.go  namespace → container name resolution via /proc + docker ps
+internal/alert/alert.go     Alert struct + Handler (stdout + alert.log)
+internal/processor/         event structs (ProcessEvent/FileEvent/NetEvent) + byte converters
+kernel/                     eBPF kernel programs (.bpf.c) — compiled by bpf2go
+```
+
+- Loads and attaches all eBPF programs via `pkg/bpf.Load()`
 - Reads process events via **perf buffer** (`execsnoop`)
 - Reads file and network events via **ring buffer** (`opensnoop`, `lsm-connect`)
 - Three concurrent goroutines, one per monitor
 - Network byte order conversion for lsm-connect IP/port: IP extracted byte-by-byte, port byte-swapped
 - Graceful shutdown on `Ctrl+C`
 
-### Detection Rules (`rules.go`)
+### Detection Rules (`pkg/detector`)
 
 **Process rules:**
 
@@ -70,7 +81,7 @@ Private IPs (RFC 1918: 10.x, 172.16.x, 192.168.x, 169.254.x) are always allowed 
 - Host processes filtered via `mnt_ns` — no host-level false positives
 - File: `runc:[2:INIT]`, `runc:[1:CHILD]`, `runc`, `curl`, `id`, `bash`, `systemd-logind` — expected system file reads during init/startup
 
-### Container Correlation (`container.go`)
+### Container Correlation (`pkg/container`)
 
 - `mnt_ns_id` captured in kernel via `BPF_CORE_READ(task, nsproxy, mnt_ns, ns.inum)` — `__u32`
 - `docker ps --no-trunc` at startup + every 30s builds container ID → name map
@@ -86,7 +97,7 @@ Private IPs (RFC 1918: 10.x, 172.16.x, 192.168.x, 169.254.x) are always allowed 
 
 On cache miss, `resolveContainer` immediately rescans `/proc` before declaring `unknown-ns` — handles new containers starting within the 30s refresh window.
 
-### Alert Output (`alert.go`)
+### Alert Output (`internal/alert`)
 
 - Structured format: `timestamp, level, rule, container, pid, ppid, uid, comm, message`
 - Writes to stdout (live monitoring) and `alerts/alert.log` (persistent record)
@@ -140,6 +151,19 @@ All 7 test cases in `VALIDATION.md` were executed via `validate.sh` against live
 | Immediate /proc rescan on cache miss | Handles containers starting within the 30s refresh window |
 | Audit mode only | Safe for personal project — no risk of killing legitimate processes |
 | Rules in separate `rules.go` | Easy to add/remove rules without touching event pipeline |
+
+---
+
+## Build & CI
+
+| Command | What it does |
+|---------|-------------|
+| `make generate` | Recompile `.bpf.c` → generate Go wrappers in `pkg/bpf/` (requires clang on Linux) |
+| `make build` | Build the `ebpf-edr-demo` binary from `cmd/edr-monitor/` |
+| `make test` | Run unit tests for `internal/` and `pkg/detector/` (no kernel required) |
+| `make vet` | Run `go vet` on non-BPF packages |
+
+GitHub Actions CI (`.github/workflows/ci.yml`) runs on every push/PR: vet → test → build. Vet and test always pass. Build requires generated BPF wrappers committed to `pkg/bpf/` — run `make generate` on the GCP VM and commit the output.
 
 ---
 

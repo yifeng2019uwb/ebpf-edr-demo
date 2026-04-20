@@ -25,6 +25,8 @@
 - [x] Named constants — `nsRefreshInterval`, `externalAllowedContainers` (no more magic numbers)
 - [x] `VALIDATION.md` + `validate.sh` — 7-test validation suite with concurrent integration traffic
 - [x] Validation confirmed: all 7 detection rules fire correctly against real containers
+- [x] Refactor Go structure — `cmd/`, `pkg/`, `internal/`, `kernel/` package layout
+- [x] CI pipeline — GitHub Actions vet + test + build; `Makefile` with generate/build/test targets ✅
 
 ---
 

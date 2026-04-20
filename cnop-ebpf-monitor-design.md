@@ -22,7 +22,6 @@ Build a working EDR agent that monitors containerized services using Go + cilium
 
 ### Out of scope
 - Production hardening, scalability, dashboards
-- Automated test suite / CI pipeline
 - Android or embedded targets
 
 ## 2. Environment
@@ -198,6 +197,8 @@ No blocking. Safe for a live demo environment.
 - [x] Validation suite — VALIDATION.md + validate.sh, 7 test cases, concurrent integration traffic ✅
 - [x] Noise fixes — fileCommWhitelist (`id`, `bash`, `systemd-logind`), drop `short_lived_failure` rule ✅
 - [x] Restore .pem rule with path exception for `/site-packages/` and `/certifi/` ✅
+- [x] Refactor Go structure — clean package layout (`cmd/`, `pkg/`, `internal/`, `kernel/`) ✅
+- [x] CI pipeline — GitHub Actions: vet + test (non-BPF) + build; Makefile with generate/build/test targets ✅
 
 ## 6. Validation
 

@@ -1,6 +1,36 @@
-# alert.log is committed to show real generated output
-kernel/*.bpf.o
-__pycache__/
-*.pyc
+# --- Binaries & Compiled Artifacts ---
+# The main executable
+ebpf-edr-demo
+# Any other built binaries
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# --- eBPF Generated Files ---
+# Ignore compiled BPF object files — Go wrappers (*_bpfel.go, *_bpfeb.go) are tracked
+# so CI can build without needing clang installed.
+*.o
+
+# --- Dependency Management ---
+# Keep go.mod and go.sum, but ignore the vendor folder if you use one
+vendor/
+
+# --- Operating System / Editor Files ---
 .DS_Store
-venv/
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# --- Project Specifics ---
+# Ignore runtime log files — snapshots/ is tracked as validation evidence
+alerts/*.log
+output/
+
+# --- Temporary Files ---
+*.tmp
+*.bak
