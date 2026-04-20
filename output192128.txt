@@ -1,0 +1,1202 @@
+2026/04/20 04:28:48 EDR Monitor started — watching process execution, exits, and file access
+2026/04/20 04:28:48 Press Ctrl+C to stop
+2026/04/20 04:28:49 [PROCESS] pid=4043799 ppid=2869092 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:28:49 [PROCESS] pid=4043807 ppid=4043799 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:28:49 [EXIT]    pid=4043808 ppid=4043799 exit_code=0   duration=0ms comm=runc:[1:CHILD]
+2026/04/20 04:28:49 [EXIT]    pid=4043807 ppid=4043799 exit_code=0   duration=15ms comm=runc:[0:PARENT]
+2026/04/20 04:28:49 [PROCESS] pid=4043809 ppid=4043799 uid=0      mnt_ns=4026532695 container=order-processor-insights_service         path=/usr/bin/curl
+2026/04/20 04:28:49 [2026-04-20 04:28:49] ALERT level=MEDIUM rule=curl_from_container container=order-processor-insights_service pid=4043809 ppid=4043799 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 04:28:49 [EXIT]    pid=4043799 ppid=2869092 exit_code=0   duration=84ms comm=runc
+2026/04/20 04:28:49 [FILE]    pid=4043809 ppid=2869092 uid=0      container=order-processor-insights_service         comm=curl                 file=/etc/passwd
+2026/04/20 04:28:49 [2026-04-20 04:28:49] ALERT level=HIGH rule=sensitive_file_access container=order-processor-insights_service pid=4043809 ppid=2869092 uid=0 comm=curl msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 04:28:49 [EXIT]    pid=4043809 ppid=2869092 exit_code=0   duration=116ms comm=curl
+2026/04/20 04:28:49 [PROCESS] pid=4043816 ppid=2868362 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:28:49 [PROCESS] pid=4043824 ppid=4043816 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:28:49 [EXIT]    pid=4043825 ppid=4043816 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 04:28:49 [EXIT]    pid=4043824 ppid=4043816 exit_code=0   duration=13ms comm=runc:[0:PARENT]
+2026/04/20 04:28:49 [PROCESS] pid=4043826 ppid=4043816 uid=0      mnt_ns=4026532567 container=order-processor-order_service            path=/usr/bin/curl
+2026/04/20 04:28:49 [2026-04-20 04:28:49] ALERT level=MEDIUM rule=curl_from_container container=order-processor-order_service pid=4043826 ppid=4043816 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 04:28:49 [EXIT]    pid=4043816 ppid=2868362 exit_code=0   duration=69ms comm=runc
+2026/04/20 04:28:49 [FILE]    pid=4043826 ppid=2868362 uid=0      container=order-processor-order_service            comm=curl                 file=/etc/passwd
+2026/04/20 04:28:49 [2026-04-20 04:28:49] ALERT level=HIGH rule=sensitive_file_access container=order-processor-order_service pid=4043826 ppid=2868362 uid=0 comm=curl msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 04:28:49 [EXIT]    pid=4043826 ppid=2868362 exit_code=0   duration=93ms comm=curl
+2026/04/20 04:28:49 [PROCESS] pid=4043831 ppid=2852483 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:28:49 [PROCESS] pid=4043839 ppid=4043831 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:28:49 [EXIT]    pid=4043840 ppid=4043831 exit_code=0   duration=4ms comm=runc:[1:CHILD]
+2026/04/20 04:28:49 [EXIT]    pid=4043839 ppid=4043831 exit_code=0   duration=7ms comm=runc:[0:PARENT]
+2026/04/20 04:28:49 [PROCESS] pid=4043841 ppid=4043831 uid=0      mnt_ns=4026532370 container=order-processor-localstack               path=/usr/bin/curl
+2026/04/20 04:28:49 [2026-04-20 04:28:49] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=4043841 ppid=4043831 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 04:28:49 [EXIT]    pid=4043831 ppid=2852483 exit_code=0   duration=64ms comm=runc
+2026/04/20 04:28:49 [FILE]    pid=4043841 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/etc/passwd
+2026/04/20 04:28:49 [2026-04-20 04:28:49] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4043841 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 04:28:49 [EXIT]    pid=4043841 ppid=2852483 exit_code=0   duration=66ms comm=curl
+2026/04/20 04:28:52 [PROCESS] pid=4043847 ppid=4018865 uid=1000   mnt_ns=4026531841 container=host                                     path=./run_all_tests.sh
+2026/04/20 04:28:52 [PROCESS] pid=4043848 ppid=4043847 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/pip
+2026/04/20 04:28:53 [PROCESS] pid=4043849 ppid=4043848 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/lsb_release
+2026/04/20 04:28:53 [PROCESS] pid=4043849 ppid=4043848 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/.npm-global/bin/lsb_release
+2026/04/20 04:28:53 [PROCESS] pid=4043849 ppid=4043848 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/local/bin/lsb_release
+2026/04/20 04:28:53 [PROCESS] pid=4043849 ppid=4043848 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/lsb_release
+2026/04/20 04:28:53 [PROCESS] pid=4043850 ppid=4043849 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/getopt
+2026/04/20 04:28:53 [EXIT]    pid=4043850 ppid=4043849 exit_code=0   duration=2ms comm=getopt
+2026/04/20 04:28:53 [EXIT]    pid=4043852 ppid=4043851 exit_code=0   duration=0ms comm=lsb_release
+2026/04/20 04:28:53 [PROCESS] pid=4043854 ppid=4043851 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/tr
+2026/04/20 04:28:53 [PROCESS] pid=4043853 ppid=4043851 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/cut
+2026/04/20 04:28:53 [EXIT]    pid=4043853 ppid=4043851 exit_code=0   duration=3ms comm=cut
+2026/04/20 04:28:53 [EXIT]    pid=4043854 ppid=4043851 exit_code=0   duration=3ms comm=tr
+2026/04/20 04:28:53 [EXIT]    pid=4043851 ppid=4043849 exit_code=0   duration=4ms comm=lsb_release
+2026/04/20 04:28:53 [EXIT]    pid=4043856 ppid=4043855 exit_code=0   duration=0ms comm=lsb_release
+2026/04/20 04:28:53 [PROCESS] pid=4043857 ppid=4043855 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/cut
+2026/04/20 04:28:53 [EXIT]    pid=4043857 ppid=4043855 exit_code=0   duration=2ms comm=cut
+2026/04/20 04:28:53 [EXIT]    pid=4043855 ppid=4043849 exit_code=0   duration=3ms comm=lsb_release
+2026/04/20 04:28:53 [EXIT]    pid=4043859 ppid=4043858 exit_code=0   duration=0ms comm=lsb_release
+2026/04/20 04:28:53 [PROCESS] pid=4043860 ppid=4043858 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/tr
+2026/04/20 04:28:53 [EXIT]    pid=4043860 ppid=4043858 exit_code=0   duration=2ms comm=tr
+2026/04/20 04:28:53 [EXIT]    pid=4043858 ppid=4043849 exit_code=0   duration=3ms comm=lsb_release
+2026/04/20 04:28:53 [PROCESS] pid=4043863 ppid=4043861 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/tr
+2026/04/20 04:28:53 [EXIT]    pid=4043862 ppid=4043861 exit_code=0   duration=0ms comm=lsb_release
+2026/04/20 04:28:53 [EXIT]    pid=4043863 ppid=4043861 exit_code=0   duration=3ms comm=tr
+2026/04/20 04:28:53 [EXIT]    pid=4043861 ppid=4043849 exit_code=0   duration=10ms comm=lsb_release
+2026/04/20 04:28:53 [EXIT]    pid=4043849 ppid=4043848 exit_code=0   duration=28ms comm=lsb_release
+2026/04/20 04:28:53 [PROCESS] pid=4043864 ppid=4043848 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/uname
+2026/04/20 04:28:53 [PROCESS] pid=4043864 ppid=4043848 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/.npm-global/bin/uname
+2026/04/20 04:28:53 [PROCESS] pid=4043864 ppid=4043848 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/local/bin/uname
+2026/04/20 04:28:53 [PROCESS] pid=4043864 ppid=4043848 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/uname
+2026/04/20 04:28:53 [EXIT]    pid=4043864 ppid=4043848 exit_code=0   duration=2ms comm=uname
+2026/04/20 04:28:53 [PROCESS] pid=4043865 ppid=761    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/ip
+2026/04/20 04:28:54 [EXIT]    pid=4043865 ppid=761    exit_code=0   duration=4ms comm=ip
+2026/04/20 04:28:54 [PROCESS] pid=4043866 ppid=761    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/ip
+2026/04/20 04:28:54 [EXIT]    pid=4043866 ppid=761    exit_code=0   duration=6ms comm=ip
+2026/04/20 04:28:54 [PROCESS] pid=4043867 ppid=761    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/ip
+2026/04/20 04:28:54 [EXIT]    pid=4043867 ppid=761    exit_code=0   duration=4ms comm=ip
+2026/04/20 04:28:54 [EXIT]    pid=4043848 ppid=4043847 exit_code=0   duration=1697ms comm=pip
+2026/04/20 04:28:54 [PROCESS] pid=4043868 ppid=4043847 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 04:28:55 [EXIT]    pid=4043868 ppid=4043847 exit_code=0   duration=1184ms comm=python3
+2026/04/20 04:28:55 [PROCESS] pid=4043869 ppid=4043847 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 04:28:55 [EXIT]    pid=4043869 ppid=4043847 exit_code=0   duration=286ms comm=python3
+2026/04/20 04:28:55 [PROCESS] pid=4043870 ppid=4043847 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 04:28:55 [EXIT]    pid=4043871 ppid=704    exit_code=0   duration=2ms comm=getconf
+2026/04/20 04:28:55 [PROCESS] pid=4043871 ppid=704    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/getconf
+2026/04/20 04:28:59 [EXIT]    pid=4043870 ppid=4043847 exit_code=0   duration=3838ms comm=python3
+2026/04/20 04:28:59 [PROCESS] pid=4043872 ppid=4043847 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 04:28:59 [PROCESS] pid=4043873 ppid=2869676 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:28:59 [PROCESS] pid=4043880 ppid=4043873 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:28:59 [EXIT]    pid=4043881 ppid=4043873 exit_code=0   duration=3ms comm=runc:[1:CHILD]
+2026/04/20 04:28:59 [EXIT]    pid=4043880 ppid=4043873 exit_code=0   duration=39ms comm=runc:[0:PARENT]
+2026/04/20 04:28:59 [PROCESS] pid=4043888 ppid=2852483 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:28:59 [EXIT]    pid=4043873 ppid=2869676 exit_code=0   duration=126ms comm=runc
+2026/04/20 04:28:59 [PROCESS] pid=4043882 ppid=4043873 uid=0      mnt_ns=4026532760 container=order-processor-gateway                  path=/usr/bin/curl
+2026/04/20 04:28:59 [2026-04-20 04:28:59] ALERT level=MEDIUM rule=curl_from_container container=order-processor-gateway pid=4043882 ppid=4043873 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 04:28:59 [EXIT]    pid=4043882 ppid=2869676 exit_code=0   duration=97ms comm=curl
+2026/04/20 04:28:59 [PROCESS] pid=4043895 ppid=4043888 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:28:59 [EXIT]    pid=4043898 ppid=4043888 exit_code=0   duration=0ms comm=runc:[1:CHILD]
+2026/04/20 04:28:59 [EXIT]    pid=4043895 ppid=4043888 exit_code=0   duration=27ms comm=runc:[0:PARENT]
+2026/04/20 04:28:59 [EXIT]    pid=4043888 ppid=2852483 exit_code=0   duration=162ms comm=runc
+2026/04/20 04:28:59 [PROCESS] pid=4043899 ppid=2852483 uid=0      mnt_ns=4026532370 container=order-processor-localstack               path=/usr/bin/curl
+2026/04/20 04:28:59 [2026-04-20 04:28:59] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=4043899 ppid=2852483 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 04:28:59 [FILE]    pid=4043899 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/etc/passwd
+2026/04/20 04:28:59 [2026-04-20 04:28:59] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4043899 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 04:28:59 [EXIT]    pid=4043899 ppid=2852483 exit_code=0   duration=148ms comm=curl
+2026/04/20 04:29:01 [PROCESS] pid=4043904 ppid=2850888 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:29:01 [PROCESS] pid=4043911 ppid=4043904 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:29:01 [EXIT]    pid=4043912 ppid=4043904 exit_code=0   duration=2ms comm=runc:[1:CHILD]
+2026/04/20 04:29:01 [EXIT]    pid=4043911 ppid=4043904 exit_code=0   duration=31ms comm=runc:[0:PARENT]
+2026/04/20 04:29:01 [EXIT]    pid=4043904 ppid=2850888 exit_code=0   duration=91ms comm=runc
+2026/04/20 04:29:01 [PROCESS] pid=4043913 ppid=2850888 uid=0      mnt_ns=4026532303 container=order-processor-redis                    path=/usr/local/bin/redis-cli
+2026/04/20 04:29:01 [EXIT]    pid=4043913 ppid=2850888 exit_code=0   duration=65ms comm=redis-cli
+2026/04/20 04:29:02 [EXIT]    pid=4043872 ppid=4043847 exit_code=0   duration=2443ms comm=python3
+2026/04/20 04:29:02 [PROCESS] pid=4043919 ppid=4043847 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 04:29:02 [PROCESS] pid=4043920 ppid=271154 uid=1000   mnt_ns=4026531841 container=host                                     path=/bin/sh
+2026/04/20 04:29:02 [PROCESS] pid=4043921 ppid=4043920 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/ip
+2026/04/20 04:29:02 [EXIT]    pid=4043921 ppid=4043920 exit_code=0   duration=4ms comm=ip
+2026/04/20 04:29:02 [EXIT]    pid=4043920 ppid=271154 exit_code=0   duration=11ms comm=sh
+2026/04/20 04:29:05 [EXIT]    pid=4043919 ppid=4043847 exit_code=0   duration=3874ms comm=python3
+2026/04/20 04:29:05 [PROCESS] pid=4043922 ppid=4043847 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 04:29:05 [PROCESS] pid=4043923 ppid=704    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/getconf
+2026/04/20 04:29:05 [EXIT]    pid=4043923 ppid=704    exit_code=0   duration=2ms comm=getconf
+2026/04/20 04:29:10 [PROCESS] pid=4043924 ppid=2852483 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:29:10 [PROCESS] pid=4043931 ppid=4043924 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:29:10 [EXIT]    pid=4043932 ppid=4043924 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 04:29:10 [EXIT]    pid=4043931 ppid=4043924 exit_code=0   duration=23ms comm=runc:[0:PARENT]
+2026/04/20 04:29:10 [EXIT]    pid=4043924 ppid=2852483 exit_code=0   duration=94ms comm=runc
+2026/04/20 04:29:10 [PROCESS] pid=4043933 ppid=4043924 uid=0      mnt_ns=4026532370 container=order-processor-localstack               path=/usr/bin/curl
+2026/04/20 04:29:10 [2026-04-20 04:29:10] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=4043933 ppid=4043924 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 04:29:10 [FILE]    pid=4043933 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/etc/passwd
+2026/04/20 04:29:10 [2026-04-20 04:29:10] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4043933 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 04:29:10 [EXIT]    pid=4043933 ppid=2852483 exit_code=0   duration=113ms comm=curl
+2026/04/20 04:29:14 [PROCESS] pid=4043939 ppid=2869676 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:29:14 [PROCESS] pid=4043946 ppid=4043939 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:29:14 [EXIT]    pid=4043947 ppid=4043939 exit_code=0   duration=2ms comm=runc:[1:CHILD]
+2026/04/20 04:29:14 [EXIT]    pid=4043946 ppid=4043939 exit_code=0   duration=22ms comm=runc:[0:PARENT]
+2026/04/20 04:29:14 [PROCESS] pid=4043948 ppid=4043939 uid=0      mnt_ns=4026532760 container=order-processor-gateway                  path=/usr/bin/curl
+2026/04/20 04:29:14 [2026-04-20 04:29:14] ALERT level=MEDIUM rule=curl_from_container container=order-processor-gateway pid=4043948 ppid=4043939 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 04:29:14 [EXIT]    pid=4043939 ppid=2869676 exit_code=0   duration=93ms comm=runc
+2026/04/20 04:29:14 [EXIT]    pid=4043948 ppid=2869676 exit_code=0   duration=71ms comm=curl
+2026/04/20 04:29:15 [PROCESS] pid=4043955 ppid=704    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/getconf
+2026/04/20 04:29:15 [EXIT]    pid=4043955 ppid=704    exit_code=0   duration=2ms comm=getconf
+2026/04/20 04:29:16 [PROCESS] pid=4043956 ppid=4043847 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 04:29:16 [EXIT]    pid=4043922 ppid=4043847 exit_code=0   duration=11010ms comm=python3
+2026/04/20 04:29:17 [PROCESS] pid=4043957 ppid=271154 uid=1000   mnt_ns=4026531841 container=host                                     path=/bin/sh
+2026/04/20 04:29:17 [PROCESS] pid=4043958 ppid=4043957 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/ip
+2026/04/20 04:29:17 [EXIT]    pid=4043958 ppid=4043957 exit_code=0   duration=4ms comm=ip
+2026/04/20 04:29:17 [EXIT]    pid=4043957 ppid=271154 exit_code=0   duration=9ms comm=sh
+2026/04/20 04:29:18 [PROCESS] pid=4043959 ppid=4043782 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/docker
+2026/04/20 04:29:18 [EXIT]    pid=4043959 ppid=4043782 exit_code=0   duration=99ms comm=docker
+2026/04/20 04:29:18 [EXIT]    pid=4043956 ppid=4043847 exit_code=0   duration=1940ms comm=python3
+2026/04/20 04:29:18 [PROCESS] pid=4043965 ppid=4043847 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 04:29:20 [PROCESS] pid=4043966 ppid=2852483 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:29:20 [PROCESS] pid=4043973 ppid=4043966 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:29:20 [EXIT]    pid=4043974 ppid=4043966 exit_code=0   duration=2ms comm=runc:[1:CHILD]
+2026/04/20 04:29:20 [EXIT]    pid=4043973 ppid=4043966 exit_code=0   duration=22ms comm=runc:[0:PARENT]
+2026/04/20 04:29:20 [EXIT]    pid=4043966 ppid=2852483 exit_code=0   duration=85ms comm=runc
+2026/04/20 04:29:20 [PROCESS] pid=4043975 ppid=2852483 uid=0      mnt_ns=4026532370 container=order-processor-localstack               path=/usr/bin/curl
+2026/04/20 04:29:20 [2026-04-20 04:29:20] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=4043975 ppid=2852483 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 04:29:20 [FILE]    pid=4043975 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/etc/passwd
+2026/04/20 04:29:20 [2026-04-20 04:29:20] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4043975 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 04:29:20 [EXIT]    pid=4043975 ppid=2852483 exit_code=0   duration=99ms comm=curl
+2026/04/20 04:29:24 [EXIT]    pid=4043965 ppid=4043847 exit_code=0   duration=5310ms comm=python3
+2026/04/20 04:29:24 [PROCESS] pid=4043981 ppid=4043847 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 04:29:25 [PROCESS] pid=4043982 ppid=704    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/getconf
+2026/04/20 04:29:25 [EXIT]    pid=4043982 ppid=704    exit_code=0   duration=3ms comm=getconf
+2026/04/20 04:29:28 [EXIT]    pid=4043981 ppid=4043847 exit_code=0   duration=4498ms comm=python3
+2026/04/20 04:29:28 [PROCESS] pid=4043983 ppid=4043847 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 04:29:29 [PROCESS] pid=4043984 ppid=2869676 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:29:29 [PROCESS] pid=4043991 ppid=4043984 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:29:30 [EXIT]    pid=4043993 ppid=4043984 exit_code=0   duration=7ms comm=runc:[1:CHILD]
+2026/04/20 04:29:30 [EXIT]    pid=4043991 ppid=4043984 exit_code=0   duration=45ms comm=runc:[0:PARENT]
+2026/04/20 04:29:30 [PROCESS] pid=4043994 ppid=4043984 uid=0      mnt_ns=4026532760 container=order-processor-gateway                  path=/usr/bin/curl
+2026/04/20 04:29:30 [2026-04-20 04:29:30] ALERT level=MEDIUM rule=curl_from_container container=order-processor-gateway pid=4043994 ppid=4043984 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 04:29:30 [EXIT]    pid=4043984 ppid=2869676 exit_code=0   duration=115ms comm=runc
+2026/04/20 04:29:30 [EXIT]    pid=4043994 ppid=2869676 exit_code=0   duration=94ms comm=curl
+2026/04/20 04:29:30 [PROCESS] pid=4044001 ppid=2852483 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:29:30 [PROCESS] pid=4044008 ppid=4044001 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:29:30 [EXIT]    pid=4044009 ppid=4044001 exit_code=0   duration=5ms comm=runc:[1:CHILD]
+2026/04/20 04:29:30 [EXIT]    pid=4044008 ppid=4044001 exit_code=0   duration=15ms comm=runc:[0:PARENT]
+2026/04/20 04:29:30 [PROCESS] pid=4044010 ppid=4044001 uid=0      mnt_ns=4026532370 container=order-processor-localstack               path=/usr/bin/curl
+2026/04/20 04:29:30 [2026-04-20 04:29:30] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=4044010 ppid=4044001 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 04:29:30 [EXIT]    pid=4044001 ppid=2852483 exit_code=0   duration=76ms comm=runc
+2026/04/20 04:29:30 [FILE]    pid=4044010 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/etc/passwd
+2026/04/20 04:29:30 [2026-04-20 04:29:30] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4044010 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 04:29:30 [EXIT]    pid=4044010 ppid=2852483 exit_code=0   duration=84ms comm=curl
+2026/04/20 04:29:31 [PROCESS] pid=4044017 ppid=2850888 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:29:31 [PROCESS] pid=4044023 ppid=4044017 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:29:31 [EXIT]    pid=4044026 ppid=4044017 exit_code=0   duration=5ms comm=runc:[1:CHILD]
+2026/04/20 04:29:31 [EXIT]    pid=4044023 ppid=4044017 exit_code=0   duration=36ms comm=runc:[0:PARENT]
+2026/04/20 04:29:31 [EXIT]    pid=4044017 ppid=2850888 exit_code=0   duration=95ms comm=runc
+2026/04/20 04:29:31 [PROCESS] pid=4044027 ppid=2850888 uid=0      mnt_ns=4026532303 container=order-processor-redis                    path=/usr/local/bin/redis-cli
+2026/04/20 04:29:31 [EXIT]    pid=4044027 ppid=2850888 exit_code=0   duration=60ms comm=redis-cli
+2026/04/20 04:29:31 [PROCESS] pid=4044034 ppid=2096863 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/sshd
+2026/04/20 04:29:32 [PROCESS] pid=4044036 ppid=271154 uid=1000   mnt_ns=4026531841 container=host                                     path=/bin/sh
+2026/04/20 04:29:32 [PROCESS] pid=4044037 ppid=4044036 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/ip
+2026/04/20 04:29:32 [EXIT]    pid=4044037 ppid=4044036 exit_code=0   duration=4ms comm=ip
+2026/04/20 04:29:32 [EXIT]    pid=4044036 ppid=271154 exit_code=0   duration=9ms comm=sh
+2026/04/20 04:29:32 [EXIT]    pid=4044035 ppid=4044034 exit_code=255 duration=879ms comm=sshd
+2026/04/20 04:29:32 [EXIT]    pid=4044034 ppid=2096863 exit_code=255 duration=942ms comm=sshd
+2026/04/20 04:29:32 [PROCESS] pid=4044038 ppid=2868312 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:29:32 [PROCESS] pid=4044045 ppid=4044038 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:29:32 [EXIT]    pid=4044047 ppid=4044038 exit_code=0   duration=8ms comm=runc:[1:CHILD]
+2026/04/20 04:29:32 [EXIT]    pid=4044045 ppid=4044038 exit_code=0   duration=25ms comm=runc:[0:PARENT]
+2026/04/20 04:29:32 [EXIT]    pid=4044038 ppid=2868312 exit_code=0   duration=106ms comm=runc
+2026/04/20 04:29:32 [PROCESS] pid=4044048 ppid=2868312 uid=0      mnt_ns=4026532504 container=order-processor-inventory_service        path=/usr/bin/curl
+2026/04/20 04:29:32 [FILE]    pid=4044048 ppid=2868312 uid=0      container=order-processor-inventory_service        comm=curl                 file=/etc/passwd
+2026/04/20 04:29:32 [2026-04-20 04:29:32] ALERT level=HIGH rule=sensitive_file_access container=order-processor-inventory_service pid=4044048 ppid=2868312 uid=0 comm=curl msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 04:29:32 [EXIT]    pid=4044048 ppid=2868312 exit_code=0   duration=143ms comm=curl
+2026/04/20 04:29:34 [PROCESS] pid=4044055 ppid=2868372 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:29:34 [PROCESS] pid=4044061 ppid=2868272 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:29:34 [PROCESS] pid=4044071 ppid=4044061 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:29:34 [EXIT]    pid=4044072 ppid=4044055 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 04:29:34 [EXIT]    pid=4044069 ppid=4044055 exit_code=0   duration=14ms comm=runc:[0:PARENT]
+2026/04/20 04:29:34 [PROCESS] pid=4044069 ppid=4044055 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:29:34 [EXIT]    pid=4044079 ppid=4044061 exit_code=0   duration=2ms comm=runc:[1:CHILD]
+2026/04/20 04:29:34 [EXIT]    pid=4044071 ppid=4044061 exit_code=0   duration=22ms comm=runc:[0:PARENT]
+2026/04/20 04:29:34 [EXIT]    pid=4044055 ppid=2868372 exit_code=0   duration=124ms comm=runc
+2026/04/20 04:29:34 [PROCESS] pid=4044073 ppid=2868372 uid=1000   mnt_ns=4026532630 container=order-processor-auth_service             path=/usr/bin/curl
+2026/04/20 04:29:34 [2026-04-20 04:29:34] ALERT level=MEDIUM rule=curl_from_container container=order-processor-auth_service pid=4044073 ppid=2868372 uid=1000 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 04:29:34 [EXIT]    pid=4043983 ppid=4043847 exit_code=0   duration=6280ms comm=python3
+2026/04/20 04:29:34 [PROCESS] pid=4044087 ppid=4043847 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 04:29:34 [FILE]    pid=4044073 ppid=2868372 uid=1000   container=order-processor-auth_service             comm=curl                 file=/etc/passwd
+2026/04/20 04:29:34 [2026-04-20 04:29:34] ALERT level=HIGH rule=sensitive_file_access container=order-processor-auth_service pid=4044073 ppid=2868372 uid=1000 comm=curl msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 04:29:35 [EXIT]    pid=4044061 ppid=2868272 exit_code=0   duration=167ms comm=runc
+2026/04/20 04:29:35 [EXIT]    pid=4044073 ppid=2868372 exit_code=0   duration=134ms comm=curl
+2026/04/20 04:29:35 [PROCESS] pid=4044081 ppid=2868272 uid=0      mnt_ns=4026532441 container=order-processor-user_service             path=/usr/bin/curl
+2026/04/20 04:29:35 [2026-04-20 04:29:35] ALERT level=MEDIUM rule=curl_from_container container=order-processor-user_service pid=4044081 ppid=2868272 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 04:29:35 [FILE]    pid=4044081 ppid=2868272 uid=0      container=order-processor-user_service             comm=curl                 file=/etc/passwd
+2026/04/20 04:29:35 [2026-04-20 04:29:35] ALERT level=HIGH rule=sensitive_file_access container=order-processor-user_service pid=4044081 ppid=2868272 uid=0 comm=curl msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 04:29:35 [EXIT]    pid=4044081 ppid=2868272 exit_code=0   duration=219ms comm=curl
+2026/04/20 04:29:35 [PROCESS] pid=4044088 ppid=704    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/getconf
+2026/04/20 04:29:35 [EXIT]    pid=4044088 ppid=704    exit_code=0   duration=2ms comm=getconf
+2026/04/20 04:29:38 [PROCESS] pid=4044089 ppid=2869781 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:29:38 [PROCESS] pid=4044095 ppid=4044089 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:29:38 [EXIT]    pid=4044097 ppid=4044089 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 04:29:38 [EXIT]    pid=4044095 ppid=4044089 exit_code=0   duration=36ms comm=runc:[0:PARENT]
+2026/04/20 04:29:38 [EXIT]    pid=4044089 ppid=2869781 exit_code=0   duration=97ms comm=runc
+2026/04/20 04:29:38 [PROCESS] pid=4044098 ppid=2869781 uid=0      mnt_ns=4026532825 container=order-processor-frontend                 path=/usr/bin/curl
+2026/04/20 04:29:38 [2026-04-20 04:29:38] ALERT level=MEDIUM rule=curl_from_container container=order-processor-frontend pid=4044098 ppid=2869781 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 04:29:38 [EXIT]    pid=4044098 ppid=2869781 exit_code=0   duration=65ms comm=curl
+2026/04/20 04:29:39 [EXIT]    pid=4044087 ppid=4043847 exit_code=0   duration=4210ms comm=python3
+2026/04/20 04:29:39 [PROCESS] pid=4044104 ppid=4043847 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 04:29:40 [PROCESS] pid=4044105 ppid=2852483 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:29:40 [PROCESS] pid=4044112 ppid=4044105 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:29:40 [EXIT]    pid=4044113 ppid=4044105 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 04:29:40 [EXIT]    pid=4044112 ppid=4044105 exit_code=0   duration=33ms comm=runc:[0:PARENT]
+2026/04/20 04:29:40 [PROCESS] pid=4044114 ppid=4044105 uid=0      mnt_ns=4026532370 container=order-processor-localstack               path=/usr/bin/curl
+2026/04/20 04:29:40 [2026-04-20 04:29:40] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=4044114 ppid=4044105 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 04:29:40 [EXIT]    pid=4044105 ppid=2852483 exit_code=0   duration=99ms comm=runc
+2026/04/20 04:29:40 [FILE]    pid=4044114 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/etc/passwd
+2026/04/20 04:29:40 [2026-04-20 04:29:40] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4044114 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 04:29:40 [EXIT]    pid=4044114 ppid=2852483 exit_code=0   duration=78ms comm=curl
+2026/04/20 04:29:41 [EXIT]    pid=4044104 ppid=4043847 exit_code=0   duration=2529ms comm=python3
+2026/04/20 04:29:41 [PROCESS] pid=4044121 ppid=4043847 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 04:29:44 [PROCESS] pid=4044122 ppid=4043847 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 04:29:44 [EXIT]    pid=4044121 ppid=4043847 exit_code=0   duration=2366ms comm=python3
+2026/04/20 04:29:44 [EXIT]    pid=4044122 ppid=4043847 exit_code=0   duration=295ms comm=python3
+2026/04/20 04:29:44 [PROCESS] pid=4044123 ppid=4043847 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 04:29:45 [PROCESS] pid=4044124 ppid=2869676 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:29:45 [PROCESS] pid=4044130 ppid=4044124 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:29:45 [EXIT]    pid=4044132 ppid=4044124 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 04:29:45 [EXIT]    pid=4044130 ppid=4044124 exit_code=0   duration=41ms comm=runc:[0:PARENT]
+2026/04/20 04:29:45 [EXIT]    pid=4044124 ppid=2869676 exit_code=0   duration=114ms comm=runc
+2026/04/20 04:29:45 [PROCESS] pid=4044133 ppid=4044124 uid=0      mnt_ns=4026532760 container=order-processor-gateway                  path=/usr/bin/curl
+2026/04/20 04:29:45 [2026-04-20 04:29:45] ALERT level=MEDIUM rule=curl_from_container container=order-processor-gateway pid=4044133 ppid=4044124 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 04:29:45 [EXIT]    pid=4044133 ppid=2869676 exit_code=0   duration=84ms comm=curl
+2026/04/20 04:29:45 [PROCESS] pid=4044139 ppid=704    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/getconf
+2026/04/20 04:29:45 [EXIT]    pid=4044139 ppid=704    exit_code=0   duration=2ms comm=getconf
+2026/04/20 04:29:47 [EXIT]    pid=4044123 ppid=4043847 exit_code=0   duration=2854ms comm=python3
+2026/04/20 04:29:47 [PROCESS] pid=4044140 ppid=4043847 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 04:29:47 [PROCESS] pid=4044141 ppid=271154 uid=1000   mnt_ns=4026531841 container=host                                     path=/bin/sh
+2026/04/20 04:29:47 [PROCESS] pid=4044142 ppid=4044141 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/ip
+2026/04/20 04:29:47 [EXIT]    pid=4044142 ppid=4044141 exit_code=0   duration=5ms comm=ip
+2026/04/20 04:29:47 [EXIT]    pid=4044141 ppid=271154 exit_code=0   duration=11ms comm=sh
+2026/04/20 04:29:48 [PROCESS] pid=4044143 ppid=4043782 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/docker
+2026/04/20 04:29:48 [EXIT]    pid=4044143 ppid=4043782 exit_code=0   duration=72ms comm=docker
+2026/04/20 04:29:49 [PROCESS] pid=4044151 ppid=2869092 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:29:49 [PROCESS] pid=4044158 ppid=4044151 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:29:49 [EXIT]    pid=4044159 ppid=4044151 exit_code=0   duration=7ms comm=runc:[1:CHILD]
+2026/04/20 04:29:49 [EXIT]    pid=4044158 ppid=4044151 exit_code=0   duration=19ms comm=runc:[0:PARENT]
+2026/04/20 04:29:49 [EXIT]    pid=4044151 ppid=2869092 exit_code=0   duration=107ms comm=runc
+2026/04/20 04:29:49 [PROCESS] pid=4044160 ppid=2869092 uid=0      mnt_ns=4026532695 container=order-processor-insights_service         path=/usr/bin/curl
+2026/04/20 04:29:49 [2026-04-20 04:29:49] ALERT level=MEDIUM rule=curl_from_container container=order-processor-insights_service pid=4044160 ppid=2869092 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 04:29:49 [FILE]    pid=4044160 ppid=2869092 uid=0      container=order-processor-insights_service         comm=curl                 file=/etc/passwd
+2026/04/20 04:29:49 [2026-04-20 04:29:49] ALERT level=HIGH rule=sensitive_file_access container=order-processor-insights_service pid=4044160 ppid=2869092 uid=0 comm=curl msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 04:29:49 [EXIT]    pid=4044160 ppid=2869092 exit_code=0   duration=127ms comm=curl
+2026/04/20 04:29:49 [PROCESS] pid=4044166 ppid=2868362 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:29:49 [PROCESS] pid=4044173 ppid=4044166 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:29:49 [EXIT]    pid=4044174 ppid=4044166 exit_code=0   duration=0ms comm=runc:[1:CHILD]
+2026/04/20 04:29:49 [EXIT]    pid=4044173 ppid=4044166 exit_code=0   duration=39ms comm=runc:[0:PARENT]
+2026/04/20 04:29:49 [EXIT]    pid=4044166 ppid=2868362 exit_code=0   duration=103ms comm=runc
+2026/04/20 04:29:49 [PROCESS] pid=4044175 ppid=2868362 uid=0      mnt_ns=4026532567 container=order-processor-order_service            path=/usr/bin/curl
+2026/04/20 04:29:49 [2026-04-20 04:29:49] ALERT level=MEDIUM rule=curl_from_container container=order-processor-order_service pid=4044175 ppid=2868362 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 04:29:49 [FILE]    pid=4044175 ppid=2868362 uid=0      container=order-processor-order_service            comm=curl                 file=/etc/passwd
+2026/04/20 04:29:49 [2026-04-20 04:29:49] ALERT level=HIGH rule=sensitive_file_access container=order-processor-order_service pid=4044175 ppid=2868362 uid=0 comm=curl msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 04:29:49 [EXIT]    pid=4044175 ppid=2868362 exit_code=0   duration=84ms comm=curl
+2026/04/20 04:29:50 [PROCESS] pid=4044181 ppid=2852483 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:29:50 [PROCESS] pid=4044188 ppid=4044181 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:29:50 [EXIT]    pid=4044190 ppid=4044181 exit_code=0   duration=0ms comm=runc:[1:CHILD]
+2026/04/20 04:29:50 [EXIT]    pid=4044188 ppid=4044181 exit_code=0   duration=6ms comm=runc:[0:PARENT]
+2026/04/20 04:29:50 [EXIT]    pid=4044181 ppid=2852483 exit_code=0   duration=63ms comm=runc
+2026/04/20 04:29:50 [PROCESS] pid=4044191 ppid=2852483 uid=0      mnt_ns=4026532370 container=order-processor-localstack               path=/usr/bin/curl
+2026/04/20 04:29:50 [2026-04-20 04:29:50] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=4044191 ppid=2852483 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 04:29:50 [FILE]    pid=4044191 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/etc/passwd
+2026/04/20 04:29:50 [2026-04-20 04:29:50] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4044191 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 04:29:50 [EXIT]    pid=4044191 ppid=2852483 exit_code=0   duration=86ms comm=curl
+2026/04/20 04:29:53 [EXIT]    pid=4044140 ppid=4043847 exit_code=0   duration=6622ms comm=python3
+2026/04/20 04:29:53 [PROCESS] pid=4044197 ppid=4043847 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 04:29:54 [PROCESS] pid=4044198 ppid=761    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/ip
+2026/04/20 04:29:54 [PROCESS] pid=4044199 ppid=761    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/ip
+2026/04/20 04:29:54 [EXIT]    pid=4044198 ppid=761    exit_code=0   duration=8ms comm=ip
+2026/04/20 04:29:54 [EXIT]    pid=4044199 ppid=761    exit_code=0   duration=7ms comm=ip
+2026/04/20 04:29:54 [PROCESS] pid=4044200 ppid=761    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/ip
+2026/04/20 04:29:54 [EXIT]    pid=4044200 ppid=761    exit_code=0   duration=6ms comm=ip
+2026/04/20 04:29:55 [PROCESS] pid=4044201 ppid=2096863 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/sshd
+2026/04/20 04:29:55 [PROCESS] pid=4044203 ppid=704    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/getconf
+2026/04/20 04:29:55 [EXIT]    pid=4044203 ppid=704    exit_code=0   duration=2ms comm=getconf
+2026/04/20 04:29:58 [EXIT]    pid=4044197 ppid=4043847 exit_code=0   duration=4838ms comm=python3
+2026/04/20 04:29:58 [PROCESS] pid=4044206 ppid=4043847 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 04:30:00 [PROCESS] pid=4044207 ppid=2869676 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:30:00 [PROCESS] pid=4044214 ppid=4044207 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:30:00 [EXIT]    pid=4044216 ppid=4044207 exit_code=0   duration=2ms comm=runc:[1:CHILD]
+2026/04/20 04:30:00 [EXIT]    pid=4044214 ppid=4044207 exit_code=0   duration=31ms comm=runc:[0:PARENT]
+2026/04/20 04:30:00 [EXIT]    pid=4044207 ppid=2869676 exit_code=0   duration=128ms comm=runc
+2026/04/20 04:30:00 [PROCESS] pid=4044217 ppid=4044207 uid=0      mnt_ns=4026532760 container=order-processor-gateway                  path=/usr/bin/curl
+2026/04/20 04:30:00 [2026-04-20 04:30:00] ALERT level=MEDIUM rule=curl_from_container container=order-processor-gateway pid=4044217 ppid=4044207 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 04:30:00 [EXIT]    pid=4044217 ppid=2869676 exit_code=0   duration=106ms comm=curl
+2026/04/20 04:30:00 [PROCESS] pid=4044223 ppid=2852483 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:30:00 [PROCESS] pid=4044229 ppid=4044223 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:30:00 [EXIT]    pid=4044231 ppid=4044223 exit_code=0   duration=3ms comm=runc:[1:CHILD]
+2026/04/20 04:30:00 [EXIT]    pid=4044229 ppid=4044223 exit_code=0   duration=31ms comm=runc:[0:PARENT]
+2026/04/20 04:30:00 [PROCESS] pid=4044232 ppid=4044223 uid=0      mnt_ns=4026532370 container=order-processor-localstack               path=/usr/bin/curl
+2026/04/20 04:30:00 [2026-04-20 04:30:00] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=4044232 ppid=4044223 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 04:30:00 [EXIT]    pid=4044223 ppid=2852483 exit_code=0   duration=111ms comm=runc
+2026/04/20 04:30:00 [FILE]    pid=4044232 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/etc/passwd
+2026/04/20 04:30:00 [2026-04-20 04:30:00] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4044232 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 04:30:00 [EXIT]    pid=4044232 ppid=2852483 exit_code=0   duration=161ms comm=curl
+2026/04/20 04:30:01 [PROCESS] pid=4044239 ppid=2850888 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:30:01 [PROCESS] pid=4044246 ppid=4044239 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:30:01 [EXIT]    pid=4044247 ppid=4044239 exit_code=0   duration=12ms comm=runc:[1:CHILD]
+2026/04/20 04:30:01 [EXIT]    pid=4044246 ppid=4044239 exit_code=0   duration=66ms comm=runc:[0:PARENT]
+2026/04/20 04:30:01 [PROCESS] pid=4044248 ppid=4044239 uid=0      mnt_ns=4026532303 container=order-processor-redis                    path=/usr/local/bin/redis-cli
+2026/04/20 04:30:01 [EXIT]    pid=4044239 ppid=2850888 exit_code=0   duration=242ms comm=runc
+2026/04/20 04:30:01 [EXIT]    pid=4044248 ppid=2850888 exit_code=0   duration=161ms comm=redis-cli
+2026/04/20 04:30:02 [PROCESS] pid=4044254 ppid=271154 uid=1000   mnt_ns=4026531841 container=host                                     path=/bin/sh
+2026/04/20 04:30:02 [PROCESS] pid=4044255 ppid=4044254 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/ip
+2026/04/20 04:30:02 [EXIT]    pid=4044255 ppid=4044254 exit_code=0   duration=5ms comm=ip
+2026/04/20 04:30:02 [EXIT]    pid=4044254 ppid=271154 exit_code=0   duration=14ms comm=sh
+2026/04/20 04:30:03 [EXIT]    pid=4044206 ppid=4043847 exit_code=0   duration=4312ms comm=python3
+2026/04/20 04:30:03 [EXIT]    pid=4043847 ppid=4018865 exit_code=0   duration=70430ms comm=run_all_tests.s
+2026/04/20 04:30:03 [EXIT]    pid=4044202 ppid=4044201 exit_code=255 duration=7980ms comm=sshd
+2026/04/20 04:30:03 [EXIT]    pid=4044201 ppid=2096863 exit_code=255 duration=8008ms comm=sshd
+2026/04/20 04:30:05 [PROCESS] pid=4044256 ppid=704    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/getconf
+2026/04/20 04:30:05 [EXIT]    pid=4044256 ppid=704    exit_code=0   duration=2ms comm=getconf
+2026/04/20 04:30:10 [PROCESS] pid=4044257 ppid=2852483 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:30:11 [PROCESS] pid=4044265 ppid=4044257 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:30:11 [EXIT]    pid=4044266 ppid=4044257 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 04:30:11 [EXIT]    pid=4044265 ppid=4044257 exit_code=0   duration=8ms comm=runc:[0:PARENT]
+2026/04/20 04:30:11 [PROCESS] pid=4044267 ppid=4044257 uid=0      mnt_ns=4026532370 container=order-processor-localstack               path=/usr/bin/curl
+2026/04/20 04:30:11 [2026-04-20 04:30:11] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=4044267 ppid=4044257 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 04:30:11 [EXIT]    pid=4044257 ppid=2852483 exit_code=0   duration=102ms comm=runc
+2026/04/20 04:30:11 [FILE]    pid=4044267 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/etc/passwd
+2026/04/20 04:30:11 [2026-04-20 04:30:11] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4044267 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 04:30:11 [EXIT]    pid=4044267 ppid=2852483 exit_code=0   duration=98ms comm=curl
+2026/04/20 04:30:15 [PROCESS] pid=4044273 ppid=2869676 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:30:15 [PROCESS] pid=4044280 ppid=4044273 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:30:15 [EXIT]    pid=4044281 ppid=4044273 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 04:30:15 [EXIT]    pid=4044280 ppid=4044273 exit_code=0   duration=14ms comm=runc:[0:PARENT]
+2026/04/20 04:30:15 [EXIT]    pid=4044273 ppid=2869676 exit_code=0   duration=83ms comm=runc
+2026/04/20 04:30:15 [PROCESS] pid=4044282 ppid=4044273 uid=0      mnt_ns=4026532760 container=order-processor-gateway                  path=/usr/bin/curl
+2026/04/20 04:30:15 [2026-04-20 04:30:15] ALERT level=MEDIUM rule=curl_from_container container=order-processor-gateway pid=4044282 ppid=4044273 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 04:30:15 [EXIT]    pid=4044282 ppid=2869676 exit_code=0   duration=66ms comm=curl
+2026/04/20 04:30:15 [PROCESS] pid=4044288 ppid=704    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/getconf
+2026/04/20 04:30:15 [EXIT]    pid=4044288 ppid=704    exit_code=0   duration=2ms comm=getconf
+2026/04/20 04:30:17 [PROCESS] pid=4044289 ppid=271154 uid=1000   mnt_ns=4026531841 container=host                                     path=/bin/sh
+2026/04/20 04:30:17 [PROCESS] pid=4044290 ppid=4044289 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/ip
+2026/04/20 04:30:17 [EXIT]    pid=4044290 ppid=4044289 exit_code=0   duration=4ms comm=ip
+2026/04/20 04:30:17 [EXIT]    pid=4044289 ppid=271154 exit_code=0   duration=8ms comm=sh
+2026/04/20 04:30:17 [PROCESS] pid=4044291 ppid=391    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg-query
+2026/04/20 04:30:17 [EXIT]    pid=4044291 ppid=391    exit_code=0   duration=19ms comm=dpkg-query
+2026/04/20 04:30:17 [PROCESS] pid=4044292 ppid=391    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/pip
+2026/04/20 04:30:18 [PROCESS] pid=4044293 ppid=4043782 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/docker
+2026/04/20 04:30:18 [EXIT]    pid=4044293 ppid=4043782 exit_code=0   duration=96ms comm=docker
+2026/04/20 04:30:19 [EXIT]    pid=4044292 ppid=391    exit_code=0   duration=1237ms comm=pip
+2026/04/20 04:30:19 [PROCESS] pid=4044299 ppid=391    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-get
+2026/04/20 04:30:19 [PROCESS] pid=4044300 ppid=4044299 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044300 ppid=4044299 exit_code=0   duration=7ms comm=dpkg
+2026/04/20 04:30:19 [PROCESS] pid=4044301 ppid=4044299 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/lib/apt/methods/mirror+file
+2026/04/20 04:30:19 [EXIT]    pid=4044301 ppid=4044299 exit_code=0   duration=7ms comm=mirror+file
+2026/04/20 04:30:19 [PROCESS] pid=4044302 ppid=4044299 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/lib/apt/methods/https
+2026/04/20 04:30:19 [EXIT]    pid=4044302 ppid=4044299 exit_code=100 duration=26ms comm=https
+2026/04/20 04:30:19 [PROCESS] pid=4044303 ppid=4044299 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/lib/apt/methods/https
+2026/04/20 04:30:19 [PROCESS] pid=4044304 ppid=4044299 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/lib/apt/methods/https
+2026/04/20 04:30:19 [PROCESS] pid=4044305 ppid=4044299 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/lib/apt/methods/mirror+file
+2026/04/20 04:30:19 [PROCESS] pid=4044306 ppid=4044299 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/lib/apt/methods/file
+2026/04/20 04:30:19 [EXIT]    pid=4044306 ppid=4044299 exit_code=0   duration=7ms comm=file
+2026/04/20 04:30:19 [PROCESS] pid=4044307 ppid=4044299 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/lib/apt/methods/file
+2026/04/20 04:30:19 [PROCESS] pid=4044308 ppid=4044299 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/lib/apt/methods/https
+2026/04/20 04:30:19 [PROCESS] pid=4044309 ppid=4044299 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/lib/apt/methods/gpgv
+2026/04/20 04:30:19 [EXIT]    pid=4044309 ppid=4044299 exit_code=0   duration=7ms comm=gpgv
+2026/04/20 04:30:19 [PROCESS] pid=4044310 ppid=4044299 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/lib/apt/methods/gpgv
+2026/04/20 04:30:19 [PROCESS] pid=4044312 ppid=4044311 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-key
+2026/04/20 04:30:19 [EXIT]    pid=4044313 ppid=4044312 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:19 [PROCESS] pid=4044314 ppid=4044312 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044315 ppid=4044314 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044315 ppid=4044314 exit_code=0   duration=4ms comm=dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044314 ppid=4044312 exit_code=0   duration=15ms comm=apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044316 ppid=4044312 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044317 ppid=4044316 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044317 ppid=4044316 exit_code=0   duration=2ms comm=dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044316 ppid=4044312 exit_code=0   duration=11ms comm=apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044318 ppid=4044312 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044319 ppid=4044318 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044319 ppid=4044318 exit_code=0   duration=3ms comm=dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044318 ppid=4044312 exit_code=0   duration=13ms comm=apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044320 ppid=4044312 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044321 ppid=4044320 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044321 ppid=4044320 exit_code=0   duration=2ms comm=dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044320 ppid=4044312 exit_code=0   duration=12ms comm=apt-config
+2026/04/20 04:30:19 [EXIT]    pid=4044322 ppid=4044312 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:19 [PROCESS] pid=4044323 ppid=4044312 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044324 ppid=4044323 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044324 ppid=4044323 exit_code=0   duration=2ms comm=dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044323 ppid=4044312 exit_code=0   duration=12ms comm=apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044325 ppid=4044312 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044326 ppid=4044325 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044326 ppid=4044325 exit_code=0   duration=2ms comm=dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044325 ppid=4044312 exit_code=0   duration=13ms comm=apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044327 ppid=4044312 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044328 ppid=4044327 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044328 ppid=4044327 exit_code=0   duration=2ms comm=dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044327 ppid=4044312 exit_code=0   duration=12ms comm=apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044329 ppid=4044312 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/mktemp
+2026/04/20 04:30:19 [EXIT]    pid=4044329 ppid=4044312 exit_code=0   duration=2ms comm=mktemp
+2026/04/20 04:30:19 [PROCESS] pid=4044330 ppid=4044312 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/chmod
+2026/04/20 04:30:19 [EXIT]    pid=4044330 ppid=4044312 exit_code=0   duration=1ms comm=chmod
+2026/04/20 04:30:19 [PROCESS] pid=4044331 ppid=4044312 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/readlink
+2026/04/20 04:30:19 [EXIT]    pid=4044331 ppid=4044312 exit_code=0   duration=2ms comm=readlink
+2026/04/20 04:30:19 [PROCESS] pid=4044332 ppid=4044312 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/rm
+2026/04/20 04:30:19 [EXIT]    pid=4044332 ppid=4044312 exit_code=0   duration=1ms comm=rm
+2026/04/20 04:30:19 [PROCESS] pid=4044333 ppid=4044312 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/touch
+2026/04/20 04:30:19 [EXIT]    pid=4044333 ppid=4044312 exit_code=0   duration=4ms comm=touch
+2026/04/20 04:30:19 [PROCESS] pid=4044334 ppid=4044312 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044335 ppid=4044334 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044335 ppid=4044334 exit_code=0   duration=2ms comm=dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044334 ppid=4044312 exit_code=0   duration=13ms comm=apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044336 ppid=4044312 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/readlink
+2026/04/20 04:30:19 [EXIT]    pid=4044336 ppid=4044312 exit_code=0   duration=1ms comm=readlink
+2026/04/20 04:30:19 [PROCESS] pid=4044337 ppid=4044312 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/find
+2026/04/20 04:30:19 [EXIT]    pid=4044337 ppid=4044312 exit_code=0   duration=3ms comm=find
+2026/04/20 04:30:19 [EXIT]    pid=4044339 ppid=4044338 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:19 [PROCESS] pid=4044340 ppid=4044338 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/sort
+2026/04/20 04:30:19 [EXIT]    pid=4044340 ppid=4044338 exit_code=0   duration=2ms comm=sort
+2026/04/20 04:30:19 [EXIT]    pid=4044338 ppid=4044312 exit_code=0   duration=3ms comm=apt-key
+2026/04/20 04:30:19 [PROCESS] pid=4044342 ppid=4044341 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/awk
+2026/04/20 04:30:19 [PROCESS] pid=4044343 ppid=4044341 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/base64
+2026/04/20 04:30:19 [EXIT]    pid=4044342 ppid=4044341 exit_code=0   duration=2ms comm=awk
+2026/04/20 04:30:19 [EXIT]    pid=4044343 ppid=4044341 exit_code=0   duration=2ms comm=base64
+2026/04/20 04:30:19 [EXIT]    pid=4044341 ppid=4044312 exit_code=0   duration=3ms comm=apt-key
+2026/04/20 04:30:19 [PROCESS] pid=4044344 ppid=4044312 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cat
+2026/04/20 04:30:19 [EXIT]    pid=4044344 ppid=4044312 exit_code=0   duration=1ms comm=cat
+2026/04/20 04:30:19 [PROCESS] pid=4044346 ppid=4044345 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/awk
+2026/04/20 04:30:19 [PROCESS] pid=4044347 ppid=4044345 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/base64
+2026/04/20 04:30:19 [EXIT]    pid=4044346 ppid=4044345 exit_code=0   duration=2ms comm=awk
+2026/04/20 04:30:19 [EXIT]    pid=4044347 ppid=4044345 exit_code=0   duration=2ms comm=base64
+2026/04/20 04:30:19 [EXIT]    pid=4044345 ppid=4044312 exit_code=0   duration=3ms comm=apt-key
+2026/04/20 04:30:19 [PROCESS] pid=4044348 ppid=4044312 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cat
+2026/04/20 04:30:19 [EXIT]    pid=4044348 ppid=4044312 exit_code=0   duration=1ms comm=cat
+2026/04/20 04:30:19 [PROCESS] pid=4044350 ppid=4044349 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/awk
+2026/04/20 04:30:19 [PROCESS] pid=4044351 ppid=4044349 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/base64
+2026/04/20 04:30:19 [EXIT]    pid=4044351 ppid=4044349 exit_code=0   duration=1ms comm=base64
+2026/04/20 04:30:19 [EXIT]    pid=4044350 ppid=4044349 exit_code=0   duration=1ms comm=awk
+2026/04/20 04:30:19 [EXIT]    pid=4044349 ppid=4044312 exit_code=0   duration=2ms comm=apt-key
+2026/04/20 04:30:19 [PROCESS] pid=4044352 ppid=4044312 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cat
+2026/04/20 04:30:19 [EXIT]    pid=4044352 ppid=4044312 exit_code=0   duration=1ms comm=cat
+2026/04/20 04:30:19 [PROCESS] pid=4044354 ppid=4044353 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/awk
+2026/04/20 04:30:19 [PROCESS] pid=4044355 ppid=4044353 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/base64
+2026/04/20 04:30:19 [EXIT]    pid=4044354 ppid=4044353 exit_code=0   duration=2ms comm=awk
+2026/04/20 04:30:19 [EXIT]    pid=4044355 ppid=4044353 exit_code=0   duration=1ms comm=base64
+2026/04/20 04:30:19 [EXIT]    pid=4044353 ppid=4044312 exit_code=0   duration=3ms comm=apt-key
+2026/04/20 04:30:19 [PROCESS] pid=4044356 ppid=4044312 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cat
+2026/04/20 04:30:19 [EXIT]    pid=4044356 ppid=4044312 exit_code=0   duration=1ms comm=cat
+2026/04/20 04:30:19 [PROCESS] pid=4044358 ppid=4044357 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/awk
+2026/04/20 04:30:19 [PROCESS] pid=4044359 ppid=4044357 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/base64
+2026/04/20 04:30:19 [EXIT]    pid=4044358 ppid=4044357 exit_code=0   duration=1ms comm=awk
+2026/04/20 04:30:19 [EXIT]    pid=4044359 ppid=4044357 exit_code=0   duration=1ms comm=base64
+2026/04/20 04:30:19 [EXIT]    pid=4044357 ppid=4044312 exit_code=0   duration=2ms comm=apt-key
+2026/04/20 04:30:19 [PROCESS] pid=4044360 ppid=4044312 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cat
+2026/04/20 04:30:19 [EXIT]    pid=4044360 ppid=4044312 exit_code=0   duration=1ms comm=cat
+2026/04/20 04:30:19 [PROCESS] pid=4044362 ppid=4044361 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/awk
+2026/04/20 04:30:19 [PROCESS] pid=4044363 ppid=4044361 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/base64
+2026/04/20 04:30:19 [EXIT]    pid=4044362 ppid=4044361 exit_code=0   duration=2ms comm=awk
+2026/04/20 04:30:19 [EXIT]    pid=4044363 ppid=4044361 exit_code=0   duration=2ms comm=base64
+2026/04/20 04:30:19 [EXIT]    pid=4044361 ppid=4044312 exit_code=0   duration=3ms comm=apt-key
+2026/04/20 04:30:19 [PROCESS] pid=4044364 ppid=4044312 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cat
+2026/04/20 04:30:19 [EXIT]    pid=4044364 ppid=4044312 exit_code=0   duration=2ms comm=cat
+2026/04/20 04:30:19 [PROCESS] pid=4044366 ppid=4044365 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/awk
+2026/04/20 04:30:19 [PROCESS] pid=4044367 ppid=4044365 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/base64
+2026/04/20 04:30:19 [EXIT]    pid=4044366 ppid=4044365 exit_code=0   duration=2ms comm=awk
+2026/04/20 04:30:19 [EXIT]    pid=4044367 ppid=4044365 exit_code=0   duration=2ms comm=base64
+2026/04/20 04:30:19 [EXIT]    pid=4044365 ppid=4044312 exit_code=0   duration=3ms comm=apt-key
+2026/04/20 04:30:19 [PROCESS] pid=4044368 ppid=4044312 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cat
+2026/04/20 04:30:19 [EXIT]    pid=4044368 ppid=4044312 exit_code=0   duration=1ms comm=cat
+2026/04/20 04:30:19 [PROCESS] pid=4044370 ppid=4044369 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/awk
+2026/04/20 04:30:19 [PROCESS] pid=4044371 ppid=4044369 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/base64
+2026/04/20 04:30:19 [EXIT]    pid=4044370 ppid=4044369 exit_code=0   duration=2ms comm=awk
+2026/04/20 04:30:19 [EXIT]    pid=4044371 ppid=4044369 exit_code=0   duration=2ms comm=base64
+2026/04/20 04:30:19 [EXIT]    pid=4044369 ppid=4044312 exit_code=0   duration=3ms comm=apt-key
+2026/04/20 04:30:19 [PROCESS] pid=4044372 ppid=4044312 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cat
+2026/04/20 04:30:19 [EXIT]    pid=4044372 ppid=4044312 exit_code=0   duration=1ms comm=cat
+2026/04/20 04:30:19 [PROCESS] pid=4044374 ppid=4044373 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/awk
+2026/04/20 04:30:19 [PROCESS] pid=4044375 ppid=4044373 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/base64
+2026/04/20 04:30:19 [EXIT]    pid=4044374 ppid=4044373 exit_code=0   duration=2ms comm=awk
+2026/04/20 04:30:19 [EXIT]    pid=4044375 ppid=4044373 exit_code=0   duration=1ms comm=base64
+2026/04/20 04:30:19 [EXIT]    pid=4044373 ppid=4044312 exit_code=0   duration=3ms comm=apt-key
+2026/04/20 04:30:19 [PROCESS] pid=4044376 ppid=4044312 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cat
+2026/04/20 04:30:19 [EXIT]    pid=4044376 ppid=4044312 exit_code=0   duration=1ms comm=cat
+2026/04/20 04:30:19 [EXIT]    pid=4044377 ppid=4044312 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:19 [PROCESS] pid=4044378 ppid=4044312 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cmp
+2026/04/20 04:30:19 [EXIT]    pid=4044378 ppid=4044312 exit_code=0   duration=1ms comm=cmp
+2026/04/20 04:30:19 [EXIT]    pid=4044379 ppid=4044312 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:19 [PROCESS] pid=4044380 ppid=4044312 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cat
+2026/04/20 04:30:19 [EXIT]    pid=4044380 ppid=4044312 exit_code=0   duration=1ms comm=cat
+2026/04/20 04:30:19 [EXIT]    pid=4044381 ppid=4044312 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:19 [PROCESS] pid=4044382 ppid=4044312 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cmp
+2026/04/20 04:30:19 [EXIT]    pid=4044382 ppid=4044312 exit_code=1   duration=1ms comm=cmp
+2026/04/20 04:30:19 [EXIT]    pid=4044383 ppid=4044312 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:19 [PROCESS] pid=4044384 ppid=4044312 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cmp
+2026/04/20 04:30:19 [EXIT]    pid=4044384 ppid=4044312 exit_code=1   duration=2ms comm=cmp
+2026/04/20 04:30:19 [PROCESS] pid=4044386 ppid=4044312 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cmp
+2026/04/20 04:30:19 [EXIT]    pid=4044385 ppid=4044312 exit_code=0   duration=2ms comm=apt-key
+2026/04/20 04:30:19 [EXIT]    pid=4044386 ppid=4044312 exit_code=0   duration=2ms comm=cmp
+2026/04/20 04:30:19 [EXIT]    pid=4044387 ppid=4044312 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:19 [PROCESS] pid=4044388 ppid=4044312 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cat
+2026/04/20 04:30:19 [EXIT]    pid=4044388 ppid=4044312 exit_code=0   duration=1ms comm=cat
+2026/04/20 04:30:19 [PROCESS] pid=4044389 ppid=4044312 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cp
+2026/04/20 04:30:19 [EXIT]    pid=4044389 ppid=4044312 exit_code=0   duration=2ms comm=cp
+2026/04/20 04:30:19 [EXIT]    pid=4044391 ppid=4044390 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:19 [PROCESS] pid=4044392 ppid=4044390 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/sed
+2026/04/20 04:30:19 [EXIT]    pid=4044392 ppid=4044390 exit_code=0   duration=3ms comm=sed
+2026/04/20 04:30:19 [EXIT]    pid=4044390 ppid=4044312 exit_code=0   duration=3ms comm=apt-key
+2026/04/20 04:30:19 [EXIT]    pid=4044394 ppid=4044393 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:19 [PROCESS] pid=4044395 ppid=4044393 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/sed
+2026/04/20 04:30:19 [EXIT]    pid=4044395 ppid=4044393 exit_code=0   duration=1ms comm=sed
+2026/04/20 04:30:19 [EXIT]    pid=4044393 ppid=4044312 exit_code=0   duration=2ms comm=apt-key
+2026/04/20 04:30:19 [PROCESS] pid=4044396 ppid=4044312 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/gpgv
+2026/04/20 04:30:19 [EXIT]    pid=4044396 ppid=4044312 exit_code=0   duration=4ms comm=gpgv
+2026/04/20 04:30:19 [PROCESS] pid=4044397 ppid=4044312 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/gpgconf
+2026/04/20 04:30:19 [PROCESS] pid=4044398 ppid=4044397 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/gpg-connect-agent
+2026/04/20 04:30:19 [EXIT]    pid=4044398 ppid=4044397 exit_code=0   duration=3ms comm=gpg-connect-age
+2026/04/20 04:30:19 [PROCESS] pid=4044399 ppid=4044397 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/gpg-connect-agent
+2026/04/20 04:30:19 [EXIT]    pid=4044399 ppid=4044397 exit_code=0   duration=3ms comm=gpg-connect-age
+2026/04/20 04:30:19 [PROCESS] pid=4044400 ppid=4044397 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/gpg-connect-agent
+2026/04/20 04:30:19 [EXIT]    pid=4044400 ppid=4044397 exit_code=0   duration=3ms comm=gpg-connect-age
+2026/04/20 04:30:19 [EXIT]    pid=4044397 ppid=4044312 exit_code=0   duration=12ms comm=gpgconf
+2026/04/20 04:30:19 [PROCESS] pid=4044401 ppid=4044312 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/rm
+2026/04/20 04:30:19 [EXIT]    pid=4044401 ppid=4044312 exit_code=0   duration=1ms comm=rm
+2026/04/20 04:30:19 [EXIT]    pid=4044312 ppid=4044311 exit_code=0   duration=221ms comm=apt-key
+2026/04/20 04:30:19 [EXIT]    pid=4044311 ppid=4044310 exit_code=0   duration=227ms comm=gpgv
+2026/04/20 04:30:19 [PROCESS] pid=4044403 ppid=4044402 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-key
+2026/04/20 04:30:19 [EXIT]    pid=4044404 ppid=4044403 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:19 [PROCESS] pid=4044405 ppid=4044403 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044406 ppid=4044405 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044406 ppid=4044405 exit_code=0   duration=3ms comm=dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044405 ppid=4044403 exit_code=0   duration=15ms comm=apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044407 ppid=4044403 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044408 ppid=4044407 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044408 ppid=4044407 exit_code=0   duration=3ms comm=dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044407 ppid=4044403 exit_code=0   duration=13ms comm=apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044409 ppid=4044403 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044410 ppid=4044409 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044410 ppid=4044409 exit_code=0   duration=3ms comm=dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044409 ppid=4044403 exit_code=0   duration=13ms comm=apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044411 ppid=4044403 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044412 ppid=4044411 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044412 ppid=4044411 exit_code=0   duration=3ms comm=dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044411 ppid=4044403 exit_code=0   duration=15ms comm=apt-config
+2026/04/20 04:30:19 [EXIT]    pid=4044413 ppid=4044403 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:19 [PROCESS] pid=4044414 ppid=4044403 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044415 ppid=4044414 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044415 ppid=4044414 exit_code=0   duration=3ms comm=dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044414 ppid=4044403 exit_code=0   duration=14ms comm=apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044416 ppid=4044403 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/mktemp
+2026/04/20 04:30:19 [EXIT]    pid=4044416 ppid=4044403 exit_code=0   duration=1ms comm=mktemp
+2026/04/20 04:30:19 [PROCESS] pid=4044417 ppid=4044403 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/chmod
+2026/04/20 04:30:19 [EXIT]    pid=4044417 ppid=4044403 exit_code=0   duration=1ms comm=chmod
+2026/04/20 04:30:19 [EXIT]    pid=4044418 ppid=4044403 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:19 [EXIT]    pid=4044420 ppid=4044419 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:19 [PROCESS] pid=4044421 ppid=4044419 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/sed
+2026/04/20 04:30:19 [EXIT]    pid=4044421 ppid=4044419 exit_code=0   duration=2ms comm=sed
+2026/04/20 04:30:19 [EXIT]    pid=4044419 ppid=4044403 exit_code=0   duration=2ms comm=apt-key
+2026/04/20 04:30:19 [EXIT]    pid=4044423 ppid=4044422 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:19 [PROCESS] pid=4044424 ppid=4044422 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/sed
+2026/04/20 04:30:19 [EXIT]    pid=4044424 ppid=4044422 exit_code=0   duration=2ms comm=sed
+2026/04/20 04:30:19 [EXIT]    pid=4044422 ppid=4044403 exit_code=0   duration=3ms comm=apt-key
+2026/04/20 04:30:19 [EXIT]    pid=4044425 ppid=4044403 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:19 [PROCESS] pid=4044426 ppid=4044403 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/gpgv
+2026/04/20 04:30:19 [EXIT]    pid=4044426 ppid=4044403 exit_code=0   duration=19ms comm=gpgv
+2026/04/20 04:30:19 [PROCESS] pid=4044427 ppid=4044403 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/gpgconf
+2026/04/20 04:30:19 [PROCESS] pid=4044428 ppid=4044427 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/gpg-connect-agent
+2026/04/20 04:30:19 [EXIT]    pid=4044428 ppid=4044427 exit_code=0   duration=4ms comm=gpg-connect-age
+2026/04/20 04:30:19 [PROCESS] pid=4044429 ppid=4044427 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/gpg-connect-agent
+2026/04/20 04:30:19 [EXIT]    pid=4044429 ppid=4044427 exit_code=0   duration=3ms comm=gpg-connect-age
+2026/04/20 04:30:19 [PROCESS] pid=4044430 ppid=4044427 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/gpg-connect-agent
+2026/04/20 04:30:19 [EXIT]    pid=4044430 ppid=4044427 exit_code=0   duration=2ms comm=gpg-connect-age
+2026/04/20 04:30:19 [EXIT]    pid=4044427 ppid=4044403 exit_code=0   duration=14ms comm=gpgconf
+2026/04/20 04:30:19 [PROCESS] pid=4044431 ppid=4044403 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/rm
+2026/04/20 04:30:19 [EXIT]    pid=4044431 ppid=4044403 exit_code=0   duration=1ms comm=rm
+2026/04/20 04:30:19 [EXIT]    pid=4044403 ppid=4044402 exit_code=0   duration=128ms comm=apt-key
+2026/04/20 04:30:19 [EXIT]    pid=4044402 ppid=4044310 exit_code=0   duration=143ms comm=gpgv
+2026/04/20 04:30:19 [PROCESS] pid=4044433 ppid=4044432 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-key
+2026/04/20 04:30:19 [EXIT]    pid=4044434 ppid=4044433 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:19 [PROCESS] pid=4044435 ppid=4044433 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044436 ppid=4044435 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044436 ppid=4044435 exit_code=0   duration=2ms comm=dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044435 ppid=4044433 exit_code=0   duration=14ms comm=apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044437 ppid=4044433 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044438 ppid=4044437 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044438 ppid=4044437 exit_code=0   duration=3ms comm=dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044437 ppid=4044433 exit_code=0   duration=14ms comm=apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044439 ppid=4044433 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044440 ppid=4044439 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044440 ppid=4044439 exit_code=0   duration=2ms comm=dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044439 ppid=4044433 exit_code=0   duration=13ms comm=apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044441 ppid=4044433 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044442 ppid=4044441 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044442 ppid=4044441 exit_code=0   duration=2ms comm=dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044441 ppid=4044433 exit_code=0   duration=12ms comm=apt-config
+2026/04/20 04:30:19 [EXIT]    pid=4044443 ppid=4044433 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:19 [PROCESS] pid=4044444 ppid=4044433 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044445 ppid=4044444 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044445 ppid=4044444 exit_code=0   duration=2ms comm=dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044444 ppid=4044433 exit_code=0   duration=13ms comm=apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044446 ppid=4044433 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/mktemp
+2026/04/20 04:30:19 [EXIT]    pid=4044446 ppid=4044433 exit_code=0   duration=1ms comm=mktemp
+2026/04/20 04:30:19 [PROCESS] pid=4044447 ppid=4044433 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/chmod
+2026/04/20 04:30:19 [EXIT]    pid=4044447 ppid=4044433 exit_code=0   duration=1ms comm=chmod
+2026/04/20 04:30:19 [EXIT]    pid=4044448 ppid=4044433 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:19 [EXIT]    pid=4044450 ppid=4044449 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:19 [PROCESS] pid=4044451 ppid=4044449 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/sed
+2026/04/20 04:30:19 [EXIT]    pid=4044451 ppid=4044449 exit_code=0   duration=1ms comm=sed
+2026/04/20 04:30:19 [EXIT]    pid=4044449 ppid=4044433 exit_code=0   duration=2ms comm=apt-key
+2026/04/20 04:30:19 [EXIT]    pid=4044453 ppid=4044452 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:19 [PROCESS] pid=4044454 ppid=4044452 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/sed
+2026/04/20 04:30:19 [EXIT]    pid=4044454 ppid=4044452 exit_code=0   duration=1ms comm=sed
+2026/04/20 04:30:19 [EXIT]    pid=4044452 ppid=4044433 exit_code=0   duration=2ms comm=apt-key
+2026/04/20 04:30:19 [EXIT]    pid=4044455 ppid=4044433 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:19 [PROCESS] pid=4044456 ppid=4044433 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/gpgv
+2026/04/20 04:30:19 [EXIT]    pid=4044456 ppid=4044433 exit_code=0   duration=6ms comm=gpgv
+2026/04/20 04:30:19 [PROCESS] pid=4044457 ppid=4044433 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/gpgconf
+2026/04/20 04:30:19 [PROCESS] pid=4044458 ppid=4044457 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/gpg-connect-agent
+2026/04/20 04:30:19 [EXIT]    pid=4044458 ppid=4044457 exit_code=0   duration=5ms comm=gpg-connect-age
+2026/04/20 04:30:19 [PROCESS] pid=4044459 ppid=4044457 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/gpg-connect-agent
+2026/04/20 04:30:19 [EXIT]    pid=4044459 ppid=4044457 exit_code=0   duration=3ms comm=gpg-connect-age
+2026/04/20 04:30:19 [PROCESS] pid=4044460 ppid=4044457 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/gpg-connect-agent
+2026/04/20 04:30:19 [EXIT]    pid=4044460 ppid=4044457 exit_code=0   duration=3ms comm=gpg-connect-age
+2026/04/20 04:30:19 [EXIT]    pid=4044457 ppid=4044433 exit_code=0   duration=14ms comm=gpgconf
+2026/04/20 04:30:19 [PROCESS] pid=4044461 ppid=4044433 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/rm
+2026/04/20 04:30:19 [EXIT]    pid=4044461 ppid=4044433 exit_code=0   duration=1ms comm=rm
+2026/04/20 04:30:19 [EXIT]    pid=4044433 ppid=4044432 exit_code=0   duration=109ms comm=apt-key
+2026/04/20 04:30:19 [EXIT]    pid=4044432 ppid=4044310 exit_code=0   duration=113ms comm=gpgv
+2026/04/20 04:30:19 [PROCESS] pid=4044463 ppid=4044462 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-key
+2026/04/20 04:30:19 [EXIT]    pid=4044464 ppid=4044463 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:19 [PROCESS] pid=4044465 ppid=4044463 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044466 ppid=4044465 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044466 ppid=4044465 exit_code=0   duration=3ms comm=dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044465 ppid=4044463 exit_code=0   duration=12ms comm=apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044467 ppid=4044463 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044468 ppid=4044467 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044468 ppid=4044467 exit_code=0   duration=3ms comm=dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044467 ppid=4044463 exit_code=0   duration=14ms comm=apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044469 ppid=4044463 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044470 ppid=4044469 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044470 ppid=4044469 exit_code=0   duration=2ms comm=dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044469 ppid=4044463 exit_code=0   duration=14ms comm=apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044471 ppid=4044463 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044472 ppid=4044471 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044472 ppid=4044471 exit_code=0   duration=4ms comm=dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044471 ppid=4044463 exit_code=0   duration=14ms comm=apt-config
+2026/04/20 04:30:19 [EXIT]    pid=4044473 ppid=4044463 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:19 [PROCESS] pid=4044474 ppid=4044463 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044475 ppid=4044474 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044475 ppid=4044474 exit_code=0   duration=2ms comm=dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044474 ppid=4044463 exit_code=0   duration=12ms comm=apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044476 ppid=4044463 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/mktemp
+2026/04/20 04:30:19 [EXIT]    pid=4044476 ppid=4044463 exit_code=0   duration=1ms comm=mktemp
+2026/04/20 04:30:19 [PROCESS] pid=4044477 ppid=4044463 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/chmod
+2026/04/20 04:30:19 [EXIT]    pid=4044477 ppid=4044463 exit_code=0   duration=1ms comm=chmod
+2026/04/20 04:30:19 [EXIT]    pid=4044478 ppid=4044463 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:19 [EXIT]    pid=4044480 ppid=4044479 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:19 [PROCESS] pid=4044481 ppid=4044479 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/sed
+2026/04/20 04:30:19 [EXIT]    pid=4044481 ppid=4044479 exit_code=0   duration=2ms comm=sed
+2026/04/20 04:30:19 [EXIT]    pid=4044479 ppid=4044463 exit_code=0   duration=2ms comm=apt-key
+2026/04/20 04:30:19 [EXIT]    pid=4044483 ppid=4044482 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:19 [PROCESS] pid=4044484 ppid=4044482 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/sed
+2026/04/20 04:30:19 [EXIT]    pid=4044484 ppid=4044482 exit_code=0   duration=2ms comm=sed
+2026/04/20 04:30:19 [EXIT]    pid=4044482 ppid=4044463 exit_code=0   duration=3ms comm=apt-key
+2026/04/20 04:30:19 [EXIT]    pid=4044485 ppid=4044463 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:19 [PROCESS] pid=4044486 ppid=4044463 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/gpgv
+2026/04/20 04:30:19 [EXIT]    pid=4044486 ppid=4044463 exit_code=0   duration=15ms comm=gpgv
+2026/04/20 04:30:19 [PROCESS] pid=4044487 ppid=4044463 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/gpgconf
+2026/04/20 04:30:19 [PROCESS] pid=4044488 ppid=4044487 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/gpg-connect-agent
+2026/04/20 04:30:19 [EXIT]    pid=4044488 ppid=4044487 exit_code=0   duration=2ms comm=gpg-connect-age
+2026/04/20 04:30:19 [PROCESS] pid=4044489 ppid=4044487 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/gpg-connect-agent
+2026/04/20 04:30:19 [EXIT]    pid=4044489 ppid=4044487 exit_code=0   duration=3ms comm=gpg-connect-age
+2026/04/20 04:30:19 [PROCESS] pid=4044490 ppid=4044487 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/gpg-connect-agent
+2026/04/20 04:30:19 [EXIT]    pid=4044490 ppid=4044487 exit_code=0   duration=3ms comm=gpg-connect-age
+2026/04/20 04:30:19 [EXIT]    pid=4044487 ppid=4044463 exit_code=0   duration=12ms comm=gpgconf
+2026/04/20 04:30:19 [PROCESS] pid=4044491 ppid=4044463 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/rm
+2026/04/20 04:30:19 [EXIT]    pid=4044491 ppid=4044463 exit_code=0   duration=1ms comm=rm
+2026/04/20 04:30:19 [EXIT]    pid=4044463 ppid=4044462 exit_code=0   duration=116ms comm=apt-key
+2026/04/20 04:30:19 [EXIT]    pid=4044462 ppid=4044310 exit_code=0   duration=122ms comm=gpgv
+2026/04/20 04:30:19 [PROCESS] pid=4044493 ppid=4044492 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-key
+2026/04/20 04:30:19 [EXIT]    pid=4044494 ppid=4044493 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:19 [PROCESS] pid=4044495 ppid=4044493 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044496 ppid=4044495 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044496 ppid=4044495 exit_code=0   duration=2ms comm=dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044495 ppid=4044493 exit_code=0   duration=12ms comm=apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044497 ppid=4044493 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044498 ppid=4044497 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044498 ppid=4044497 exit_code=0   duration=3ms comm=dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044497 ppid=4044493 exit_code=0   duration=13ms comm=apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044499 ppid=4044493 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044500 ppid=4044499 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044500 ppid=4044499 exit_code=0   duration=4ms comm=dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044499 ppid=4044493 exit_code=0   duration=15ms comm=apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044501 ppid=4044493 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:19 [PROCESS] pid=4044502 ppid=4044501 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044502 ppid=4044501 exit_code=0   duration=3ms comm=dpkg
+2026/04/20 04:30:19 [EXIT]    pid=4044501 ppid=4044493 exit_code=0   duration=14ms comm=apt-config
+2026/04/20 04:30:19 [EXIT]    pid=4044503 ppid=4044493 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:19 [PROCESS] pid=4044504 ppid=4044493 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:20 [PROCESS] pid=4044505 ppid=4044504 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044505 ppid=4044504 exit_code=0   duration=5ms comm=dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044504 ppid=4044493 exit_code=0   duration=16ms comm=apt-config
+2026/04/20 04:30:20 [PROCESS] pid=4044506 ppid=4044493 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/mktemp
+2026/04/20 04:30:20 [EXIT]    pid=4044506 ppid=4044493 exit_code=0   duration=1ms comm=mktemp
+2026/04/20 04:30:20 [PROCESS] pid=4044507 ppid=4044493 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/chmod
+2026/04/20 04:30:20 [EXIT]    pid=4044507 ppid=4044493 exit_code=0   duration=0ms comm=chmod
+2026/04/20 04:30:20 [EXIT]    pid=4044508 ppid=4044493 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:20 [EXIT]    pid=4044510 ppid=4044509 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044511 ppid=4044509 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/sed
+2026/04/20 04:30:20 [EXIT]    pid=4044511 ppid=4044509 exit_code=0   duration=2ms comm=sed
+2026/04/20 04:30:20 [EXIT]    pid=4044509 ppid=4044493 exit_code=0   duration=2ms comm=apt-key
+2026/04/20 04:30:20 [EXIT]    pid=4044513 ppid=4044512 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044514 ppid=4044512 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/sed
+2026/04/20 04:30:20 [EXIT]    pid=4044514 ppid=4044512 exit_code=0   duration=2ms comm=sed
+2026/04/20 04:30:20 [EXIT]    pid=4044512 ppid=4044493 exit_code=0   duration=2ms comm=apt-key
+2026/04/20 04:30:20 [EXIT]    pid=4044515 ppid=4044493 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044516 ppid=4044493 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/gpgv
+2026/04/20 04:30:20 [EXIT]    pid=4044516 ppid=4044493 exit_code=0   duration=13ms comm=gpgv
+2026/04/20 04:30:20 [PROCESS] pid=4044517 ppid=4044493 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/gpgconf
+2026/04/20 04:30:20 [PROCESS] pid=4044518 ppid=4044517 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/gpg-connect-agent
+2026/04/20 04:30:20 [EXIT]    pid=4044518 ppid=4044517 exit_code=0   duration=3ms comm=gpg-connect-age
+2026/04/20 04:30:20 [PROCESS] pid=4044519 ppid=4044517 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/gpg-connect-agent
+2026/04/20 04:30:20 [EXIT]    pid=4044519 ppid=4044517 exit_code=0   duration=3ms comm=gpg-connect-age
+2026/04/20 04:30:20 [PROCESS] pid=4044520 ppid=4044517 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/gpg-connect-agent
+2026/04/20 04:30:20 [EXIT]    pid=4044520 ppid=4044517 exit_code=0   duration=3ms comm=gpg-connect-age
+2026/04/20 04:30:20 [EXIT]    pid=4044517 ppid=4044493 exit_code=0   duration=14ms comm=gpgconf
+2026/04/20 04:30:20 [PROCESS] pid=4044521 ppid=4044493 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/rm
+2026/04/20 04:30:20 [EXIT]    pid=4044521 ppid=4044493 exit_code=0   duration=1ms comm=rm
+2026/04/20 04:30:20 [EXIT]    pid=4044493 ppid=4044492 exit_code=0   duration=118ms comm=apt-key
+2026/04/20 04:30:20 [EXIT]    pid=4044492 ppid=4044310 exit_code=0   duration=125ms comm=gpgv
+2026/04/20 04:30:20 [PROCESS] pid=4044523 ppid=4044522 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-key
+2026/04/20 04:30:20 [EXIT]    pid=4044524 ppid=4044523 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044525 ppid=4044523 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:20 [PROCESS] pid=4044526 ppid=4044525 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044526 ppid=4044525 exit_code=0   duration=2ms comm=dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044525 ppid=4044523 exit_code=0   duration=13ms comm=apt-config
+2026/04/20 04:30:20 [PROCESS] pid=4044527 ppid=4044523 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:20 [PROCESS] pid=4044528 ppid=4044527 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044528 ppid=4044527 exit_code=0   duration=3ms comm=dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044527 ppid=4044523 exit_code=0   duration=12ms comm=apt-config
+2026/04/20 04:30:20 [PROCESS] pid=4044529 ppid=4044523 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:20 [PROCESS] pid=4044530 ppid=4044529 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044530 ppid=4044529 exit_code=0   duration=4ms comm=dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044529 ppid=4044523 exit_code=0   duration=16ms comm=apt-config
+2026/04/20 04:30:20 [PROCESS] pid=4044531 ppid=4044523 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:20 [PROCESS] pid=4044532 ppid=4044531 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044532 ppid=4044531 exit_code=0   duration=2ms comm=dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044531 ppid=4044523 exit_code=0   duration=12ms comm=apt-config
+2026/04/20 04:30:20 [EXIT]    pid=4044533 ppid=4044523 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044534 ppid=4044523 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:20 [PROCESS] pid=4044535 ppid=4044534 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044535 ppid=4044534 exit_code=0   duration=3ms comm=dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044534 ppid=4044523 exit_code=0   duration=14ms comm=apt-config
+2026/04/20 04:30:20 [PROCESS] pid=4044536 ppid=4044523 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/mktemp
+2026/04/20 04:30:20 [EXIT]    pid=4044536 ppid=4044523 exit_code=0   duration=1ms comm=mktemp
+2026/04/20 04:30:20 [PROCESS] pid=4044537 ppid=4044523 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/chmod
+2026/04/20 04:30:20 [EXIT]    pid=4044537 ppid=4044523 exit_code=0   duration=1ms comm=chmod
+2026/04/20 04:30:20 [EXIT]    pid=4044538 ppid=4044523 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044541 ppid=4044539 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/sed
+2026/04/20 04:30:20 [EXIT]    pid=4044540 ppid=4044539 exit_code=0   duration=2ms comm=apt-key
+2026/04/20 04:30:20 [EXIT]    pid=4044541 ppid=4044539 exit_code=0   duration=2ms comm=sed
+2026/04/20 04:30:20 [EXIT]    pid=4044539 ppid=4044523 exit_code=0   duration=3ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044544 ppid=4044542 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/sed
+2026/04/20 04:30:20 [EXIT]    pid=4044543 ppid=4044542 exit_code=0   duration=2ms comm=apt-key
+2026/04/20 04:30:20 [EXIT]    pid=4044544 ppid=4044542 exit_code=0   duration=3ms comm=sed
+2026/04/20 04:30:20 [EXIT]    pid=4044542 ppid=4044523 exit_code=0   duration=3ms comm=apt-key
+2026/04/20 04:30:20 [EXIT]    pid=4044545 ppid=4044523 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044546 ppid=4044523 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/gpgv
+2026/04/20 04:30:20 [EXIT]    pid=4044546 ppid=4044523 exit_code=0   duration=17ms comm=gpgv
+2026/04/20 04:30:20 [PROCESS] pid=4044547 ppid=4044523 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/gpgconf
+2026/04/20 04:30:20 [PROCESS] pid=4044548 ppid=4044547 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/gpg-connect-agent
+2026/04/20 04:30:20 [EXIT]    pid=4044548 ppid=4044547 exit_code=0   duration=5ms comm=gpg-connect-age
+2026/04/20 04:30:20 [PROCESS] pid=4044549 ppid=4044547 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/gpg-connect-agent
+2026/04/20 04:30:20 [EXIT]    pid=4044549 ppid=4044547 exit_code=0   duration=5ms comm=gpg-connect-age
+2026/04/20 04:30:20 [PROCESS] pid=4044550 ppid=4044547 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/gpg-connect-agent
+2026/04/20 04:30:20 [EXIT]    pid=4044550 ppid=4044547 exit_code=0   duration=4ms comm=gpg-connect-age
+2026/04/20 04:30:20 [EXIT]    pid=4044547 ppid=4044523 exit_code=0   duration=17ms comm=gpgconf
+2026/04/20 04:30:20 [PROCESS] pid=4044551 ppid=4044523 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/rm
+2026/04/20 04:30:20 [EXIT]    pid=4044551 ppid=4044523 exit_code=0   duration=1ms comm=rm
+2026/04/20 04:30:20 [EXIT]    pid=4044523 ppid=4044522 exit_code=0   duration=125ms comm=apt-key
+2026/04/20 04:30:20 [EXIT]    pid=4044522 ppid=4044310 exit_code=0   duration=131ms comm=gpgv
+2026/04/20 04:30:20 [PROCESS] pid=4044553 ppid=4044552 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-key
+2026/04/20 04:30:20 [EXIT]    pid=4044554 ppid=4044553 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044555 ppid=4044553 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:20 [PROCESS] pid=4044556 ppid=4044555 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044556 ppid=4044555 exit_code=0   duration=3ms comm=dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044555 ppid=4044553 exit_code=0   duration=15ms comm=apt-config
+2026/04/20 04:30:20 [PROCESS] pid=4044557 ppid=4044553 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:20 [PROCESS] pid=4044558 ppid=4044557 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044558 ppid=4044557 exit_code=0   duration=4ms comm=dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044557 ppid=4044553 exit_code=0   duration=16ms comm=apt-config
+2026/04/20 04:30:20 [PROCESS] pid=4044559 ppid=4044553 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:20 [PROCESS] pid=4044560 ppid=4044559 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044560 ppid=4044559 exit_code=0   duration=3ms comm=dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044559 ppid=4044553 exit_code=0   duration=14ms comm=apt-config
+2026/04/20 04:30:20 [PROCESS] pid=4044561 ppid=4044553 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:20 [PROCESS] pid=4044562 ppid=4044561 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044562 ppid=4044561 exit_code=0   duration=3ms comm=dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044561 ppid=4044553 exit_code=0   duration=13ms comm=apt-config
+2026/04/20 04:30:20 [EXIT]    pid=4044563 ppid=4044553 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044564 ppid=4044553 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:20 [PROCESS] pid=4044565 ppid=4044564 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044565 ppid=4044564 exit_code=0   duration=2ms comm=dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044564 ppid=4044553 exit_code=0   duration=12ms comm=apt-config
+2026/04/20 04:30:20 [PROCESS] pid=4044566 ppid=4044553 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:20 [PROCESS] pid=4044567 ppid=4044566 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044567 ppid=4044566 exit_code=0   duration=3ms comm=dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044566 ppid=4044553 exit_code=0   duration=13ms comm=apt-config
+2026/04/20 04:30:20 [PROCESS] pid=4044568 ppid=4044553 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:20 [PROCESS] pid=4044569 ppid=4044568 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044569 ppid=4044568 exit_code=0   duration=2ms comm=dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044568 ppid=4044553 exit_code=0   duration=14ms comm=apt-config
+2026/04/20 04:30:20 [PROCESS] pid=4044570 ppid=4044553 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/mktemp
+2026/04/20 04:30:20 [EXIT]    pid=4044570 ppid=4044553 exit_code=0   duration=1ms comm=mktemp
+2026/04/20 04:30:20 [PROCESS] pid=4044571 ppid=4044553 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/chmod
+2026/04/20 04:30:20 [EXIT]    pid=4044571 ppid=4044553 exit_code=0   duration=1ms comm=chmod
+2026/04/20 04:30:20 [PROCESS] pid=4044572 ppid=4044553 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/readlink
+2026/04/20 04:30:20 [EXIT]    pid=4044572 ppid=4044553 exit_code=0   duration=1ms comm=readlink
+2026/04/20 04:30:20 [PROCESS] pid=4044573 ppid=4044553 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/rm
+2026/04/20 04:30:20 [EXIT]    pid=4044573 ppid=4044553 exit_code=0   duration=1ms comm=rm
+2026/04/20 04:30:20 [PROCESS] pid=4044574 ppid=4044553 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/touch
+2026/04/20 04:30:20 [EXIT]    pid=4044574 ppid=4044553 exit_code=0   duration=1ms comm=touch
+2026/04/20 04:30:20 [PROCESS] pid=4044575 ppid=4044553 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:20 [PROCESS] pid=4044576 ppid=4044575 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044576 ppid=4044575 exit_code=0   duration=2ms comm=dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044575 ppid=4044553 exit_code=0   duration=12ms comm=apt-config
+2026/04/20 04:30:20 [PROCESS] pid=4044577 ppid=4044553 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/readlink
+2026/04/20 04:30:20 [EXIT]    pid=4044577 ppid=4044553 exit_code=0   duration=1ms comm=readlink
+2026/04/20 04:30:20 [PROCESS] pid=4044578 ppid=4044553 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/find
+2026/04/20 04:30:20 [EXIT]    pid=4044578 ppid=4044553 exit_code=0   duration=2ms comm=find
+2026/04/20 04:30:20 [EXIT]    pid=4044580 ppid=4044579 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044581 ppid=4044579 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/sort
+2026/04/20 04:30:20 [EXIT]    pid=4044581 ppid=4044579 exit_code=0   duration=1ms comm=sort
+2026/04/20 04:30:20 [EXIT]    pid=4044579 ppid=4044553 exit_code=0   duration=2ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044583 ppid=4044582 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/awk
+2026/04/20 04:30:20 [PROCESS] pid=4044584 ppid=4044582 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/base64
+2026/04/20 04:30:20 [EXIT]    pid=4044583 ppid=4044582 exit_code=0   duration=2ms comm=awk
+2026/04/20 04:30:20 [EXIT]    pid=4044584 ppid=4044582 exit_code=0   duration=2ms comm=base64
+2026/04/20 04:30:20 [EXIT]    pid=4044582 ppid=4044553 exit_code=0   duration=3ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044585 ppid=4044553 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cat
+2026/04/20 04:30:20 [EXIT]    pid=4044585 ppid=4044553 exit_code=0   duration=1ms comm=cat
+2026/04/20 04:30:20 [PROCESS] pid=4044587 ppid=4044586 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/awk
+2026/04/20 04:30:20 [PROCESS] pid=4044588 ppid=4044586 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/base64
+2026/04/20 04:30:20 [EXIT]    pid=4044587 ppid=4044586 exit_code=0   duration=2ms comm=awk
+2026/04/20 04:30:20 [EXIT]    pid=4044588 ppid=4044586 exit_code=0   duration=2ms comm=base64
+2026/04/20 04:30:20 [EXIT]    pid=4044586 ppid=4044553 exit_code=0   duration=4ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044589 ppid=4044553 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cat
+2026/04/20 04:30:20 [EXIT]    pid=4044589 ppid=4044553 exit_code=0   duration=1ms comm=cat
+2026/04/20 04:30:20 [PROCESS] pid=4044591 ppid=4044590 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/awk
+2026/04/20 04:30:20 [PROCESS] pid=4044592 ppid=4044590 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/base64
+2026/04/20 04:30:20 [EXIT]    pid=4044591 ppid=4044590 exit_code=0   duration=2ms comm=awk
+2026/04/20 04:30:20 [EXIT]    pid=4044592 ppid=4044590 exit_code=0   duration=1ms comm=base64
+2026/04/20 04:30:20 [EXIT]    pid=4044590 ppid=4044553 exit_code=0   duration=2ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044593 ppid=4044553 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cat
+2026/04/20 04:30:20 [EXIT]    pid=4044593 ppid=4044553 exit_code=0   duration=1ms comm=cat
+2026/04/20 04:30:20 [PROCESS] pid=4044595 ppid=4044594 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/awk
+2026/04/20 04:30:20 [PROCESS] pid=4044596 ppid=4044594 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/base64
+2026/04/20 04:30:20 [EXIT]    pid=4044595 ppid=4044594 exit_code=0   duration=2ms comm=awk
+2026/04/20 04:30:20 [EXIT]    pid=4044596 ppid=4044594 exit_code=0   duration=2ms comm=base64
+2026/04/20 04:30:20 [EXIT]    pid=4044594 ppid=4044553 exit_code=0   duration=2ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044597 ppid=4044553 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cat
+2026/04/20 04:30:20 [EXIT]    pid=4044597 ppid=4044553 exit_code=0   duration=1ms comm=cat
+2026/04/20 04:30:20 [PROCESS] pid=4044599 ppid=4044598 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/awk
+2026/04/20 04:30:20 [PROCESS] pid=4044600 ppid=4044598 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/base64
+2026/04/20 04:30:20 [EXIT]    pid=4044599 ppid=4044598 exit_code=0   duration=2ms comm=awk
+2026/04/20 04:30:20 [EXIT]    pid=4044600 ppid=4044598 exit_code=0   duration=2ms comm=base64
+2026/04/20 04:30:20 [EXIT]    pid=4044598 ppid=4044553 exit_code=0   duration=3ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044601 ppid=4044553 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cat
+2026/04/20 04:30:20 [EXIT]    pid=4044601 ppid=4044553 exit_code=0   duration=1ms comm=cat
+2026/04/20 04:30:20 [PROCESS] pid=4044603 ppid=4044602 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/awk
+2026/04/20 04:30:20 [PROCESS] pid=4044604 ppid=4044602 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/base64
+2026/04/20 04:30:20 [EXIT]    pid=4044603 ppid=4044602 exit_code=0   duration=1ms comm=awk
+2026/04/20 04:30:20 [EXIT]    pid=4044604 ppid=4044602 exit_code=0   duration=1ms comm=base64
+2026/04/20 04:30:20 [EXIT]    pid=4044602 ppid=4044553 exit_code=0   duration=2ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044605 ppid=4044553 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cat
+2026/04/20 04:30:20 [EXIT]    pid=4044605 ppid=4044553 exit_code=0   duration=1ms comm=cat
+2026/04/20 04:30:20 [PROCESS] pid=4044608 ppid=4044606 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/base64
+2026/04/20 04:30:20 [PROCESS] pid=4044607 ppid=4044606 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/awk
+2026/04/20 04:30:20 [EXIT]    pid=4044607 ppid=4044606 exit_code=0   duration=2ms comm=awk
+2026/04/20 04:30:20 [EXIT]    pid=4044608 ppid=4044606 exit_code=0   duration=2ms comm=base64
+2026/04/20 04:30:20 [EXIT]    pid=4044606 ppid=4044553 exit_code=0   duration=3ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044609 ppid=4044553 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cat
+2026/04/20 04:30:20 [EXIT]    pid=4044609 ppid=4044553 exit_code=0   duration=1ms comm=cat
+2026/04/20 04:30:20 [PROCESS] pid=4044612 ppid=4044610 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/base64
+2026/04/20 04:30:20 [PROCESS] pid=4044611 ppid=4044610 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/awk
+2026/04/20 04:30:20 [EXIT]    pid=4044611 ppid=4044610 exit_code=0   duration=4ms comm=awk
+2026/04/20 04:30:20 [EXIT]    pid=4044612 ppid=4044610 exit_code=0   duration=4ms comm=base64
+2026/04/20 04:30:20 [EXIT]    pid=4044610 ppid=4044553 exit_code=0   duration=5ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044613 ppid=4044553 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cat
+2026/04/20 04:30:20 [EXIT]    pid=4044613 ppid=4044553 exit_code=0   duration=1ms comm=cat
+2026/04/20 04:30:20 [PROCESS] pid=4044615 ppid=4044614 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/awk
+2026/04/20 04:30:20 [PROCESS] pid=4044616 ppid=4044614 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/base64
+2026/04/20 04:30:20 [EXIT]    pid=4044615 ppid=4044614 exit_code=0   duration=2ms comm=awk
+2026/04/20 04:30:20 [EXIT]    pid=4044616 ppid=4044614 exit_code=0   duration=2ms comm=base64
+2026/04/20 04:30:20 [EXIT]    pid=4044614 ppid=4044553 exit_code=0   duration=3ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044617 ppid=4044553 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cat
+2026/04/20 04:30:20 [EXIT]    pid=4044617 ppid=4044553 exit_code=0   duration=1ms comm=cat
+2026/04/20 04:30:20 [EXIT]    pid=4044618 ppid=4044553 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044619 ppid=4044553 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cmp
+2026/04/20 04:30:20 [EXIT]    pid=4044619 ppid=4044553 exit_code=0   duration=2ms comm=cmp
+2026/04/20 04:30:20 [EXIT]    pid=4044620 ppid=4044553 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044621 ppid=4044553 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cat
+2026/04/20 04:30:20 [EXIT]    pid=4044621 ppid=4044553 exit_code=0   duration=1ms comm=cat
+2026/04/20 04:30:20 [EXIT]    pid=4044622 ppid=4044553 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044623 ppid=4044553 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cmp
+2026/04/20 04:30:20 [EXIT]    pid=4044623 ppid=4044553 exit_code=1   duration=1ms comm=cmp
+2026/04/20 04:30:20 [PROCESS] pid=4044625 ppid=4044553 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cmp
+2026/04/20 04:30:20 [EXIT]    pid=4044624 ppid=4044553 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:20 [EXIT]    pid=4044625 ppid=4044553 exit_code=1   duration=2ms comm=cmp
+2026/04/20 04:30:20 [PROCESS] pid=4044627 ppid=4044553 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cmp
+2026/04/20 04:30:20 [EXIT]    pid=4044626 ppid=4044553 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:20 [EXIT]    pid=4044627 ppid=4044553 exit_code=0   duration=2ms comm=cmp
+2026/04/20 04:30:20 [EXIT]    pid=4044628 ppid=4044553 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044629 ppid=4044553 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cat
+2026/04/20 04:30:20 [EXIT]    pid=4044629 ppid=4044553 exit_code=0   duration=1ms comm=cat
+2026/04/20 04:30:20 [PROCESS] pid=4044630 ppid=4044553 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cp
+2026/04/20 04:30:20 [EXIT]    pid=4044630 ppid=4044553 exit_code=0   duration=2ms comm=cp
+2026/04/20 04:30:20 [EXIT]    pid=4044632 ppid=4044631 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044633 ppid=4044631 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/sed
+2026/04/20 04:30:20 [EXIT]    pid=4044633 ppid=4044631 exit_code=0   duration=2ms comm=sed
+2026/04/20 04:30:20 [EXIT]    pid=4044631 ppid=4044553 exit_code=0   duration=3ms comm=apt-key
+2026/04/20 04:30:20 [EXIT]    pid=4044635 ppid=4044634 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044636 ppid=4044634 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/sed
+2026/04/20 04:30:20 [EXIT]    pid=4044636 ppid=4044634 exit_code=0   duration=2ms comm=sed
+2026/04/20 04:30:20 [EXIT]    pid=4044634 ppid=4044553 exit_code=0   duration=3ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044637 ppid=4044553 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/gpgv
+2026/04/20 04:30:20 [EXIT]    pid=4044637 ppid=4044553 exit_code=0   duration=4ms comm=gpgv
+2026/04/20 04:30:20 [PROCESS] pid=4044638 ppid=4044553 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/gpgconf
+2026/04/20 04:30:20 [PROCESS] pid=4044639 ppid=4044638 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/gpg-connect-agent
+2026/04/20 04:30:20 [EXIT]    pid=4044639 ppid=4044638 exit_code=0   duration=4ms comm=gpg-connect-age
+2026/04/20 04:30:20 [PROCESS] pid=4044640 ppid=4044638 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/gpg-connect-agent
+2026/04/20 04:30:20 [EXIT]    pid=4044640 ppid=4044638 exit_code=0   duration=3ms comm=gpg-connect-age
+2026/04/20 04:30:20 [PROCESS] pid=4044641 ppid=4044638 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/gpg-connect-agent
+2026/04/20 04:30:20 [EXIT]    pid=4044641 ppid=4044638 exit_code=0   duration=3ms comm=gpg-connect-age
+2026/04/20 04:30:20 [EXIT]    pid=4044638 ppid=4044553 exit_code=0   duration=14ms comm=gpgconf
+2026/04/20 04:30:20 [PROCESS] pid=4044642 ppid=4044553 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/rm
+2026/04/20 04:30:20 [EXIT]    pid=4044642 ppid=4044553 exit_code=0   duration=1ms comm=rm
+2026/04/20 04:30:20 [EXIT]    pid=4044553 ppid=4044552 exit_code=0   duration=231ms comm=apt-key
+2026/04/20 04:30:20 [EXIT]    pid=4044552 ppid=4044310 exit_code=0   duration=236ms comm=gpgv
+2026/04/20 04:30:20 [PROCESS] pid=4044644 ppid=4044643 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-key
+2026/04/20 04:30:20 [EXIT]    pid=4044645 ppid=4044644 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044646 ppid=4044644 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:20 [PROCESS] pid=4044647 ppid=4044646 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044647 ppid=4044646 exit_code=0   duration=3ms comm=dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044646 ppid=4044644 exit_code=0   duration=14ms comm=apt-config
+2026/04/20 04:30:20 [PROCESS] pid=4044648 ppid=4044644 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:20 [PROCESS] pid=4044649 ppid=4044648 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044649 ppid=4044648 exit_code=0   duration=2ms comm=dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044648 ppid=4044644 exit_code=0   duration=12ms comm=apt-config
+2026/04/20 04:30:20 [PROCESS] pid=4044650 ppid=4044644 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:20 [PROCESS] pid=4044651 ppid=4044650 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044651 ppid=4044650 exit_code=0   duration=4ms comm=dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044650 ppid=4044644 exit_code=0   duration=14ms comm=apt-config
+2026/04/20 04:30:20 [PROCESS] pid=4044652 ppid=4044644 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:20 [PROCESS] pid=4044653 ppid=4044652 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044653 ppid=4044652 exit_code=0   duration=3ms comm=dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044652 ppid=4044644 exit_code=0   duration=12ms comm=apt-config
+2026/04/20 04:30:20 [EXIT]    pid=4044654 ppid=4044644 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044655 ppid=4044644 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:20 [PROCESS] pid=4044656 ppid=4044655 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044656 ppid=4044655 exit_code=0   duration=4ms comm=dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044655 ppid=4044644 exit_code=0   duration=14ms comm=apt-config
+2026/04/20 04:30:20 [PROCESS] pid=4044657 ppid=4044644 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:20 [PROCESS] pid=4044658 ppid=4044657 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044658 ppid=4044657 exit_code=0   duration=2ms comm=dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044657 ppid=4044644 exit_code=0   duration=13ms comm=apt-config
+2026/04/20 04:30:20 [PROCESS] pid=4044659 ppid=4044644 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:20 [PROCESS] pid=4044660 ppid=4044659 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044660 ppid=4044659 exit_code=0   duration=3ms comm=dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044659 ppid=4044644 exit_code=0   duration=14ms comm=apt-config
+2026/04/20 04:30:20 [PROCESS] pid=4044661 ppid=4044644 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/mktemp
+2026/04/20 04:30:20 [EXIT]    pid=4044661 ppid=4044644 exit_code=0   duration=1ms comm=mktemp
+2026/04/20 04:30:20 [PROCESS] pid=4044662 ppid=4044644 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/chmod
+2026/04/20 04:30:20 [EXIT]    pid=4044662 ppid=4044644 exit_code=0   duration=0ms comm=chmod
+2026/04/20 04:30:20 [PROCESS] pid=4044663 ppid=4044644 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/readlink
+2026/04/20 04:30:20 [EXIT]    pid=4044663 ppid=4044644 exit_code=0   duration=1ms comm=readlink
+2026/04/20 04:30:20 [PROCESS] pid=4044664 ppid=4044644 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/rm
+2026/04/20 04:30:20 [EXIT]    pid=4044664 ppid=4044644 exit_code=0   duration=1ms comm=rm
+2026/04/20 04:30:20 [PROCESS] pid=4044665 ppid=4044644 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/touch
+2026/04/20 04:30:20 [EXIT]    pid=4044665 ppid=4044644 exit_code=0   duration=1ms comm=touch
+2026/04/20 04:30:20 [PROCESS] pid=4044666 ppid=4044644 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-config
+2026/04/20 04:30:20 [PROCESS] pid=4044667 ppid=4044666 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044667 ppid=4044666 exit_code=0   duration=2ms comm=dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044666 ppid=4044644 exit_code=0   duration=11ms comm=apt-config
+2026/04/20 04:30:20 [PROCESS] pid=4044668 ppid=4044644 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/readlink
+2026/04/20 04:30:20 [EXIT]    pid=4044668 ppid=4044644 exit_code=0   duration=1ms comm=readlink
+2026/04/20 04:30:20 [PROCESS] pid=4044669 ppid=4044644 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/find
+2026/04/20 04:30:20 [EXIT]    pid=4044669 ppid=4044644 exit_code=0   duration=2ms comm=find
+2026/04/20 04:30:20 [EXIT]    pid=4044671 ppid=4044670 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044672 ppid=4044670 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/sort
+2026/04/20 04:30:20 [EXIT]    pid=4044672 ppid=4044670 exit_code=0   duration=1ms comm=sort
+2026/04/20 04:30:20 [EXIT]    pid=4044670 ppid=4044644 exit_code=0   duration=2ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044674 ppid=4044673 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/awk
+2026/04/20 04:30:20 [PROCESS] pid=4044675 ppid=4044673 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/base64
+2026/04/20 04:30:20 [EXIT]    pid=4044674 ppid=4044673 exit_code=0   duration=2ms comm=awk
+2026/04/20 04:30:20 [EXIT]    pid=4044675 ppid=4044673 exit_code=0   duration=2ms comm=base64
+2026/04/20 04:30:20 [EXIT]    pid=4044673 ppid=4044644 exit_code=0   duration=3ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044676 ppid=4044644 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cat
+2026/04/20 04:30:20 [EXIT]    pid=4044676 ppid=4044644 exit_code=0   duration=1ms comm=cat
+2026/04/20 04:30:20 [PROCESS] pid=4044678 ppid=4044677 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/awk
+2026/04/20 04:30:20 [PROCESS] pid=4044679 ppid=4044677 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/base64
+2026/04/20 04:30:20 [EXIT]    pid=4044678 ppid=4044677 exit_code=0   duration=2ms comm=awk
+2026/04/20 04:30:20 [EXIT]    pid=4044679 ppid=4044677 exit_code=0   duration=2ms comm=base64
+2026/04/20 04:30:20 [EXIT]    pid=4044677 ppid=4044644 exit_code=0   duration=3ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044680 ppid=4044644 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cat
+2026/04/20 04:30:20 [EXIT]    pid=4044680 ppid=4044644 exit_code=0   duration=1ms comm=cat
+2026/04/20 04:30:20 [PROCESS] pid=4044682 ppid=4044681 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/awk
+2026/04/20 04:30:20 [PROCESS] pid=4044683 ppid=4044681 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/base64
+2026/04/20 04:30:20 [EXIT]    pid=4044682 ppid=4044681 exit_code=0   duration=2ms comm=awk
+2026/04/20 04:30:20 [EXIT]    pid=4044683 ppid=4044681 exit_code=0   duration=1ms comm=base64
+2026/04/20 04:30:20 [EXIT]    pid=4044681 ppid=4044644 exit_code=0   duration=3ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044684 ppid=4044644 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cat
+2026/04/20 04:30:20 [EXIT]    pid=4044684 ppid=4044644 exit_code=0   duration=1ms comm=cat
+2026/04/20 04:30:20 [PROCESS] pid=4044686 ppid=4044685 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/awk
+2026/04/20 04:30:20 [PROCESS] pid=4044687 ppid=4044685 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/base64
+2026/04/20 04:30:20 [EXIT]    pid=4044686 ppid=4044685 exit_code=0   duration=2ms comm=awk
+2026/04/20 04:30:20 [EXIT]    pid=4044687 ppid=4044685 exit_code=0   duration=4ms comm=base64
+2026/04/20 04:30:20 [EXIT]    pid=4044685 ppid=4044644 exit_code=0   duration=5ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044688 ppid=4044644 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cat
+2026/04/20 04:30:20 [EXIT]    pid=4044688 ppid=4044644 exit_code=0   duration=1ms comm=cat
+2026/04/20 04:30:20 [PROCESS] pid=4044690 ppid=4044689 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/awk
+2026/04/20 04:30:20 [PROCESS] pid=4044691 ppid=4044689 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/base64
+2026/04/20 04:30:20 [EXIT]    pid=4044690 ppid=4044689 exit_code=0   duration=2ms comm=awk
+2026/04/20 04:30:20 [EXIT]    pid=4044691 ppid=4044689 exit_code=0   duration=2ms comm=base64
+2026/04/20 04:30:20 [EXIT]    pid=4044689 ppid=4044644 exit_code=0   duration=3ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044692 ppid=4044644 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cat
+2026/04/20 04:30:20 [EXIT]    pid=4044692 ppid=4044644 exit_code=0   duration=1ms comm=cat
+2026/04/20 04:30:20 [PROCESS] pid=4044694 ppid=4044693 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/awk
+2026/04/20 04:30:20 [PROCESS] pid=4044695 ppid=4044693 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/base64
+2026/04/20 04:30:20 [EXIT]    pid=4044694 ppid=4044693 exit_code=0   duration=2ms comm=awk
+2026/04/20 04:30:20 [EXIT]    pid=4044695 ppid=4044693 exit_code=0   duration=1ms comm=base64
+2026/04/20 04:30:20 [EXIT]    pid=4044693 ppid=4044644 exit_code=0   duration=2ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044696 ppid=4044644 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cat
+2026/04/20 04:30:20 [EXIT]    pid=4044696 ppid=4044644 exit_code=0   duration=1ms comm=cat
+2026/04/20 04:30:20 [PROCESS] pid=4044698 ppid=4044697 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/awk
+2026/04/20 04:30:20 [PROCESS] pid=4044699 ppid=4044697 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/base64
+2026/04/20 04:30:20 [EXIT]    pid=4044698 ppid=4044697 exit_code=0   duration=2ms comm=awk
+2026/04/20 04:30:20 [EXIT]    pid=4044699 ppid=4044697 exit_code=0   duration=2ms comm=base64
+2026/04/20 04:30:20 [EXIT]    pid=4044697 ppid=4044644 exit_code=0   duration=3ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044700 ppid=4044644 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cat
+2026/04/20 04:30:20 [EXIT]    pid=4044700 ppid=4044644 exit_code=0   duration=1ms comm=cat
+2026/04/20 04:30:20 [PROCESS] pid=4044702 ppid=4044701 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/awk
+2026/04/20 04:30:20 [PROCESS] pid=4044703 ppid=4044701 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/base64
+2026/04/20 04:30:20 [EXIT]    pid=4044702 ppid=4044701 exit_code=0   duration=2ms comm=awk
+2026/04/20 04:30:20 [EXIT]    pid=4044703 ppid=4044701 exit_code=0   duration=1ms comm=base64
+2026/04/20 04:30:20 [EXIT]    pid=4044701 ppid=4044644 exit_code=0   duration=2ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044704 ppid=4044644 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cat
+2026/04/20 04:30:20 [EXIT]    pid=4044704 ppid=4044644 exit_code=0   duration=1ms comm=cat
+2026/04/20 04:30:20 [PROCESS] pid=4044706 ppid=4044705 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/awk
+2026/04/20 04:30:20 [PROCESS] pid=4044707 ppid=4044705 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/base64
+2026/04/20 04:30:20 [EXIT]    pid=4044706 ppid=4044705 exit_code=0   duration=2ms comm=awk
+2026/04/20 04:30:20 [EXIT]    pid=4044707 ppid=4044705 exit_code=0   duration=1ms comm=base64
+2026/04/20 04:30:20 [EXIT]    pid=4044705 ppid=4044644 exit_code=0   duration=2ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044708 ppid=4044644 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cat
+2026/04/20 04:30:20 [EXIT]    pid=4044708 ppid=4044644 exit_code=0   duration=1ms comm=cat
+2026/04/20 04:30:20 [EXIT]    pid=4044709 ppid=4044644 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044710 ppid=4044644 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cmp
+2026/04/20 04:30:20 [EXIT]    pid=4044710 ppid=4044644 exit_code=0   duration=1ms comm=cmp
+2026/04/20 04:30:20 [EXIT]    pid=4044711 ppid=4044644 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044712 ppid=4044644 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cat
+2026/04/20 04:30:20 [EXIT]    pid=4044712 ppid=4044644 exit_code=0   duration=1ms comm=cat
+2026/04/20 04:30:20 [PROCESS] pid=4044714 ppid=4044644 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cmp
+2026/04/20 04:30:20 [EXIT]    pid=4044713 ppid=4044644 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:20 [EXIT]    pid=4044714 ppid=4044644 exit_code=1   duration=1ms comm=cmp
+2026/04/20 04:30:20 [EXIT]    pid=4044715 ppid=4044644 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044716 ppid=4044644 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cmp
+2026/04/20 04:30:20 [EXIT]    pid=4044716 ppid=4044644 exit_code=1   duration=1ms comm=cmp
+2026/04/20 04:30:20 [EXIT]    pid=4044717 ppid=4044644 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044718 ppid=4044644 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cmp
+2026/04/20 04:30:20 [EXIT]    pid=4044718 ppid=4044644 exit_code=0   duration=1ms comm=cmp
+2026/04/20 04:30:20 [EXIT]    pid=4044719 ppid=4044644 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044720 ppid=4044644 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cat
+2026/04/20 04:30:20 [EXIT]    pid=4044720 ppid=4044644 exit_code=0   duration=1ms comm=cat
+2026/04/20 04:30:20 [PROCESS] pid=4044721 ppid=4044644 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/cp
+2026/04/20 04:30:20 [EXIT]    pid=4044721 ppid=4044644 exit_code=0   duration=2ms comm=cp
+2026/04/20 04:30:20 [EXIT]    pid=4044723 ppid=4044722 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044724 ppid=4044722 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/sed
+2026/04/20 04:30:20 [EXIT]    pid=4044724 ppid=4044722 exit_code=0   duration=2ms comm=sed
+2026/04/20 04:30:20 [EXIT]    pid=4044722 ppid=4044644 exit_code=0   duration=3ms comm=apt-key
+2026/04/20 04:30:20 [EXIT]    pid=4044726 ppid=4044725 exit_code=0   duration=0ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044727 ppid=4044725 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/sed
+2026/04/20 04:30:20 [EXIT]    pid=4044727 ppid=4044725 exit_code=0   duration=2ms comm=sed
+2026/04/20 04:30:20 [EXIT]    pid=4044725 ppid=4044644 exit_code=0   duration=2ms comm=apt-key
+2026/04/20 04:30:20 [PROCESS] pid=4044728 ppid=4044644 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/gpgv
+2026/04/20 04:30:20 [EXIT]    pid=4044728 ppid=4044644 exit_code=0   duration=4ms comm=gpgv
+2026/04/20 04:30:20 [PROCESS] pid=4044729 ppid=4044644 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/gpgconf
+2026/04/20 04:30:20 [PROCESS] pid=4044730 ppid=4044729 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/gpg-connect-agent
+2026/04/20 04:30:20 [EXIT]    pid=4044730 ppid=4044729 exit_code=0   duration=3ms comm=gpg-connect-age
+2026/04/20 04:30:20 [PROCESS] pid=4044731 ppid=4044729 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/gpg-connect-agent
+2026/04/20 04:30:20 [EXIT]    pid=4044731 ppid=4044729 exit_code=0   duration=3ms comm=gpg-connect-age
+2026/04/20 04:30:20 [PROCESS] pid=4044732 ppid=4044729 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/gpg-connect-agent
+2026/04/20 04:30:20 [EXIT]    pid=4044732 ppid=4044729 exit_code=0   duration=3ms comm=gpg-connect-age
+2026/04/20 04:30:20 [EXIT]    pid=4044729 ppid=4044644 exit_code=0   duration=13ms comm=gpgconf
+2026/04/20 04:30:20 [PROCESS] pid=4044733 ppid=4044644 uid=42     mnt_ns=4026531841 container=host                                     path=/usr/bin/rm
+2026/04/20 04:30:20 [EXIT]    pid=4044733 ppid=4044644 exit_code=0   duration=1ms comm=rm
+2026/04/20 04:30:20 [EXIT]    pid=4044644 ppid=4044643 exit_code=0   duration=218ms comm=apt-key
+2026/04/20 04:30:20 [EXIT]    pid=4044643 ppid=4044310 exit_code=0   duration=221ms comm=gpgv
+2026/04/20 04:30:20 [EXIT]    pid=4044310 ppid=4044299 exit_code=0   duration=1359ms comm=gpgv
+2026/04/20 04:30:20 [EXIT]    pid=4044308 ppid=4044299 exit_code=100 duration=1443ms comm=https
+2026/04/20 04:30:20 [EXIT]    pid=4044307 ppid=4044299 exit_code=0   duration=1469ms comm=file
+2026/04/20 04:30:20 [EXIT]    pid=4044303 ppid=4044299 exit_code=100 duration=1521ms comm=https
+2026/04/20 04:30:20 [EXIT]    pid=4044304 ppid=4044299 exit_code=100 duration=1510ms comm=https
+2026/04/20 04:30:20 [EXIT]    pid=4044305 ppid=4044299 exit_code=0   duration=1500ms comm=mirror+file
+2026/04/20 04:30:20 [PROCESS] pid=4044734 ppid=4044299 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:20 [EXIT]    pid=4044734 ppid=4044299 exit_code=0   duration=4ms comm=dpkg
+2026/04/20 04:30:21 [PROCESS] pid=4044735 ppid=2852483 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:30:21 [PROCESS] pid=4044742 ppid=4044735 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:30:21 [EXIT]    pid=4044743 ppid=4044735 exit_code=0   duration=2ms comm=runc:[1:CHILD]
+2026/04/20 04:30:21 [EXIT]    pid=4044742 ppid=4044735 exit_code=0   duration=22ms comm=runc:[0:PARENT]
+2026/04/20 04:30:21 [EXIT]    pid=4044735 ppid=2852483 exit_code=0   duration=90ms comm=runc
+2026/04/20 04:30:21 [PROCESS] pid=4044744 ppid=2852483 uid=0      mnt_ns=4026532370 container=order-processor-localstack               path=/usr/bin/curl
+2026/04/20 04:30:21 [2026-04-20 04:30:21] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=4044744 ppid=2852483 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 04:30:21 [FILE]    pid=4044744 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/etc/passwd
+2026/04/20 04:30:21 [2026-04-20 04:30:21] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4044744 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 04:30:21 [EXIT]    pid=4044744 ppid=2852483 exit_code=0   duration=98ms comm=curl
+2026/04/20 04:30:21 [PROCESS] pid=4044750 ppid=4044299 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:21 [EXIT]    pid=4044750 ppid=4044299 exit_code=0   duration=45ms comm=dpkg
+2026/04/20 04:30:21 [EXIT]    pid=4044299 ppid=391    exit_code=0   duration=2931ms comm=apt-get
+2026/04/20 04:30:21 [PROCESS] pid=4044751 ppid=391    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/apt-get
+2026/04/20 04:30:22 [PROCESS] pid=4044752 ppid=4044751 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:22 [EXIT]    pid=4044752 ppid=4044751 exit_code=0   duration=4ms comm=dpkg
+2026/04/20 04:30:22 [PROCESS] pid=4044753 ppid=4044751 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/dpkg
+2026/04/20 04:30:22 [EXIT]    pid=4044753 ppid=4044751 exit_code=0   duration=5ms comm=dpkg
+2026/04/20 04:30:22 [PROCESS] pid=4044754 ppid=4018865 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/docker
+2026/04/20 04:30:22 [PROCESS] pid=4044760 ppid=4044751 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/lib/apt/methods/https
+2026/04/20 04:30:23 [EXIT]    pid=4044760 ppid=4044751 exit_code=0   duration=34ms comm=https
+2026/04/20 04:30:23 [PROCESS] pid=4044761 ppid=2868372 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:30:23 [PROCESS] pid=4044771 ppid=4044761 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:30:23 [EXIT]    pid=4044772 ppid=4044761 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 04:30:23 [EXIT]    pid=4044771 ppid=4044761 exit_code=0   duration=38ms comm=runc:[0:PARENT]
+2026/04/20 04:30:23 [EXIT]    pid=4044761 ppid=2868372 exit_code=0   duration=116ms comm=runc
+2026/04/20 04:30:23 [PROCESS] pid=4044773 ppid=2868372 uid=1000   mnt_ns=4026532630 container=order-processor-auth_service             path=/usr/bin/cat
+2026/04/20 04:30:23 [EXIT]    pid=4044773 ppid=2868372 exit_code=1   duration=68ms comm=cat
+2026/04/20 04:30:23 [2026-04-20 04:30:23] ALERT level=LOW rule=short_lived_failure container=unknown pid=4044773 ppid=0 uid=0 comm=cat msg=Process exited quickly with error — possible failed exploit
+2026/04/20 04:30:23 [EXIT]    pid=4044754 ppid=4018865 exit_code=1   duration=293ms comm=docker
+2026/04/20 04:30:23 [EXIT]    pid=4044751 ppid=391    exit_code=0   duration=1937ms comm=apt-get
+2026/04/20 04:30:23 [PROCESS] pid=4044779 ppid=391    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/pip
+2026/04/20 04:30:24 [PROCESS] pid=4044780 ppid=4044779 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/local/sbin/lsb_release
+2026/04/20 04:30:24 [PROCESS] pid=4044780 ppid=4044779 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/local/bin/lsb_release
+2026/04/20 04:30:24 [PROCESS] pid=4044780 ppid=4044779 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/lsb_release
+2026/04/20 04:30:24 [PROCESS] pid=4044780 ppid=4044779 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/lsb_release
+2026/04/20 04:30:24 [PROCESS] pid=4044781 ppid=4044780 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/getopt
+2026/04/20 04:30:24 [EXIT]    pid=4044781 ppid=4044780 exit_code=0   duration=3ms comm=getopt
+2026/04/20 04:30:24 [EXIT]    pid=4044783 ppid=4044782 exit_code=0   duration=0ms comm=lsb_release
+2026/04/20 04:30:24 [PROCESS] pid=4044784 ppid=4044782 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/cut
+2026/04/20 04:30:24 [PROCESS] pid=4044785 ppid=4044782 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/tr
+2026/04/20 04:30:24 [EXIT]    pid=4044784 ppid=4044782 exit_code=0   duration=2ms comm=cut
+2026/04/20 04:30:24 [EXIT]    pid=4044785 ppid=4044782 exit_code=0   duration=4ms comm=tr
+2026/04/20 04:30:24 [EXIT]    pid=4044782 ppid=4044780 exit_code=0   duration=5ms comm=lsb_release
+2026/04/20 04:30:24 [EXIT]    pid=4044787 ppid=4044786 exit_code=0   duration=0ms comm=lsb_release
+2026/04/20 04:30:24 [PROCESS] pid=4044788 ppid=4044786 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/cut
+2026/04/20 04:30:24 [EXIT]    pid=4044788 ppid=4044786 exit_code=0   duration=2ms comm=cut
+2026/04/20 04:30:24 [EXIT]    pid=4044786 ppid=4044780 exit_code=0   duration=2ms comm=lsb_release
+2026/04/20 04:30:24 [EXIT]    pid=4044790 ppid=4044789 exit_code=0   duration=0ms comm=lsb_release
+2026/04/20 04:30:24 [PROCESS] pid=4044791 ppid=4044789 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/tr
+2026/04/20 04:30:24 [EXIT]    pid=4044791 ppid=4044789 exit_code=0   duration=2ms comm=tr
+2026/04/20 04:30:24 [EXIT]    pid=4044789 ppid=4044780 exit_code=0   duration=3ms comm=lsb_release
+2026/04/20 04:30:24 [EXIT]    pid=4044793 ppid=4044792 exit_code=0   duration=0ms comm=lsb_release
+2026/04/20 04:30:24 [PROCESS] pid=4044794 ppid=4044792 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/tr
+2026/04/20 04:30:24 [EXIT]    pid=4044794 ppid=4044792 exit_code=0   duration=3ms comm=tr
+2026/04/20 04:30:24 [EXIT]    pid=4044792 ppid=4044780 exit_code=0   duration=3ms comm=lsb_release
+2026/04/20 04:30:24 [EXIT]    pid=4044780 ppid=4044779 exit_code=0   duration=22ms comm=lsb_release
+2026/04/20 04:30:24 [PROCESS] pid=4044795 ppid=4044779 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/local/sbin/uname
+2026/04/20 04:30:24 [PROCESS] pid=4044795 ppid=4044779 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/local/bin/uname
+2026/04/20 04:30:24 [PROCESS] pid=4044795 ppid=4044779 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/uname
+2026/04/20 04:30:24 [PROCESS] pid=4044795 ppid=4044779 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/uname
+2026/04/20 04:30:24 [EXIT]    pid=4044795 ppid=4044779 exit_code=0   duration=3ms comm=uname
+2026/04/20 04:30:25 [PROCESS] pid=4044796 ppid=704    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/getconf
+2026/04/20 04:30:25 [EXIT]    pid=4044796 ppid=704    exit_code=0   duration=2ms comm=getconf
+2026/04/20 04:30:26 [PROCESS] pid=4044797 ppid=4018865 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/cat
+2026/04/20 04:30:26 [EXIT]    pid=4044797 ppid=4018865 exit_code=0   duration=5ms comm=cat
+2026/04/20 04:30:27 [PROCESS] pid=4044798 ppid=4018865 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/ls
+2026/04/20 04:30:27 [EXIT]    pid=4044798 ppid=4018865 exit_code=0   duration=6ms comm=ls
+2026/04/20 04:30:28 [EXIT]    pid=4044779 ppid=391    exit_code=0   duration=4535ms comm=pip
+2026/04/20 04:30:30 Stopping EDR monitor...

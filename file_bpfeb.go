@@ -8,9 +8,21 @@ import (
 	_ "embed"
 	"fmt"
 	"io"
+	"structs"
 
 	"github.com/cilium/ebpf"
 )
+
+type filePendingOpen struct {
+	_        structs.HostLayout
+	MntNsId  uint64
+	Pid      int32
+	Ppid     int32
+	Uid      uint32
+	Pad      uint32
+	Comm     [128]int8
+	Filename [256]int8
+}
 
 // loadFile returns the embedded CollectionSpec for file.
 func loadFile() (*ebpf.CollectionSpec, error) {
@@ -54,20 +66,22 @@ type fileSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type fileProgramSpecs struct {
-	TracepointSyscallsSysEnterOpenat *ebpf.ProgramSpec `ebpf:"tracepoint__syscalls__sys_enter_openat"`
+	HandleEnter *ebpf.ProgramSpec `ebpf:"handle_enter"`
+	HandleExit  *ebpf.ProgramSpec `ebpf:"handle_exit"`
 }
 
 // fileMapSpecs contains maps before they are loaded into the kernel.
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type fileMapSpecs struct {
+	PendingOpens *ebpf.MapSpec `ebpf:"pending_opens"`
+	Rb           *ebpf.MapSpec `ebpf:"rb"`
 }
 
 // fileVariableSpecs contains global variables before they are loaded into the kernel.
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type fileVariableSpecs struct {
-	PidTarget *ebpf.VariableSpec `ebpf:"pid_target"`
 }
 
 // fileObjects contains all objects after they have been loaded into the kernel.
@@ -90,29 +104,35 @@ func (o *fileObjects) Close() error {
 //
 // It can be passed to loadFileObjects or ebpf.CollectionSpec.LoadAndAssign.
 type fileMaps struct {
+	PendingOpens *ebpf.Map `ebpf:"pending_opens"`
+	Rb           *ebpf.Map `ebpf:"rb"`
 }
 
 func (m *fileMaps) Close() error {
-	return _FileClose()
+	return _FileClose(
+		m.PendingOpens,
+		m.Rb,
+	)
 }
 
 // fileVariables contains all global variables after they have been loaded into the kernel.
 //
 // It can be passed to loadFileObjects or ebpf.CollectionSpec.LoadAndAssign.
 type fileVariables struct {
-	PidTarget *ebpf.Variable `ebpf:"pid_target"`
 }
 
 // filePrograms contains all programs after they have been loaded into the kernel.
 //
 // It can be passed to loadFileObjects or ebpf.CollectionSpec.LoadAndAssign.
 type filePrograms struct {
-	TracepointSyscallsSysEnterOpenat *ebpf.Program `ebpf:"tracepoint__syscalls__sys_enter_openat"`
+	HandleEnter *ebpf.Program `ebpf:"handle_enter"`
+	HandleExit  *ebpf.Program `ebpf:"handle_exit"`
 }
 
 func (p *filePrograms) Close() error {
 	return _FileClose(
-		p.TracepointSyscallsSysEnterOpenat,
+		p.HandleEnter,
+		p.HandleExit,
 	)
 }
 

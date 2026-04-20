@@ -1,0 +1,561 @@
+2026/04/20 03:37:44 EDR Monitor started — watching process execution, exits, and file access
+2026/04/20 03:37:44 Press Ctrl+C to stop
+2026/04/20 03:37:44 [PROCESS] pid=4025357 ppid=271154 uid=1000   mnt_ns=4026531841 container=host                                     path=/bin/sh
+2026/04/20 03:37:44 [PROCESS] pid=4025358 ppid=4025357 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/ip
+2026/04/20 03:37:44 [EXIT]    pid=4025358 ppid=4025357 exit_code=0   duration=3ms comm=ip
+2026/04/20 03:37:44 [EXIT]    pid=4025357 ppid=271154 exit_code=0   duration=8ms comm=sh
+2026/04/20 03:37:45 [PROCESS] pid=4025359 ppid=704    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/getconf
+2026/04/20 03:37:45 [EXIT]    pid=4025359 ppid=704    exit_code=0   duration=2ms comm=getconf
+2026/04/20 03:37:50 [PROCESS] pid=4025360 ppid=761    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/ip
+2026/04/20 03:37:50 [EXIT]    pid=4025360 ppid=761    exit_code=0   duration=3ms comm=ip
+2026/04/20 03:37:50 [PROCESS] pid=4025361 ppid=761    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/ip
+2026/04/20 03:37:50 [EXIT]    pid=4025361 ppid=761    exit_code=0   duration=4ms comm=ip
+2026/04/20 03:37:50 [PROCESS] pid=4025362 ppid=761    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/ip
+2026/04/20 03:37:50 [EXIT]    pid=4025362 ppid=761    exit_code=0   duration=3ms comm=ip
+2026/04/20 03:37:50 [PROCESS] pid=4025363 ppid=2850888 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 03:37:50 [PROCESS] pid=4025370 ppid=4025363 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 03:37:50 [EXIT]    pid=4025371 ppid=4025363 exit_code=0   duration=5ms comm=runc:[1:CHILD]
+2026/04/20 03:37:50 [EXIT]    pid=4025370 ppid=4025363 exit_code=0   duration=18ms comm=runc:[0:PARENT]
+2026/04/20 03:37:50 [PROCESS] pid=4025379 ppid=2869676 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 03:37:50 [PROCESS] pid=4025385 ppid=4025379 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 03:37:50 [EXIT]    pid=4025385 ppid=4025379 exit_code=0   duration=19ms comm=runc:[0:PARENT]
+2026/04/20 03:37:50 [EXIT]    pid=4025387 ppid=4025379 exit_code=0   duration=5ms comm=runc:[1:CHILD]
+2026/04/20 03:37:50 [FILE]    pid=4025372 ppid=4025363 uid=0      container=order-processor-redis                    comm=runc:[2:INIT]        file=/etc/passwd
+2026/04/20 03:37:50 [2026-04-20 03:37:50] ALERT level=HIGH rule=sensitive_file_access container=order-processor-redis pid=4025372 ppid=4025363 uid=0 comm=runc:[2:INIT] msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:37:50 [PROCESS] pid=4025372 ppid=4025363 uid=0      mnt_ns=4026532303 container=order-processor-redis                    path=/usr/local/bin/redis-cli
+2026/04/20 03:37:50 [EXIT]    pid=4025363 ppid=2850888 exit_code=0   duration=118ms comm=runc
+2026/04/20 03:37:50 [EXIT]    pid=4025372 ppid=2850888 exit_code=0   duration=91ms comm=redis-cli
+2026/04/20 03:37:50 [FILE]    pid=4025388 ppid=4025379 uid=0      container=order-processor-gateway                  comm=runc:[2:INIT]        file=/etc/passwd
+2026/04/20 03:37:50 [2026-04-20 03:37:50] ALERT level=HIGH rule=sensitive_file_access container=order-processor-gateway pid=4025388 ppid=4025379 uid=0 comm=runc:[2:INIT] msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:37:50 [EXIT]    pid=4025379 ppid=2869676 exit_code=0   duration=92ms comm=runc
+2026/04/20 03:37:50 [PROCESS] pid=4025388 ppid=4025379 uid=0      mnt_ns=4026532760 container=order-processor-gateway                  path=/usr/bin/curl
+2026/04/20 03:37:50 [2026-04-20 03:37:50] ALERT level=MEDIUM rule=curl_from_container container=order-processor-gateway pid=4025388 ppid=4025379 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 03:37:50 [EXIT]    pid=4025388 ppid=2869676 exit_code=0   duration=73ms comm=curl
+2026/04/20 03:37:51 [PROCESS] pid=4025394 ppid=2852483 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 03:37:51 [PROCESS] pid=4025402 ppid=4025394 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 03:37:51 [EXIT]    pid=4025403 ppid=4025394 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 03:37:51 [EXIT]    pid=4025402 ppid=4025394 exit_code=0   duration=15ms comm=runc:[0:PARENT]
+2026/04/20 03:37:51 [FILE]    pid=4025404 ppid=4025394 uid=0      container=order-processor-localstack               comm=runc:[2:INIT]        file=/etc/passwd
+2026/04/20 03:37:51 [2026-04-20 03:37:51] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025404 ppid=4025394 uid=0 comm=runc:[2:INIT] msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:37:51 [PROCESS] pid=4025404 ppid=4025394 uid=0      mnt_ns=4026532370 container=order-processor-localstack               path=/usr/bin/curl
+2026/04/20 03:37:51 [2026-04-20 03:37:51] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=4025404 ppid=4025394 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 03:37:51 [EXIT]    pid=4025394 ppid=2852483 exit_code=0   duration=70ms comm=runc
+2026/04/20 03:37:51 [FILE]    pid=4025404 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/root/.curlrc
+2026/04/20 03:37:51 [2026-04-20 03:37:51] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025404 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /root/.curlrc
+2026/04/20 03:37:51 [FILE]    pid=4025404 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/root/.config/curlrc
+2026/04/20 03:37:51 [2026-04-20 03:37:51] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025404 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /root/.config/curlrc
+2026/04/20 03:37:51 [FILE]    pid=4025404 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/etc/passwd
+2026/04/20 03:37:51 [2026-04-20 03:37:51] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025404 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:37:51 [FILE]    pid=4025404 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/root/.curlrc
+2026/04/20 03:37:51 [2026-04-20 03:37:51] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025404 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /root/.curlrc
+2026/04/20 03:37:51 [EXIT]    pid=4025404 ppid=2852483 exit_code=0   duration=66ms comm=curl
+2026/04/20 03:37:54 [PROCESS] pid=4025410 ppid=4018865 uid=1000   mnt_ns=4026531841 container=host                                     path=./run_all_tests.sh
+2026/04/20 03:37:54 [PROCESS] pid=4025411 ppid=4025410 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/pip
+2026/04/20 03:37:54 [PROCESS] pid=4025412 ppid=4025411 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/lsb_release
+2026/04/20 03:37:54 [PROCESS] pid=4025412 ppid=4025411 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/.npm-global/bin/lsb_release
+2026/04/20 03:37:54 [PROCESS] pid=4025412 ppid=4025411 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/local/bin/lsb_release
+2026/04/20 03:37:54 [PROCESS] pid=4025412 ppid=4025411 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/lsb_release
+2026/04/20 03:37:54 [PROCESS] pid=4025413 ppid=4025412 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/getopt
+2026/04/20 03:37:54 [EXIT]    pid=4025413 ppid=4025412 exit_code=0   duration=2ms comm=getopt
+2026/04/20 03:37:54 [PROCESS] pid=4025417 ppid=4025414 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/tr
+2026/04/20 03:37:54 [EXIT]    pid=4025415 ppid=4025414 exit_code=0   duration=0ms comm=lsb_release
+2026/04/20 03:37:54 [PROCESS] pid=4025416 ppid=4025414 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/cut
+2026/04/20 03:37:54 [EXIT]    pid=4025416 ppid=4025414 exit_code=0   duration=4ms comm=cut
+2026/04/20 03:37:54 [EXIT]    pid=4025417 ppid=4025414 exit_code=0   duration=4ms comm=tr
+2026/04/20 03:37:54 [EXIT]    pid=4025414 ppid=4025412 exit_code=0   duration=5ms comm=lsb_release
+2026/04/20 03:37:54 [EXIT]    pid=4025419 ppid=4025418 exit_code=0   duration=0ms comm=lsb_release
+2026/04/20 03:37:54 [PROCESS] pid=4025420 ppid=4025418 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/cut
+2026/04/20 03:37:54 [EXIT]    pid=4025420 ppid=4025418 exit_code=0   duration=1ms comm=cut
+2026/04/20 03:37:54 [EXIT]    pid=4025418 ppid=4025412 exit_code=0   duration=2ms comm=lsb_release
+2026/04/20 03:37:54 [EXIT]    pid=4025422 ppid=4025421 exit_code=0   duration=0ms comm=lsb_release
+2026/04/20 03:37:54 [PROCESS] pid=4025423 ppid=4025421 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/tr
+2026/04/20 03:37:54 [EXIT]    pid=4025423 ppid=4025421 exit_code=0   duration=1ms comm=tr
+2026/04/20 03:37:54 [EXIT]    pid=4025421 ppid=4025412 exit_code=0   duration=2ms comm=lsb_release
+2026/04/20 03:37:54 [EXIT]    pid=4025425 ppid=4025424 exit_code=0   duration=0ms comm=lsb_release
+2026/04/20 03:37:54 [PROCESS] pid=4025426 ppid=4025424 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/tr
+2026/04/20 03:37:54 [EXIT]    pid=4025426 ppid=4025424 exit_code=0   duration=1ms comm=tr
+2026/04/20 03:37:54 [EXIT]    pid=4025424 ppid=4025412 exit_code=0   duration=2ms comm=lsb_release
+2026/04/20 03:37:54 [EXIT]    pid=4025412 ppid=4025411 exit_code=0   duration=19ms comm=lsb_release
+2026/04/20 03:37:54 [PROCESS] pid=4025427 ppid=4025411 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/uname
+2026/04/20 03:37:54 [PROCESS] pid=4025427 ppid=4025411 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/.npm-global/bin/uname
+2026/04/20 03:37:54 [PROCESS] pid=4025427 ppid=4025411 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/local/bin/uname
+2026/04/20 03:37:54 [PROCESS] pid=4025427 ppid=4025411 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/uname
+2026/04/20 03:37:54 [EXIT]    pid=4025427 ppid=4025411 exit_code=0   duration=2ms comm=uname
+2026/04/20 03:37:55 [EXIT]    pid=4025411 ppid=4025410 exit_code=0   duration=1223ms comm=pip
+2026/04/20 03:37:55 [PROCESS] pid=4025428 ppid=4025410 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 03:37:55 [PROCESS] pid=4025429 ppid=704    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/getconf
+2026/04/20 03:37:55 [EXIT]    pid=4025429 ppid=704    exit_code=0   duration=2ms comm=getconf
+2026/04/20 03:37:56 [EXIT]    pid=4025428 ppid=4025410 exit_code=0   duration=934ms comm=python3
+2026/04/20 03:37:56 [PROCESS] pid=4025430 ppid=4025410 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 03:37:56 [PROCESS] pid=4025431 ppid=4025410 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 03:37:56 [EXIT]    pid=4025430 ppid=4025410 exit_code=0   duration=282ms comm=python3
+2026/04/20 03:37:59 [EXIT]    pid=4025431 ppid=4025410 exit_code=0   duration=2991ms comm=python3
+2026/04/20 03:37:59 [PROCESS] pid=4025432 ppid=4025410 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 03:37:59 [PROCESS] pid=4025433 ppid=271154 uid=1000   mnt_ns=4026531841 container=host                                     path=/bin/sh
+2026/04/20 03:37:59 [PROCESS] pid=4025434 ppid=4025433 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/ip
+2026/04/20 03:37:59 [EXIT]    pid=4025434 ppid=4025433 exit_code=0   duration=7ms comm=ip
+2026/04/20 03:37:59 [EXIT]    pid=4025433 ppid=271154 exit_code=0   duration=12ms comm=sh
+2026/04/20 03:38:01 [PROCESS] pid=4025435 ppid=2852483 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 03:38:01 [PROCESS] pid=4025442 ppid=4025435 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 03:38:01 [EXIT]    pid=4025443 ppid=4025435 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 03:38:01 [EXIT]    pid=4025442 ppid=4025435 exit_code=0   duration=21ms comm=runc:[0:PARENT]
+2026/04/20 03:38:01 [FILE]    pid=4025444 ppid=4025435 uid=0      container=order-processor-localstack               comm=runc:[2:INIT]        file=/etc/passwd
+2026/04/20 03:38:01 [2026-04-20 03:38:01] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025444 ppid=4025435 uid=0 comm=runc:[2:INIT] msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:38:01 [EXIT]    pid=4025435 ppid=2852483 exit_code=0   duration=79ms comm=runc
+2026/04/20 03:38:01 [PROCESS] pid=4025444 ppid=2852483 uid=0      mnt_ns=4026532370 container=order-processor-localstack               path=/usr/bin/curl
+2026/04/20 03:38:01 [2026-04-20 03:38:01] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=4025444 ppid=2852483 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 03:38:01 [FILE]    pid=4025444 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/root/.curlrc
+2026/04/20 03:38:01 [2026-04-20 03:38:01] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025444 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /root/.curlrc
+2026/04/20 03:38:01 [FILE]    pid=4025444 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/root/.config/curlrc
+2026/04/20 03:38:01 [2026-04-20 03:38:01] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025444 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /root/.config/curlrc
+2026/04/20 03:38:01 [FILE]    pid=4025444 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/etc/passwd
+2026/04/20 03:38:01 [2026-04-20 03:38:01] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025444 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:38:01 [FILE]    pid=4025444 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/root/.curlrc
+2026/04/20 03:38:01 [2026-04-20 03:38:01] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025444 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /root/.curlrc
+2026/04/20 03:38:01 [EXIT]    pid=4025444 ppid=2852483 exit_code=0   duration=92ms comm=curl
+2026/04/20 03:38:01 [EXIT]    pid=4025432 ppid=4025410 exit_code=0   duration=2217ms comm=python3
+2026/04/20 03:38:01 [PROCESS] pid=4025450 ppid=4025410 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 03:38:04 [PROCESS] pid=4025451 ppid=2868312 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 03:38:04 [PROCESS] pid=4025457 ppid=4025451 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 03:38:04 [EXIT]    pid=4025459 ppid=4025451 exit_code=0   duration=0ms comm=runc:[1:CHILD]
+2026/04/20 03:38:04 [EXIT]    pid=4025457 ppid=4025451 exit_code=0   duration=13ms comm=runc:[0:PARENT]
+2026/04/20 03:38:04 [FILE]    pid=4025460 ppid=4025451 uid=0      container=order-processor-inventory_service        comm=runc:[2:INIT]        file=/etc/passwd
+2026/04/20 03:38:04 [2026-04-20 03:38:04] ALERT level=HIGH rule=sensitive_file_access container=order-processor-inventory_service pid=4025460 ppid=4025451 uid=0 comm=runc:[2:INIT] msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:38:04 [EXIT]    pid=4025451 ppid=2868312 exit_code=0   duration=83ms comm=runc
+2026/04/20 03:38:04 [PROCESS] pid=4025460 ppid=4025451 uid=0      mnt_ns=4026532504 container=order-processor-inventory_service        path=/usr/bin/curl
+2026/04/20 03:38:04 [FILE]    pid=4025460 ppid=2868312 uid=0      container=order-processor-inventory_service        comm=curl                 file=/root/.curlrc
+2026/04/20 03:38:04 [2026-04-20 03:38:04] ALERT level=HIGH rule=sensitive_file_access container=order-processor-inventory_service pid=4025460 ppid=2868312 uid=0 comm=curl msg=Container accessed sensitive file: /root/.curlrc
+2026/04/20 03:38:04 [FILE]    pid=4025460 ppid=2868312 uid=0      container=order-processor-inventory_service        comm=curl                 file=/root/.config/curlrc
+2026/04/20 03:38:04 [2026-04-20 03:38:04] ALERT level=HIGH rule=sensitive_file_access container=order-processor-inventory_service pid=4025460 ppid=2868312 uid=0 comm=curl msg=Container accessed sensitive file: /root/.config/curlrc
+2026/04/20 03:38:04 [FILE]    pid=4025460 ppid=2868312 uid=0      container=order-processor-inventory_service        comm=curl                 file=/etc/passwd
+2026/04/20 03:38:04 [2026-04-20 03:38:04] ALERT level=HIGH rule=sensitive_file_access container=order-processor-inventory_service pid=4025460 ppid=2868312 uid=0 comm=curl msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:38:04 [FILE]    pid=4025460 ppid=2868312 uid=0      container=order-processor-inventory_service        comm=curl                 file=/root/.curlrc
+2026/04/20 03:38:04 [2026-04-20 03:38:04] ALERT level=HIGH rule=sensitive_file_access container=order-processor-inventory_service pid=4025460 ppid=2868312 uid=0 comm=curl msg=Container accessed sensitive file: /root/.curlrc
+2026/04/20 03:38:04 [EXIT]    pid=4025460 ppid=2868312 exit_code=0   duration=104ms comm=curl
+2026/04/20 03:38:05 [EXIT]    pid=4025450 ppid=4025410 exit_code=0   duration=3813ms comm=python3
+2026/04/20 03:38:05 [PROCESS] pid=4025466 ppid=4025410 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 03:38:05 [PROCESS] pid=4025467 ppid=2869676 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 03:38:05 [PROCESS] pid=4025473 ppid=4025467 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 03:38:05 [EXIT]    pid=4025475 ppid=4025467 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 03:38:05 [EXIT]    pid=4025473 ppid=4025467 exit_code=0   duration=10ms comm=runc:[0:PARENT]
+2026/04/20 03:38:05 [FILE]    pid=4025476 ppid=4025467 uid=0      container=order-processor-gateway                  comm=runc:[2:INIT]        file=/etc/passwd
+2026/04/20 03:38:05 [2026-04-20 03:38:05] ALERT level=HIGH rule=sensitive_file_access container=order-processor-gateway pid=4025476 ppid=4025467 uid=0 comm=runc:[2:INIT] msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:38:05 [PROCESS] pid=4025476 ppid=4025467 uid=0      mnt_ns=4026532760 container=order-processor-gateway                  path=/usr/bin/curl
+2026/04/20 03:38:05 [2026-04-20 03:38:05] ALERT level=MEDIUM rule=curl_from_container container=order-processor-gateway pid=4025476 ppid=4025467 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 03:38:05 [EXIT]    pid=4025467 ppid=2869676 exit_code=0   duration=111ms comm=runc
+2026/04/20 03:38:05 [PROCESS] pid=4025481 ppid=704    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/getconf
+2026/04/20 03:38:05 [EXIT]    pid=4025476 ppid=2869676 exit_code=0   duration=87ms comm=curl
+2026/04/20 03:38:05 [EXIT]    pid=4025481 ppid=704    exit_code=0   duration=8ms comm=getconf
+2026/04/20 03:38:11 [PROCESS] pid=4025482 ppid=2852483 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 03:38:11 [PROCESS] pid=4025488 ppid=4025482 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 03:38:11 [EXIT]    pid=4025490 ppid=4025482 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 03:38:11 [EXIT]    pid=4025488 ppid=4025482 exit_code=0   duration=20ms comm=runc:[0:PARENT]
+2026/04/20 03:38:11 [FILE]    pid=4025491 ppid=4025482 uid=0      container=order-processor-localstack               comm=runc:[2:INIT]        file=/etc/passwd
+2026/04/20 03:38:11 [2026-04-20 03:38:11] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025491 ppid=4025482 uid=0 comm=runc:[2:INIT] msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:38:11 [PROCESS] pid=4025491 ppid=4025482 uid=0      mnt_ns=4026532370 container=order-processor-localstack               path=/usr/bin/curl
+2026/04/20 03:38:11 [2026-04-20 03:38:11] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=4025491 ppid=4025482 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 03:38:11 [EXIT]    pid=4025482 ppid=2852483 exit_code=0   duration=81ms comm=runc
+2026/04/20 03:38:11 [FILE]    pid=4025491 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/root/.curlrc
+2026/04/20 03:38:11 [2026-04-20 03:38:11] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025491 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /root/.curlrc
+2026/04/20 03:38:11 [FILE]    pid=4025491 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/root/.config/curlrc
+2026/04/20 03:38:11 [2026-04-20 03:38:11] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025491 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /root/.config/curlrc
+2026/04/20 03:38:11 [FILE]    pid=4025491 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/etc/passwd
+2026/04/20 03:38:11 [2026-04-20 03:38:11] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025491 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:38:11 [FILE]    pid=4025491 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/root/.curlrc
+2026/04/20 03:38:11 [2026-04-20 03:38:11] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025491 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /root/.curlrc
+2026/04/20 03:38:11 [EXIT]    pid=4025491 ppid=2852483 exit_code=0   duration=101ms comm=curl
+2026/04/20 03:38:14 [PROCESS] pid=4025498 ppid=4025340 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/docker
+2026/04/20 03:38:14 [EXIT]    pid=4025498 ppid=4025340 exit_code=0   duration=66ms comm=docker
+2026/04/20 03:38:14 [PROCESS] pid=4025504 ppid=271154 uid=1000   mnt_ns=4026531841 container=host                                     path=/bin/sh
+2026/04/20 03:38:14 [PROCESS] pid=4025505 ppid=4025504 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/ip
+2026/04/20 03:38:14 [EXIT]    pid=4025505 ppid=4025504 exit_code=0   duration=3ms comm=ip
+2026/04/20 03:38:14 [EXIT]    pid=4025504 ppid=271154 exit_code=0   duration=8ms comm=sh
+2026/04/20 03:38:15 [PROCESS] pid=4025506 ppid=704    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/getconf
+2026/04/20 03:38:15 [EXIT]    pid=4025506 ppid=704    exit_code=0   duration=2ms comm=getconf
+2026/04/20 03:38:16 [EXIT]    pid=4025466 ppid=4025410 exit_code=0   duration=10984ms comm=python3
+2026/04/20 03:38:16 [PROCESS] pid=4025507 ppid=4025410 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 03:38:18 [EXIT]    pid=4025507 ppid=4025410 exit_code=0   duration=1892ms comm=python3
+2026/04/20 03:38:18 [PROCESS] pid=4025508 ppid=4025410 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 03:38:20 [PROCESS] pid=4025509 ppid=2850888 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 03:38:20 [PROCESS] pid=4025515 ppid=4025509 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 03:38:20 [EXIT]    pid=4025517 ppid=4025509 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 03:38:20 [EXIT]    pid=4025515 ppid=4025509 exit_code=0   duration=21ms comm=runc:[0:PARENT]
+2026/04/20 03:38:20 [FILE]    pid=4025518 ppid=4025509 uid=0      container=order-processor-redis                    comm=runc:[2:INIT]        file=/etc/passwd
+2026/04/20 03:38:20 [2026-04-20 03:38:20] ALERT level=HIGH rule=sensitive_file_access container=order-processor-redis pid=4025518 ppid=4025509 uid=0 comm=runc:[2:INIT] msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:38:20 [PROCESS] pid=4025518 ppid=4025509 uid=0      mnt_ns=4026532303 container=order-processor-redis                    path=/usr/local/bin/redis-cli
+2026/04/20 03:38:20 [EXIT]    pid=4025509 ppid=2850888 exit_code=0   duration=86ms comm=runc
+2026/04/20 03:38:20 [EXIT]    pid=4025518 ppid=2850888 exit_code=0   duration=58ms comm=redis-cli
+2026/04/20 03:38:20 [PROCESS] pid=4025524 ppid=2869676 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 03:38:20 [PROCESS] pid=4025530 ppid=4025524 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 03:38:21 [EXIT]    pid=4025532 ppid=4025524 exit_code=0   duration=0ms comm=runc:[1:CHILD]
+2026/04/20 03:38:21 [EXIT]    pid=4025530 ppid=4025524 exit_code=0   duration=15ms comm=runc:[0:PARENT]
+2026/04/20 03:38:21 [FILE]    pid=4025533 ppid=4025524 uid=0      container=order-processor-gateway                  comm=runc:[2:INIT]        file=/etc/passwd
+2026/04/20 03:38:21 [2026-04-20 03:38:21] ALERT level=HIGH rule=sensitive_file_access container=order-processor-gateway pid=4025533 ppid=4025524 uid=0 comm=runc:[2:INIT] msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:38:21 [PROCESS] pid=4025533 ppid=4025524 uid=0      mnt_ns=4026532760 container=order-processor-gateway                  path=/usr/bin/curl
+2026/04/20 03:38:21 [2026-04-20 03:38:21] ALERT level=MEDIUM rule=curl_from_container container=order-processor-gateway pid=4025533 ppid=4025524 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 03:38:21 [EXIT]    pid=4025524 ppid=2869676 exit_code=0   duration=82ms comm=runc
+2026/04/20 03:38:21 [EXIT]    pid=4025533 ppid=2869676 exit_code=0   duration=59ms comm=curl
+2026/04/20 03:38:21 [PROCESS] pid=4025539 ppid=2852483 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 03:38:21 [PROCESS] pid=4025545 ppid=4025539 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 03:38:21 [EXIT]    pid=4025547 ppid=4025539 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 03:38:21 [EXIT]    pid=4025545 ppid=4025539 exit_code=0   duration=7ms comm=runc:[0:PARENT]
+2026/04/20 03:38:21 [FILE]    pid=4025548 ppid=4025539 uid=0      container=order-processor-localstack               comm=runc:[2:INIT]        file=/etc/passwd
+2026/04/20 03:38:21 [2026-04-20 03:38:21] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025548 ppid=4025539 uid=0 comm=runc:[2:INIT] msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:38:21 [PROCESS] pid=4025548 ppid=4025539 uid=0      mnt_ns=4026532370 container=order-processor-localstack               path=/usr/bin/curl
+2026/04/20 03:38:21 [2026-04-20 03:38:21] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=4025548 ppid=4025539 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 03:38:21 [EXIT]    pid=4025539 ppid=2852483 exit_code=0   duration=89ms comm=runc
+2026/04/20 03:38:21 [FILE]    pid=4025548 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/root/.curlrc
+2026/04/20 03:38:21 [2026-04-20 03:38:21] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025548 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /root/.curlrc
+2026/04/20 03:38:21 [FILE]    pid=4025548 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/root/.config/curlrc
+2026/04/20 03:38:21 [2026-04-20 03:38:21] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025548 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /root/.config/curlrc
+2026/04/20 03:38:21 [FILE]    pid=4025548 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/etc/passwd
+2026/04/20 03:38:21 [2026-04-20 03:38:21] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025548 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:38:21 [FILE]    pid=4025548 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/root/.curlrc
+2026/04/20 03:38:21 [2026-04-20 03:38:21] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025548 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /root/.curlrc
+2026/04/20 03:38:21 [EXIT]    pid=4025548 ppid=2852483 exit_code=0   duration=113ms comm=curl
+2026/04/20 03:38:23 [EXIT]    pid=4025508 ppid=4025410 exit_code=0   duration=5281ms comm=python3
+2026/04/20 03:38:23 [PROCESS] pid=4025555 ppid=4025410 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 03:38:25 [PROCESS] pid=4025556 ppid=704    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/getconf
+2026/04/20 03:38:25 [EXIT]    pid=4025556 ppid=704    exit_code=0   duration=2ms comm=getconf
+2026/04/20 03:38:26 [PROCESS] pid=4025557 ppid=2868372 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 03:38:26 [PROCESS] pid=4025564 ppid=4025557 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 03:38:26 [PROCESS] pid=4025565 ppid=2868272 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 03:38:26 [EXIT]    pid=4025566 ppid=4025557 exit_code=0   duration=4ms comm=runc:[1:CHILD]
+2026/04/20 03:38:26 [EXIT]    pid=4025564 ppid=4025557 exit_code=0   duration=36ms comm=runc:[0:PARENT]
+2026/04/20 03:38:26 [PROCESS] pid=4025579 ppid=4025565 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 03:38:26 [EXIT]    pid=4025580 ppid=4025565 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 03:38:26 [EXIT]    pid=4025579 ppid=4025565 exit_code=0   duration=20ms comm=runc:[0:PARENT]
+2026/04/20 03:38:26 [FILE]    pid=4025571 ppid=4025557 uid=0      container=order-processor-auth_service             comm=runc:[2:INIT]        file=/etc/passwd
+2026/04/20 03:38:26 [2026-04-20 03:38:26] ALERT level=HIGH rule=sensitive_file_access container=order-processor-auth_service pid=4025571 ppid=4025557 uid=0 comm=runc:[2:INIT] msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:38:26 [PROCESS] pid=4025571 ppid=4025557 uid=1000   mnt_ns=4026532630 container=order-processor-auth_service             path=/usr/bin/curl
+2026/04/20 03:38:26 [2026-04-20 03:38:26] ALERT level=MEDIUM rule=curl_from_container container=order-processor-auth_service pid=4025571 ppid=4025557 uid=1000 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 03:38:26 [EXIT]    pid=4025557 ppid=2868372 exit_code=0   duration=125ms comm=runc
+2026/04/20 03:38:26 [FILE]    pid=4025581 ppid=4025565 uid=0      container=order-processor-user_service             comm=runc:[2:INIT]        file=/etc/passwd
+2026/04/20 03:38:26 [2026-04-20 03:38:26] ALERT level=HIGH rule=sensitive_file_access container=order-processor-user_service pid=4025581 ppid=4025565 uid=0 comm=runc:[2:INIT] msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:38:26 [EXIT]    pid=4025565 ppid=2868272 exit_code=0   duration=124ms comm=runc
+2026/04/20 03:38:26 [PROCESS] pid=4025581 ppid=2868272 uid=0      mnt_ns=4026532441 container=order-processor-user_service             path=/usr/bin/curl
+2026/04/20 03:38:26 [2026-04-20 03:38:26] ALERT level=MEDIUM rule=curl_from_container container=order-processor-user_service pid=4025581 ppid=2868272 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 03:38:26 [FILE]    pid=4025571 ppid=2868372 uid=1000   container=order-processor-auth_service             comm=curl                 file=/etc/passwd
+2026/04/20 03:38:26 [2026-04-20 03:38:26] ALERT level=HIGH rule=sensitive_file_access container=order-processor-auth_service pid=4025571 ppid=2868372 uid=1000 comm=curl msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:38:26 [EXIT]    pid=4025571 ppid=2868372 exit_code=0   duration=124ms comm=curl
+2026/04/20 03:38:26 [FILE]    pid=4025581 ppid=2868272 uid=0      container=order-processor-user_service             comm=curl                 file=/root/.curlrc
+2026/04/20 03:38:26 [2026-04-20 03:38:26] ALERT level=HIGH rule=sensitive_file_access container=order-processor-user_service pid=4025581 ppid=2868272 uid=0 comm=curl msg=Container accessed sensitive file: /root/.curlrc
+2026/04/20 03:38:26 [FILE]    pid=4025581 ppid=2868272 uid=0      container=order-processor-user_service             comm=curl                 file=/root/.config/curlrc
+2026/04/20 03:38:26 [2026-04-20 03:38:26] ALERT level=HIGH rule=sensitive_file_access container=order-processor-user_service pid=4025581 ppid=2868272 uid=0 comm=curl msg=Container accessed sensitive file: /root/.config/curlrc
+2026/04/20 03:38:26 [FILE]    pid=4025581 ppid=2868272 uid=0      container=order-processor-user_service             comm=curl                 file=/etc/passwd
+2026/04/20 03:38:26 [2026-04-20 03:38:26] ALERT level=HIGH rule=sensitive_file_access container=order-processor-user_service pid=4025581 ppid=2868272 uid=0 comm=curl msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:38:26 [FILE]    pid=4025581 ppid=2868272 uid=0      container=order-processor-user_service             comm=curl                 file=/root/.curlrc
+2026/04/20 03:38:26 [2026-04-20 03:38:26] ALERT level=HIGH rule=sensitive_file_access container=order-processor-user_service pid=4025581 ppid=2868272 uid=0 comm=curl msg=Container accessed sensitive file: /root/.curlrc
+2026/04/20 03:38:26 [EXIT]    pid=4025581 ppid=2868272 exit_code=0   duration=106ms comm=curl
+2026/04/20 03:38:28 [EXIT]    pid=4025588 ppid=2850926 exit_code=0   duration=15ms comm=redis-server
+2026/04/20 03:38:28 [EXIT]    pid=4025555 ppid=4025410 exit_code=0   duration=4519ms comm=python3
+2026/04/20 03:38:28 [PROCESS] pid=4025589 ppid=4025410 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 03:38:29 [PROCESS] pid=4025590 ppid=271154 uid=1000   mnt_ns=4026531841 container=host                                     path=/bin/sh
+2026/04/20 03:38:29 [PROCESS] pid=4025591 ppid=4025590 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/ip
+2026/04/20 03:38:29 [EXIT]    pid=4025591 ppid=4025590 exit_code=0   duration=4ms comm=ip
+2026/04/20 03:38:29 [EXIT]    pid=4025590 ppid=271154 exit_code=0   duration=9ms comm=sh
+2026/04/20 03:38:30 [EXIT]    pid=4024723 ppid=2096863 exit_code=1   duration=120019ms comm=sshd
+2026/04/20 03:38:31 [PROCESS] pid=4025592 ppid=2852483 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 03:38:31 [PROCESS] pid=4025599 ppid=4025592 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 03:38:31 [EXIT]    pid=4025600 ppid=4025592 exit_code=0   duration=0ms comm=runc:[1:CHILD]
+2026/04/20 03:38:31 [EXIT]    pid=4025599 ppid=4025592 exit_code=0   duration=5ms comm=runc:[0:PARENT]
+2026/04/20 03:38:31 [FILE]    pid=4025601 ppid=4025592 uid=0      container=order-processor-localstack               comm=runc:[2:INIT]        file=/etc/passwd
+2026/04/20 03:38:31 [2026-04-20 03:38:31] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025601 ppid=4025592 uid=0 comm=runc:[2:INIT] msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:38:31 [EXIT]    pid=4025592 ppid=2852483 exit_code=0   duration=63ms comm=runc
+2026/04/20 03:38:31 [PROCESS] pid=4025601 ppid=4025592 uid=0      mnt_ns=4026532370 container=order-processor-localstack               path=/usr/bin/curl
+2026/04/20 03:38:31 [2026-04-20 03:38:31] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=4025601 ppid=4025592 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 03:38:31 [FILE]    pid=4025601 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/root/.curlrc
+2026/04/20 03:38:31 [2026-04-20 03:38:31] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025601 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /root/.curlrc
+2026/04/20 03:38:31 [FILE]    pid=4025601 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/root/.config/curlrc
+2026/04/20 03:38:31 [2026-04-20 03:38:31] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025601 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /root/.config/curlrc
+2026/04/20 03:38:31 [FILE]    pid=4025601 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/etc/passwd
+2026/04/20 03:38:31 [2026-04-20 03:38:31] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025601 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:38:31 [FILE]    pid=4025601 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/root/.curlrc
+2026/04/20 03:38:31 [2026-04-20 03:38:31] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025601 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /root/.curlrc
+2026/04/20 03:38:31 [EXIT]    pid=4025601 ppid=2852483 exit_code=0   duration=93ms comm=curl
+2026/04/20 03:38:32 [PROCESS] pid=4025607 ppid=2096863 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/sshd
+2026/04/20 03:38:32 [PROCESS] pid=4025608 ppid=2869781 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 03:38:32 [PROCESS] pid=4025614 ppid=4025608 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 03:38:32 [EXIT]    pid=4025617 ppid=4025608 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 03:38:32 [EXIT]    pid=4025614 ppid=4025608 exit_code=0   duration=26ms comm=runc:[0:PARENT]
+2026/04/20 03:38:32 [FILE]    pid=4025618 ppid=4025608 uid=0      container=order-processor-frontend                 comm=runc:[2:INIT]        file=/etc/passwd
+2026/04/20 03:38:32 [2026-04-20 03:38:32] ALERT level=HIGH rule=sensitive_file_access container=order-processor-frontend pid=4025618 ppid=4025608 uid=0 comm=runc:[2:INIT] msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:38:32 [EXIT]    pid=4025608 ppid=2869781 exit_code=0   duration=106ms comm=runc
+2026/04/20 03:38:32 [PROCESS] pid=4025618 ppid=2869781 uid=0      mnt_ns=4026532825 container=order-processor-frontend                 path=/usr/bin/curl
+2026/04/20 03:38:32 [2026-04-20 03:38:32] ALERT level=MEDIUM rule=curl_from_container container=order-processor-frontend pid=4025618 ppid=2869781 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 03:38:32 [EXIT]    pid=4025618 ppid=2869781 exit_code=0   duration=84ms comm=curl
+2026/04/20 03:38:33 [EXIT]    pid=4025616 ppid=4025607 exit_code=255 duration=862ms comm=sshd
+2026/04/20 03:38:33 [EXIT]    pid=4025607 ppid=2096863 exit_code=255 duration=942ms comm=sshd
+2026/04/20 03:38:34 [EXIT]    pid=4025589 ppid=4025410 exit_code=0   duration=6037ms comm=python3
+2026/04/20 03:38:34 [PROCESS] pid=4025624 ppid=4025410 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 03:38:35 [PROCESS] pid=4025625 ppid=704    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/getconf
+2026/04/20 03:38:35 [EXIT]    pid=4025625 ppid=704    exit_code=0   duration=2ms comm=getconf
+2026/04/20 03:38:36 [PROCESS] pid=4025626 ppid=2869676 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 03:38:36 [PROCESS] pid=4025633 ppid=4025626 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 03:38:36 [EXIT]    pid=4025634 ppid=4025626 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 03:38:36 [EXIT]    pid=4025633 ppid=4025626 exit_code=0   duration=28ms comm=runc:[0:PARENT]
+2026/04/20 03:38:36 [FILE]    pid=4025635 ppid=4025626 uid=0      container=order-processor-gateway                  comm=runc:[2:INIT]        file=/etc/passwd
+2026/04/20 03:38:36 [2026-04-20 03:38:36] ALERT level=HIGH rule=sensitive_file_access container=order-processor-gateway pid=4025635 ppid=4025626 uid=0 comm=runc:[2:INIT] msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:38:36 [EXIT]    pid=4025626 ppid=2869676 exit_code=0   duration=91ms comm=runc
+2026/04/20 03:38:36 [PROCESS] pid=4025635 ppid=2869676 uid=0      mnt_ns=4026532760 container=order-processor-gateway                  path=/usr/bin/curl
+2026/04/20 03:38:36 [2026-04-20 03:38:36] ALERT level=MEDIUM rule=curl_from_container container=order-processor-gateway pid=4025635 ppid=2869676 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 03:38:36 [EXIT]    pid=4025635 ppid=2869676 exit_code=0   duration=76ms comm=curl
+2026/04/20 03:38:37 [PROCESS] pid=4025641 ppid=2096863 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/sshd
+2026/04/20 03:38:38 [EXIT]    pid=4025624 ppid=4025410 exit_code=0   duration=4104ms comm=python3
+2026/04/20 03:38:38 [PROCESS] pid=4025642 ppid=4025410 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 03:38:40 [EXIT]    pid=4025642 ppid=4025410 exit_code=0   duration=2382ms comm=python3
+2026/04/20 03:38:40 [PROCESS] pid=4025644 ppid=4025410 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 03:38:41 [PROCESS] pid=4025645 ppid=2868362 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 03:38:41 [PROCESS] pid=4025652 ppid=2869092 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 03:38:41 [PROCESS] pid=4025653 ppid=4025645 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 03:38:41 [EXIT]    pid=4025658 ppid=4025645 exit_code=0   duration=3ms comm=runc:[1:CHILD]
+2026/04/20 03:38:41 [EXIT]    pid=4025653 ppid=4025645 exit_code=0   duration=31ms comm=runc:[0:PARENT]
+2026/04/20 03:38:41 [PROCESS] pid=4025664 ppid=4025652 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 03:38:41 [EXIT]    pid=4025669 ppid=4025652 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 03:38:41 [EXIT]    pid=4025664 ppid=4025652 exit_code=0   duration=30ms comm=runc:[0:PARENT]
+2026/04/20 03:38:41 [FILE]    pid=4025659 ppid=4025645 uid=0      container=order-processor-order_service            comm=runc:[2:INIT]        file=/etc/passwd
+2026/04/20 03:38:41 [2026-04-20 03:38:41] ALERT level=HIGH rule=sensitive_file_access container=order-processor-order_service pid=4025659 ppid=4025645 uid=0 comm=runc:[2:INIT] msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:38:41 [EXIT]    pid=4025645 ppid=2868362 exit_code=0   duration=139ms comm=runc
+2026/04/20 03:38:41 [PROCESS] pid=4025659 ppid=2868362 uid=0      mnt_ns=4026532567 container=order-processor-order_service            path=/usr/bin/curl
+2026/04/20 03:38:41 [2026-04-20 03:38:41] ALERT level=MEDIUM rule=curl_from_container container=order-processor-order_service pid=4025659 ppid=2868362 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 03:38:41 [FILE]    pid=4025659 ppid=2868362 uid=0      container=order-processor-order_service            comm=curl                 file=/root/.curlrc
+2026/04/20 03:38:41 [2026-04-20 03:38:41] ALERT level=HIGH rule=sensitive_file_access container=order-processor-order_service pid=4025659 ppid=2868362 uid=0 comm=curl msg=Container accessed sensitive file: /root/.curlrc
+2026/04/20 03:38:41 [FILE]    pid=4025659 ppid=2868362 uid=0      container=order-processor-order_service            comm=curl                 file=/root/.config/curlrc
+2026/04/20 03:38:41 [2026-04-20 03:38:41] ALERT level=HIGH rule=sensitive_file_access container=order-processor-order_service pid=4025659 ppid=2868362 uid=0 comm=curl msg=Container accessed sensitive file: /root/.config/curlrc
+2026/04/20 03:38:41 [FILE]    pid=4025659 ppid=2868362 uid=0      container=order-processor-order_service            comm=curl                 file=/etc/passwd
+2026/04/20 03:38:41 [2026-04-20 03:38:41] ALERT level=HIGH rule=sensitive_file_access container=order-processor-order_service pid=4025659 ppid=2868362 uid=0 comm=curl msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:38:41 [FILE]    pid=4025659 ppid=2868362 uid=0      container=order-processor-order_service            comm=curl                 file=/root/.curlrc
+2026/04/20 03:38:41 [2026-04-20 03:38:41] ALERT level=HIGH rule=sensitive_file_access container=order-processor-order_service pid=4025659 ppid=2868362 uid=0 comm=curl msg=Container accessed sensitive file: /root/.curlrc
+2026/04/20 03:38:41 [FILE]    pid=4025670 ppid=4025652 uid=0      container=order-processor-insights_service         comm=runc:[2:INIT]        file=/etc/passwd
+2026/04/20 03:38:41 [2026-04-20 03:38:41] ALERT level=HIGH rule=sensitive_file_access container=order-processor-insights_service pid=4025670 ppid=4025652 uid=0 comm=runc:[2:INIT] msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:38:41 [EXIT]    pid=4025652 ppid=2869092 exit_code=0   duration=166ms comm=runc
+2026/04/20 03:38:41 [PROCESS] pid=4025670 ppid=2869092 uid=0      mnt_ns=4026532695 container=order-processor-insights_service         path=/usr/bin/curl
+2026/04/20 03:38:41 [2026-04-20 03:38:41] ALERT level=MEDIUM rule=curl_from_container container=order-processor-insights_service pid=4025670 ppid=2869092 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 03:38:41 [EXIT]    pid=4025659 ppid=2868362 exit_code=0   duration=148ms comm=curl
+2026/04/20 03:38:41 [FILE]    pid=4025670 ppid=2869092 uid=0      container=order-processor-insights_service         comm=curl                 file=/root/.curlrc
+2026/04/20 03:38:41 [2026-04-20 03:38:41] ALERT level=HIGH rule=sensitive_file_access container=order-processor-insights_service pid=4025670 ppid=2869092 uid=0 comm=curl msg=Container accessed sensitive file: /root/.curlrc
+2026/04/20 03:38:41 [FILE]    pid=4025670 ppid=2869092 uid=0      container=order-processor-insights_service         comm=curl                 file=/root/.config/curlrc
+2026/04/20 03:38:41 [2026-04-20 03:38:41] ALERT level=HIGH rule=sensitive_file_access container=order-processor-insights_service pid=4025670 ppid=2869092 uid=0 comm=curl msg=Container accessed sensitive file: /root/.config/curlrc
+2026/04/20 03:38:41 [FILE]    pid=4025670 ppid=2869092 uid=0      container=order-processor-insights_service         comm=curl                 file=/etc/passwd
+2026/04/20 03:38:41 [2026-04-20 03:38:41] ALERT level=HIGH rule=sensitive_file_access container=order-processor-insights_service pid=4025670 ppid=2869092 uid=0 comm=curl msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:38:41 [FILE]    pid=4025670 ppid=2869092 uid=0      container=order-processor-insights_service         comm=curl                 file=/root/.curlrc
+2026/04/20 03:38:41 [2026-04-20 03:38:41] ALERT level=HIGH rule=sensitive_file_access container=order-processor-insights_service pid=4025670 ppid=2869092 uid=0 comm=curl msg=Container accessed sensitive file: /root/.curlrc
+2026/04/20 03:38:41 [EXIT]    pid=4025670 ppid=2869092 exit_code=0   duration=167ms comm=curl
+2026/04/20 03:38:41 [PROCESS] pid=4025675 ppid=2852483 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 03:38:41 [PROCESS] pid=4025682 ppid=4025675 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 03:38:41 [EXIT]    pid=4025682 ppid=4025675 exit_code=0   duration=9ms comm=runc:[0:PARENT]
+2026/04/20 03:38:41 [EXIT]    pid=4025683 ppid=4025675 exit_code=0   duration=5ms comm=runc:[1:CHILD]
+2026/04/20 03:38:42 [FILE]    pid=4025684 ppid=4025675 uid=0      container=order-processor-localstack               comm=runc:[2:INIT]        file=/etc/passwd
+2026/04/20 03:38:42 [2026-04-20 03:38:42] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025684 ppid=4025675 uid=0 comm=runc:[2:INIT] msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:38:42 [PROCESS] pid=4025684 ppid=4025675 uid=0      mnt_ns=4026532370 container=order-processor-localstack               path=/usr/bin/curl
+2026/04/20 03:38:42 [2026-04-20 03:38:42] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=4025684 ppid=4025675 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 03:38:42 [EXIT]    pid=4025675 ppid=2852483 exit_code=0   duration=92ms comm=runc
+2026/04/20 03:38:42 [FILE]    pid=4025684 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/root/.curlrc
+2026/04/20 03:38:42 [2026-04-20 03:38:42] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025684 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /root/.curlrc
+2026/04/20 03:38:42 [FILE]    pid=4025684 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/root/.config/curlrc
+2026/04/20 03:38:42 [2026-04-20 03:38:42] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025684 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /root/.config/curlrc
+2026/04/20 03:38:42 [FILE]    pid=4025684 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/etc/passwd
+2026/04/20 03:38:42 [2026-04-20 03:38:42] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025684 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:38:42 [FILE]    pid=4025684 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/root/.curlrc
+2026/04/20 03:38:42 [2026-04-20 03:38:42] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025684 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /root/.curlrc
+2026/04/20 03:38:42 [EXIT]    pid=4025684 ppid=2852483 exit_code=0   duration=117ms comm=curl
+2026/04/20 03:38:42 [EXIT]    pid=4025643 ppid=4025641 exit_code=255 duration=3508ms comm=sshd
+2026/04/20 03:38:42 [EXIT]    pid=4025641 ppid=2096863 exit_code=255 duration=4649ms comm=sshd
+2026/04/20 03:38:43 [PROCESS] pid=4025690 ppid=4025410 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 03:38:43 [EXIT]    pid=4025644 ppid=4025410 exit_code=0   duration=2552ms comm=python3
+2026/04/20 03:38:43 [EXIT]    pid=4025690 ppid=4025410 exit_code=0   duration=264ms comm=python3
+2026/04/20 03:38:43 [PROCESS] pid=4025691 ppid=4025410 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 03:38:44 [PROCESS] pid=4025692 ppid=4025340 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/docker
+2026/04/20 03:38:44 [EXIT]    pid=4025692 ppid=4025340 exit_code=0   duration=57ms comm=docker
+2026/04/20 03:38:44 [PROCESS] pid=4025698 ppid=271154 uid=1000   mnt_ns=4026531841 container=host                                     path=/bin/sh
+2026/04/20 03:38:44 [PROCESS] pid=4025699 ppid=4025698 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/ip
+2026/04/20 03:38:44 [EXIT]    pid=4025699 ppid=4025698 exit_code=0   duration=3ms comm=ip
+2026/04/20 03:38:44 [EXIT]    pid=4025698 ppid=271154 exit_code=0   duration=9ms comm=sh
+2026/04/20 03:38:45 [PROCESS] pid=4025700 ppid=704    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/getconf
+2026/04/20 03:38:45 [EXIT]    pid=4025700 ppid=704    exit_code=0   duration=2ms comm=getconf
+2026/04/20 03:38:46 [EXIT]    pid=4025691 ppid=4025410 exit_code=0   duration=2701ms comm=python3
+2026/04/20 03:38:46 [PROCESS] pid=4025701 ppid=4025410 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 03:38:50 [PROCESS] pid=4025702 ppid=761    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/ip
+2026/04/20 03:38:50 [EXIT]    pid=4025702 ppid=761    exit_code=0   duration=4ms comm=ip
+2026/04/20 03:38:50 [PROCESS] pid=4025703 ppid=761    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/ip
+2026/04/20 03:38:50 [EXIT]    pid=4025703 ppid=761    exit_code=0   duration=7ms comm=ip
+2026/04/20 03:38:50 [PROCESS] pid=4025704 ppid=761    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/ip
+2026/04/20 03:38:50 [EXIT]    pid=4025704 ppid=761    exit_code=0   duration=4ms comm=ip
+2026/04/20 03:38:50 [PROCESS] pid=4025705 ppid=2850888 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 03:38:50 [PROCESS] pid=4025712 ppid=4025705 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 03:38:50 [EXIT]    pid=4025714 ppid=4025705 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 03:38:50 [EXIT]    pid=4025712 ppid=4025705 exit_code=0   duration=8ms comm=runc:[0:PARENT]
+2026/04/20 03:38:50 [FILE]    pid=4025715 ppid=4025705 uid=0      container=order-processor-redis                    comm=runc:[2:INIT]        file=/etc/passwd
+2026/04/20 03:38:50 [2026-04-20 03:38:50] ALERT level=HIGH rule=sensitive_file_access container=order-processor-redis pid=4025715 ppid=4025705 uid=0 comm=runc:[2:INIT] msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:38:50 [EXIT]    pid=4025705 ppid=2850888 exit_code=0   duration=76ms comm=runc
+2026/04/20 03:38:50 [PROCESS] pid=4025715 ppid=4025705 uid=0      mnt_ns=4026532303 container=order-processor-redis                    path=/usr/local/bin/redis-cli
+2026/04/20 03:38:50 [EXIT]    pid=4025715 ppid=2850888 exit_code=0   duration=56ms comm=redis-cli
+2026/04/20 03:38:51 [PROCESS] pid=4025721 ppid=2869676 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 03:38:51 [PROCESS] pid=4025727 ppid=4025721 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 03:38:51 [EXIT]    pid=4025729 ppid=4025721 exit_code=0   duration=4ms comm=runc:[1:CHILD]
+2026/04/20 03:38:51 [EXIT]    pid=4025727 ppid=4025721 exit_code=0   duration=21ms comm=runc:[0:PARENT]
+2026/04/20 03:38:51 [FILE]    pid=4025730 ppid=4025721 uid=0      container=order-processor-gateway                  comm=runc:[2:INIT]        file=/etc/passwd
+2026/04/20 03:38:51 [2026-04-20 03:38:51] ALERT level=HIGH rule=sensitive_file_access container=order-processor-gateway pid=4025730 ppid=4025721 uid=0 comm=runc:[2:INIT] msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:38:51 [PROCESS] pid=4025730 ppid=4025721 uid=0      mnt_ns=4026532760 container=order-processor-gateway                  path=/usr/bin/curl
+2026/04/20 03:38:51 [2026-04-20 03:38:51] ALERT level=MEDIUM rule=curl_from_container container=order-processor-gateway pid=4025730 ppid=4025721 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 03:38:51 [EXIT]    pid=4025721 ppid=2869676 exit_code=0   duration=86ms comm=runc
+2026/04/20 03:38:51 [EXIT]    pid=4025730 ppid=2869676 exit_code=0   duration=85ms comm=curl
+2026/04/20 03:38:52 [PROCESS] pid=4025736 ppid=2852483 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 03:38:52 [PROCESS] pid=4025744 ppid=4025736 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 03:38:52 [EXIT]    pid=4025745 ppid=4025736 exit_code=0   duration=3ms comm=runc:[1:CHILD]
+2026/04/20 03:38:52 [EXIT]    pid=4025744 ppid=4025736 exit_code=0   duration=30ms comm=runc:[0:PARENT]
+2026/04/20 03:38:52 [FILE]    pid=4025746 ppid=4025736 uid=0      container=order-processor-localstack               comm=runc:[2:INIT]        file=/etc/passwd
+2026/04/20 03:38:52 [2026-04-20 03:38:52] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025746 ppid=4025736 uid=0 comm=runc:[2:INIT] msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:38:52 [EXIT]    pid=4025736 ppid=2852483 exit_code=0   duration=127ms comm=runc
+2026/04/20 03:38:52 [PROCESS] pid=4025746 ppid=2852483 uid=0      mnt_ns=4026532370 container=order-processor-localstack               path=/usr/bin/curl
+2026/04/20 03:38:52 [2026-04-20 03:38:52] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=4025746 ppid=2852483 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 03:38:52 [FILE]    pid=4025746 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/root/.curlrc
+2026/04/20 03:38:52 [2026-04-20 03:38:52] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025746 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /root/.curlrc
+2026/04/20 03:38:52 [FILE]    pid=4025746 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/root/.config/curlrc
+2026/04/20 03:38:52 [2026-04-20 03:38:52] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025746 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /root/.config/curlrc
+2026/04/20 03:38:52 [FILE]    pid=4025746 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/etc/passwd
+2026/04/20 03:38:52 [2026-04-20 03:38:52] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025746 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:38:52 [FILE]    pid=4025746 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/root/.curlrc
+2026/04/20 03:38:52 [2026-04-20 03:38:52] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025746 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /root/.curlrc
+2026/04/20 03:38:52 [EXIT]    pid=4025746 ppid=2852483 exit_code=0   duration=116ms comm=curl
+2026/04/20 03:38:53 [EXIT]    pid=4025701 ppid=4025410 exit_code=0   duration=6814ms comm=python3
+2026/04/20 03:38:53 [PROCESS] pid=4025753 ppid=4025410 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 03:38:55 [PROCESS] pid=4025754 ppid=704    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/getconf
+2026/04/20 03:38:55 [EXIT]    pid=4025754 ppid=704    exit_code=0   duration=2ms comm=getconf
+2026/04/20 03:38:57 [EXIT]    pid=4025753 ppid=4025410 exit_code=0   duration=4709ms comm=python3
+2026/04/20 03:38:57 [PROCESS] pid=4025755 ppid=4025410 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 03:38:59 [PROCESS] pid=4025756 ppid=271154 uid=1000   mnt_ns=4026531841 container=host                                     path=/bin/sh
+2026/04/20 03:38:59 [PROCESS] pid=4025757 ppid=4025756 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/ip
+2026/04/20 03:38:59 [EXIT]    pid=4025757 ppid=4025756 exit_code=0   duration=3ms comm=ip
+2026/04/20 03:38:59 [EXIT]    pid=4025756 ppid=271154 exit_code=0   duration=8ms comm=sh
+2026/04/20 03:39:01 [EXIT]    pid=4025755 ppid=4025410 exit_code=0   duration=3216ms comm=python3
+2026/04/20 03:39:01 [EXIT]    pid=4025410 ppid=4018865 exit_code=0   duration=66954ms comm=run_all_tests.s
+2026/04/20 03:39:02 [PROCESS] pid=4025758 ppid=2852483 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 03:39:02 [PROCESS] pid=4025766 ppid=4025758 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 03:39:02 [EXIT]    pid=4025767 ppid=4025758 exit_code=0   duration=5ms comm=runc:[1:CHILD]
+2026/04/20 03:39:02 [EXIT]    pid=4025766 ppid=4025758 exit_code=0   duration=9ms comm=runc:[0:PARENT]
+2026/04/20 03:39:02 [FILE]    pid=4025768 ppid=4025758 uid=0      container=order-processor-localstack               comm=runc:[2:INIT]        file=/etc/passwd
+2026/04/20 03:39:02 [2026-04-20 03:39:02] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025768 ppid=4025758 uid=0 comm=runc:[2:INIT] msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:39:02 [PROCESS] pid=4025768 ppid=4025758 uid=0      mnt_ns=4026532370 container=order-processor-localstack               path=/usr/bin/curl
+2026/04/20 03:39:02 [2026-04-20 03:39:02] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=4025768 ppid=4025758 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 03:39:02 [EXIT]    pid=4025758 ppid=2852483 exit_code=0   duration=73ms comm=runc
+2026/04/20 03:39:02 [FILE]    pid=4025768 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/root/.curlrc
+2026/04/20 03:39:02 [2026-04-20 03:39:02] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025768 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /root/.curlrc
+2026/04/20 03:39:02 [FILE]    pid=4025768 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/root/.config/curlrc
+2026/04/20 03:39:02 [2026-04-20 03:39:02] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025768 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /root/.config/curlrc
+2026/04/20 03:39:02 [FILE]    pid=4025768 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/etc/passwd
+2026/04/20 03:39:02 [2026-04-20 03:39:02] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025768 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:39:02 [FILE]    pid=4025768 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/root/.curlrc
+2026/04/20 03:39:02 [2026-04-20 03:39:02] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025768 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /root/.curlrc
+2026/04/20 03:39:02 [EXIT]    pid=4025768 ppid=2852483 exit_code=0   duration=79ms comm=curl
+2026/04/20 03:39:04 [PROCESS] pid=4025774 ppid=2868312 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 03:39:04 [PROCESS] pid=4025781 ppid=4025774 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 03:39:05 [EXIT]    pid=4025783 ppid=4025774 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 03:39:05 [EXIT]    pid=4025781 ppid=4025774 exit_code=0   duration=7ms comm=runc:[0:PARENT]
+2026/04/20 03:39:05 [FILE]    pid=4025784 ppid=4025774 uid=0      container=order-processor-inventory_service        comm=runc:[2:INIT]        file=/etc/passwd
+2026/04/20 03:39:05 [2026-04-20 03:39:05] ALERT level=HIGH rule=sensitive_file_access container=order-processor-inventory_service pid=4025784 ppid=4025774 uid=0 comm=runc:[2:INIT] msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:39:05 [PROCESS] pid=4025784 ppid=4025774 uid=0      mnt_ns=4026532504 container=order-processor-inventory_service        path=/usr/bin/curl
+2026/04/20 03:39:05 [EXIT]    pid=4025774 ppid=2868312 exit_code=0   duration=74ms comm=runc
+2026/04/20 03:39:05 [FILE]    pid=4025784 ppid=2868312 uid=0      container=order-processor-inventory_service        comm=curl                 file=/root/.curlrc
+2026/04/20 03:39:05 [2026-04-20 03:39:05] ALERT level=HIGH rule=sensitive_file_access container=order-processor-inventory_service pid=4025784 ppid=2868312 uid=0 comm=curl msg=Container accessed sensitive file: /root/.curlrc
+2026/04/20 03:39:05 [FILE]    pid=4025784 ppid=2868312 uid=0      container=order-processor-inventory_service        comm=curl                 file=/root/.config/curlrc
+2026/04/20 03:39:05 [2026-04-20 03:39:05] ALERT level=HIGH rule=sensitive_file_access container=order-processor-inventory_service pid=4025784 ppid=2868312 uid=0 comm=curl msg=Container accessed sensitive file: /root/.config/curlrc
+2026/04/20 03:39:05 [FILE]    pid=4025784 ppid=2868312 uid=0      container=order-processor-inventory_service        comm=curl                 file=/etc/passwd
+2026/04/20 03:39:05 [2026-04-20 03:39:05] ALERT level=HIGH rule=sensitive_file_access container=order-processor-inventory_service pid=4025784 ppid=2868312 uid=0 comm=curl msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:39:05 [FILE]    pid=4025784 ppid=2868312 uid=0      container=order-processor-inventory_service        comm=curl                 file=/root/.curlrc
+2026/04/20 03:39:05 [2026-04-20 03:39:05] ALERT level=HIGH rule=sensitive_file_access container=order-processor-inventory_service pid=4025784 ppid=2868312 uid=0 comm=curl msg=Container accessed sensitive file: /root/.curlrc
+2026/04/20 03:39:05 [EXIT]    pid=4025784 ppid=2868312 exit_code=0   duration=76ms comm=curl
+2026/04/20 03:39:05 [PROCESS] pid=4025790 ppid=704    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/getconf
+2026/04/20 03:39:05 [EXIT]    pid=4025790 ppid=704    exit_code=0   duration=2ms comm=getconf
+2026/04/20 03:39:06 [PROCESS] pid=4025791 ppid=2869676 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 03:39:06 [PROCESS] pid=4025799 ppid=4025791 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 03:39:06 [EXIT]    pid=4025800 ppid=4025791 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 03:39:06 [EXIT]    pid=4025799 ppid=4025791 exit_code=0   duration=7ms comm=runc:[0:PARENT]
+2026/04/20 03:39:06 [FILE]    pid=4025801 ppid=4025791 uid=0      container=order-processor-gateway                  comm=runc:[2:INIT]        file=/etc/passwd
+2026/04/20 03:39:06 [2026-04-20 03:39:06] ALERT level=HIGH rule=sensitive_file_access container=order-processor-gateway pid=4025801 ppid=4025791 uid=0 comm=runc:[2:INIT] msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:39:06 [PROCESS] pid=4025801 ppid=4025791 uid=0      mnt_ns=4026532760 container=order-processor-gateway                  path=/usr/bin/curl
+2026/04/20 03:39:06 [2026-04-20 03:39:06] ALERT level=MEDIUM rule=curl_from_container container=order-processor-gateway pid=4025801 ppid=4025791 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 03:39:06 [EXIT]    pid=4025791 ppid=2869676 exit_code=0   duration=67ms comm=runc
+2026/04/20 03:39:06 [EXIT]    pid=4025801 ppid=2869676 exit_code=0   duration=58ms comm=curl
+2026/04/20 03:39:09 [PROCESS] pid=4025807 ppid=4018865 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/docker
+2026/04/20 03:39:09 [PROCESS] pid=4025814 ppid=2868372 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 03:39:09 [PROCESS] pid=4025823 ppid=4025814 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 03:39:09 [EXIT]    pid=4025824 ppid=4025814 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 03:39:09 [EXIT]    pid=4025823 ppid=4025814 exit_code=0   duration=6ms comm=runc:[0:PARENT]
+2026/04/20 03:39:09 [FILE]    pid=4025825 ppid=4025814 uid=0      container=order-processor-auth_service             comm=runc:[2:INIT]        file=/etc/passwd
+2026/04/20 03:39:09 [2026-04-20 03:39:09] ALERT level=HIGH rule=sensitive_file_access container=order-processor-auth_service pid=4025825 ppid=4025814 uid=0 comm=runc:[2:INIT] msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:39:09 [PROCESS] pid=4025825 ppid=4025814 uid=1000   mnt_ns=4026532630 container=order-processor-auth_service             path=/usr/bin/cat
+2026/04/20 03:39:09 [EXIT]    pid=4025814 ppid=2868372 exit_code=0   duration=70ms comm=runc
+2026/04/20 03:39:09 [FILE]    pid=4025825 ppid=2868372 uid=1000   container=order-processor-auth_service             comm=cat                  file=/etc/shadow
+2026/04/20 03:39:09 [2026-04-20 03:39:09] ALERT level=HIGH rule=sensitive_file_access container=order-processor-auth_service pid=4025825 ppid=2868372 uid=1000 comm=cat msg=Container accessed sensitive file: /etc/shadow
+2026/04/20 03:39:09 [EXIT]    pid=4025825 ppid=2868372 exit_code=1   duration=57ms comm=cat
+2026/04/20 03:39:09 [2026-04-20 03:39:09] ALERT level=LOW rule=short_lived_failure container=unknown pid=4025825 ppid=0 uid=0 comm=cat msg=Process exited quickly with error — possible failed exploit
+2026/04/20 03:39:09 [EXIT]    pid=4025807 ppid=4018865 exit_code=1   duration=145ms comm=docker
+2026/04/20 03:39:12 [PROCESS] pid=4025831 ppid=2852483 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 03:39:12 [PROCESS] pid=4025838 ppid=4025831 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 03:39:12 [EXIT]    pid=4025840 ppid=4025831 exit_code=0   duration=0ms comm=runc:[1:CHILD]
+2026/04/20 03:39:12 [EXIT]    pid=4025838 ppid=4025831 exit_code=0   duration=5ms comm=runc:[0:PARENT]
+2026/04/20 03:39:12 [FILE]    pid=4025841 ppid=4025831 uid=0      container=order-processor-localstack               comm=runc:[2:INIT]        file=/etc/passwd
+2026/04/20 03:39:12 [2026-04-20 03:39:12] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025841 ppid=4025831 uid=0 comm=runc:[2:INIT] msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:39:12 [EXIT]    pid=4025831 ppid=2852483 exit_code=0   duration=68ms comm=runc
+2026/04/20 03:39:12 [PROCESS] pid=4025841 ppid=2852483 uid=0      mnt_ns=4026532370 container=order-processor-localstack               path=/usr/bin/curl
+2026/04/20 03:39:12 [2026-04-20 03:39:12] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=4025841 ppid=2852483 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 03:39:12 [FILE]    pid=4025841 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/root/.curlrc
+2026/04/20 03:39:12 [2026-04-20 03:39:12] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025841 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /root/.curlrc
+2026/04/20 03:39:12 [FILE]    pid=4025841 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/root/.config/curlrc
+2026/04/20 03:39:12 [2026-04-20 03:39:12] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025841 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /root/.config/curlrc
+2026/04/20 03:39:12 [FILE]    pid=4025841 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/etc/passwd
+2026/04/20 03:39:12 [2026-04-20 03:39:12] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025841 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:39:12 [FILE]    pid=4025841 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/root/.curlrc
+2026/04/20 03:39:12 [2026-04-20 03:39:12] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025841 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /root/.curlrc
+2026/04/20 03:39:12 [EXIT]    pid=4025841 ppid=2852483 exit_code=0   duration=71ms comm=curl
+2026/04/20 03:39:12 [PROCESS] pid=4025847 ppid=4018865 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/ls
+2026/04/20 03:39:12 [EXIT]    pid=4025847 ppid=4018865 exit_code=0   duration=4ms comm=ls
+2026/04/20 03:39:14 [PROCESS] pid=4025848 ppid=4025340 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/docker
+2026/04/20 03:39:14 [EXIT]    pid=4025848 ppid=4025340 exit_code=0   duration=55ms comm=docker
+2026/04/20 03:39:14 [PROCESS] pid=4025854 ppid=271154 uid=1000   mnt_ns=4026531841 container=host                                     path=/bin/sh
+2026/04/20 03:39:14 [PROCESS] pid=4025855 ppid=4025854 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/ip
+2026/04/20 03:39:14 [EXIT]    pid=4025855 ppid=4025854 exit_code=0   duration=3ms comm=ip
+2026/04/20 03:39:14 [EXIT]    pid=4025854 ppid=271154 exit_code=0   duration=7ms comm=sh
+2026/04/20 03:39:15 [PROCESS] pid=4025856 ppid=704    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/getconf
+2026/04/20 03:39:15 [EXIT]    pid=4025856 ppid=704    exit_code=0   duration=2ms comm=getconf
+2026/04/20 03:39:17 [PROCESS] pid=4025857 ppid=4018865 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/cat
+2026/04/20 03:39:17 [EXIT]    pid=4025857 ppid=4018865 exit_code=0   duration=6ms comm=cat
+2026/04/20 03:39:20 [PROCESS] pid=4025858 ppid=2850888 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 03:39:20 [PROCESS] pid=4025866 ppid=4025858 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 03:39:20 [EXIT]    pid=4025867 ppid=4025858 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 03:39:20 [EXIT]    pid=4025866 ppid=4025858 exit_code=0   duration=5ms comm=runc:[0:PARENT]
+2026/04/20 03:39:21 [FILE]    pid=4025868 ppid=4025858 uid=0      container=order-processor-redis                    comm=runc:[2:INIT]        file=/etc/passwd
+2026/04/20 03:39:21 [2026-04-20 03:39:21] ALERT level=HIGH rule=sensitive_file_access container=order-processor-redis pid=4025868 ppid=4025858 uid=0 comm=runc:[2:INIT] msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:39:21 [PROCESS] pid=4025868 ppid=4025858 uid=0      mnt_ns=4026532303 container=order-processor-redis                    path=/usr/local/bin/redis-cli
+2026/04/20 03:39:21 [EXIT]    pid=4025858 ppid=2850888 exit_code=0   duration=65ms comm=runc
+2026/04/20 03:39:21 [EXIT]    pid=4025868 ppid=2850888 exit_code=0   duration=46ms comm=redis-cli
+2026/04/20 03:39:21 [PROCESS] pid=4025874 ppid=2869676 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 03:39:21 [PROCESS] pid=4025882 ppid=4025874 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 03:39:21 [EXIT]    pid=4025883 ppid=4025874 exit_code=0   duration=3ms comm=runc:[1:CHILD]
+2026/04/20 03:39:21 [EXIT]    pid=4025882 ppid=4025874 exit_code=0   duration=8ms comm=runc:[0:PARENT]
+2026/04/20 03:39:21 [FILE]    pid=4025884 ppid=4025874 uid=0      container=order-processor-gateway                  comm=runc:[2:INIT]        file=/etc/passwd
+2026/04/20 03:39:21 [2026-04-20 03:39:21] ALERT level=HIGH rule=sensitive_file_access container=order-processor-gateway pid=4025884 ppid=4025874 uid=0 comm=runc:[2:INIT] msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:39:21 [PROCESS] pid=4025884 ppid=4025874 uid=0      mnt_ns=4026532760 container=order-processor-gateway                  path=/usr/bin/curl
+2026/04/20 03:39:21 [2026-04-20 03:39:21] ALERT level=MEDIUM rule=curl_from_container container=order-processor-gateway pid=4025884 ppid=4025874 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 03:39:21 [EXIT]    pid=4025874 ppid=2869676 exit_code=0   duration=74ms comm=runc
+2026/04/20 03:39:21 [EXIT]    pid=4025884 ppid=2869676 exit_code=0   duration=67ms comm=curl
+2026/04/20 03:39:22 [PROCESS] pid=4025890 ppid=2852483 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 03:39:22 [PROCESS] pid=4025898 ppid=4025890 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 03:39:22 [EXIT]    pid=4025899 ppid=4025890 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 03:39:22 [EXIT]    pid=4025898 ppid=4025890 exit_code=0   duration=13ms comm=runc:[0:PARENT]
+2026/04/20 03:39:22 [FILE]    pid=4025900 ppid=4025890 uid=0      container=order-processor-localstack               comm=runc:[2:INIT]        file=/etc/passwd
+2026/04/20 03:39:22 [2026-04-20 03:39:22] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025900 ppid=4025890 uid=0 comm=runc:[2:INIT] msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:39:22 [PROCESS] pid=4025900 ppid=4025890 uid=0      mnt_ns=4026532370 container=order-processor-localstack               path=/usr/bin/curl
+2026/04/20 03:39:22 [2026-04-20 03:39:22] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=4025900 ppid=4025890 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 03:39:22 [EXIT]    pid=4025890 ppid=2852483 exit_code=0   duration=75ms comm=runc
+2026/04/20 03:39:22 [FILE]    pid=4025900 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/root/.curlrc
+2026/04/20 03:39:22 [2026-04-20 03:39:22] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025900 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /root/.curlrc
+2026/04/20 03:39:22 [FILE]    pid=4025900 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/root/.config/curlrc
+2026/04/20 03:39:22 [2026-04-20 03:39:22] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025900 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /root/.config/curlrc
+2026/04/20 03:39:22 [FILE]    pid=4025900 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/etc/passwd
+2026/04/20 03:39:22 [2026-04-20 03:39:22] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025900 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /etc/passwd
+2026/04/20 03:39:22 [FILE]    pid=4025900 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/root/.curlrc
+2026/04/20 03:39:22 [2026-04-20 03:39:22] ALERT level=HIGH rule=sensitive_file_access container=order-processor-localstack pid=4025900 ppid=2852483 uid=0 comm=curl msg=Container accessed sensitive file: /root/.curlrc
+2026/04/20 03:39:22 [EXIT]    pid=4025900 ppid=2852483 exit_code=0   duration=73ms comm=curl
+2026/04/20 03:39:25 Stopping EDR monitor...

@@ -1,0 +1,338 @@
+2026/04/20 04:41:58 EDR Monitor started — watching process execution, exits, and file access
+2026/04/20 04:41:58 Press Ctrl+C to stop
+2026/04/20 04:41:59 [PROCESS] pid=4049050 ppid=2852483 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:41:59 [PROCESS] pid=4049057 ppid=4049050 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:41:59 [EXIT]    pid=4049058 ppid=4049050 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 04:41:59 [EXIT]    pid=4049057 ppid=4049050 exit_code=0   duration=13ms comm=runc:[0:PARENT]
+2026/04/20 04:41:59 [EXIT]    pid=4049050 ppid=2852483 exit_code=0   duration=78ms comm=runc
+2026/04/20 04:41:59 [PROCESS] pid=4049059 ppid=4049050 uid=0      mnt_ns=4026532370 container=order-processor-localstack               path=/usr/bin/curl
+2026/04/20 04:41:59 [FILE]    pid=4049059 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/etc/passwd
+2026/04/20 04:41:59 [2026-04-20 04:41:59] ALERT level=MEDIUM rule=sensitive_file_access container=order-processor-localstack pid=4049059 ppid=2852483 uid=0 comm=curl msg=Container accessed system file: /etc/passwd
+2026/04/20 04:41:59 [EXIT]    pid=4049059 ppid=2852483 exit_code=0   duration=76ms comm=curl
+2026/04/20 04:42:01 [PROCESS] pid=4049065 ppid=4018865 uid=1000   mnt_ns=4026531841 container=host                                     path=./run_all_tests.sh
+2026/04/20 04:42:01 [PROCESS] pid=4049066 ppid=4049065 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/pip
+2026/04/20 04:42:02 [PROCESS] pid=4049067 ppid=4049066 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/lsb_release
+2026/04/20 04:42:02 [PROCESS] pid=4049067 ppid=4049066 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/.npm-global/bin/lsb_release
+2026/04/20 04:42:02 [PROCESS] pid=4049067 ppid=4049066 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/local/bin/lsb_release
+2026/04/20 04:42:02 [PROCESS] pid=4049067 ppid=4049066 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/lsb_release
+2026/04/20 04:42:02 [PROCESS] pid=4049068 ppid=4049067 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/getopt
+2026/04/20 04:42:02 [EXIT]    pid=4049068 ppid=4049067 exit_code=0   duration=3ms comm=getopt
+2026/04/20 04:42:02 [EXIT]    pid=4049070 ppid=4049069 exit_code=0   duration=0ms comm=lsb_release
+2026/04/20 04:42:02 [PROCESS] pid=4049071 ppid=4049069 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/cut
+2026/04/20 04:42:02 [PROCESS] pid=4049072 ppid=4049069 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/tr
+2026/04/20 04:42:02 [EXIT]    pid=4049071 ppid=4049069 exit_code=0   duration=3ms comm=cut
+2026/04/20 04:42:02 [EXIT]    pid=4049072 ppid=4049069 exit_code=0   duration=3ms comm=tr
+2026/04/20 04:42:02 [EXIT]    pid=4049069 ppid=4049067 exit_code=0   duration=4ms comm=lsb_release
+2026/04/20 04:42:02 [EXIT]    pid=4049074 ppid=4049073 exit_code=0   duration=0ms comm=lsb_release
+2026/04/20 04:42:02 [PROCESS] pid=4049075 ppid=4049073 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/cut
+2026/04/20 04:42:02 [EXIT]    pid=4049075 ppid=4049073 exit_code=0   duration=3ms comm=cut
+2026/04/20 04:42:02 [EXIT]    pid=4049073 ppid=4049067 exit_code=0   duration=4ms comm=lsb_release
+2026/04/20 04:42:02 [EXIT]    pid=4049077 ppid=4049076 exit_code=0   duration=0ms comm=lsb_release
+2026/04/20 04:42:02 [PROCESS] pid=4049078 ppid=4049076 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/tr
+2026/04/20 04:42:02 [EXIT]    pid=4049078 ppid=4049076 exit_code=0   duration=3ms comm=tr
+2026/04/20 04:42:02 [EXIT]    pid=4049076 ppid=4049067 exit_code=0   duration=4ms comm=lsb_release
+2026/04/20 04:42:02 [PROCESS] pid=4049081 ppid=4049079 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/tr
+2026/04/20 04:42:02 [EXIT]    pid=4049080 ppid=4049079 exit_code=0   duration=0ms comm=lsb_release
+2026/04/20 04:42:02 [EXIT]    pid=4049081 ppid=4049079 exit_code=0   duration=3ms comm=tr
+2026/04/20 04:42:02 [EXIT]    pid=4049079 ppid=4049067 exit_code=0   duration=4ms comm=lsb_release
+2026/04/20 04:42:02 [EXIT]    pid=4049067 ppid=4049066 exit_code=0   duration=27ms comm=lsb_release
+2026/04/20 04:42:02 [PROCESS] pid=4049082 ppid=4049066 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/uname
+2026/04/20 04:42:02 [PROCESS] pid=4049082 ppid=4049066 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/.npm-global/bin/uname
+2026/04/20 04:42:02 [PROCESS] pid=4049082 ppid=4049066 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/local/bin/uname
+2026/04/20 04:42:02 [PROCESS] pid=4049082 ppid=4049066 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/uname
+2026/04/20 04:42:02 [EXIT]    pid=4049082 ppid=4049066 exit_code=0   duration=2ms comm=uname
+2026/04/20 04:42:03 [PROCESS] pid=4049083 ppid=271154 uid=1000   mnt_ns=4026531841 container=host                                     path=/bin/sh
+2026/04/20 04:42:03 [PROCESS] pid=4049084 ppid=4049083 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/ip
+2026/04/20 04:42:03 [EXIT]    pid=4049084 ppid=4049083 exit_code=0   duration=4ms comm=ip
+2026/04/20 04:42:03 [EXIT]    pid=4049083 ppid=271154 exit_code=0   duration=10ms comm=sh
+2026/04/20 04:42:03 [EXIT]    pid=4049066 ppid=4049065 exit_code=0   duration=1437ms comm=pip
+2026/04/20 04:42:03 [PROCESS] pid=4049085 ppid=4049065 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 04:42:04 [EXIT]    pid=4049085 ppid=4049065 exit_code=0   duration=893ms comm=python3
+2026/04/20 04:42:04 [PROCESS] pid=4049086 ppid=4049065 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 04:42:04 [PROCESS] pid=4049087 ppid=2850888 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:42:04 [PROCESS] pid=4049094 ppid=4049087 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:42:04 [EXIT]    pid=4049095 ppid=4049087 exit_code=0   duration=9ms comm=runc:[1:CHILD]
+2026/04/20 04:42:04 [EXIT]    pid=4049094 ppid=4049087 exit_code=0   duration=34ms comm=runc:[0:PARENT]
+2026/04/20 04:42:04 [EXIT]    pid=4049086 ppid=4049065 exit_code=0   duration=326ms comm=python3
+2026/04/20 04:42:04 [PROCESS] pid=4049101 ppid=4049065 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 04:42:04 [PROCESS] pid=4049096 ppid=4049087 uid=0      mnt_ns=4026532303 container=order-processor-redis                    path=/usr/local/bin/redis-cli
+2026/04/20 04:42:04 [EXIT]    pid=4049087 ppid=2850888 exit_code=0   duration=106ms comm=runc
+2026/04/20 04:42:04 [EXIT]    pid=4049096 ppid=2850888 exit_code=0   duration=78ms comm=redis-cli
+2026/04/20 04:42:05 [PROCESS] pid=4049106 ppid=704    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/getconf
+2026/04/20 04:42:05 [EXIT]    pid=4049106 ppid=704    exit_code=0   duration=3ms comm=getconf
+2026/04/20 04:42:06 [PROCESS] pid=4049107 ppid=2869676 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:42:06 [PROCESS] pid=4049115 ppid=4049107 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:42:06 [EXIT]    pid=4049116 ppid=4049107 exit_code=0   duration=4ms comm=runc:[1:CHILD]
+2026/04/20 04:42:06 [EXIT]    pid=4049115 ppid=4049107 exit_code=0   duration=16ms comm=runc:[0:PARENT]
+2026/04/20 04:42:06 [EXIT]    pid=4049107 ppid=2869676 exit_code=0   duration=89ms comm=runc
+2026/04/20 04:42:06 [PROCESS] pid=4049117 ppid=2869676 uid=0      mnt_ns=4026532760 container=order-processor-gateway                  path=/usr/bin/curl
+2026/04/20 04:42:06 [EXIT]    pid=4049117 ppid=2869676 exit_code=0   duration=103ms comm=curl
+2026/04/20 04:42:07 [EXIT]    pid=4049101 ppid=4049065 exit_code=0   duration=3217ms comm=python3
+2026/04/20 04:42:07 [PROCESS] pid=4049124 ppid=4049065 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 04:42:08 [PROCESS] pid=4049125 ppid=2096863 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/sshd
+2026/04/20 04:42:09 [EXIT]    pid=4049126 ppid=4049125 exit_code=255 duration=1034ms comm=sshd
+2026/04/20 04:42:09 [EXIT]    pid=4049125 ppid=2096863 exit_code=255 duration=1071ms comm=sshd
+2026/04/20 04:42:09 [EXIT]    pid=4049124 ppid=4049065 exit_code=0   duration=2242ms comm=python3
+2026/04/20 04:42:09 [PROCESS] pid=4049127 ppid=4049065 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 04:42:10 [PROCESS] pid=4049128 ppid=2852483 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:42:10 [PROCESS] pid=4049135 ppid=4049128 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:42:10 [EXIT]    pid=4049136 ppid=4049128 exit_code=0   duration=0ms comm=runc:[1:CHILD]
+2026/04/20 04:42:10 [EXIT]    pid=4049135 ppid=4049128 exit_code=0   duration=13ms comm=runc:[0:PARENT]
+2026/04/20 04:42:10 [PROCESS] pid=4049137 ppid=4049128 uid=0      mnt_ns=4026532370 container=order-processor-localstack               path=/usr/bin/curl
+2026/04/20 04:42:10 [EXIT]    pid=4049128 ppid=2852483 exit_code=0   duration=86ms comm=runc
+2026/04/20 04:42:10 [FILE]    pid=4049137 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/etc/passwd
+2026/04/20 04:42:10 [2026-04-20 04:42:10] ALERT level=MEDIUM rule=sensitive_file_access container=order-processor-localstack pid=4049137 ppid=2852483 uid=0 comm=curl msg=Container accessed system file: /etc/passwd
+2026/04/20 04:42:10 [EXIT]    pid=4049137 ppid=2852483 exit_code=0   duration=136ms comm=curl
+2026/04/20 04:42:13 [EXIT]    pid=4049127 ppid=4049065 exit_code=0   duration=3766ms comm=python3
+2026/04/20 04:42:13 [PROCESS] pid=4049142 ppid=4049065 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 04:42:15 [PROCESS] pid=4049143 ppid=704    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/getconf
+2026/04/20 04:42:15 [EXIT]    pid=4049143 ppid=704    exit_code=0   duration=2ms comm=getconf
+2026/04/20 04:42:18 [PROCESS] pid=4049144 ppid=271154 uid=1000   mnt_ns=4026531841 container=host                                     path=/bin/sh
+2026/04/20 04:42:18 [PROCESS] pid=4049145 ppid=4049144 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/ip
+2026/04/20 04:42:18 [EXIT]    pid=4049145 ppid=4049144 exit_code=0   duration=4ms comm=ip
+2026/04/20 04:42:18 [EXIT]    pid=4049144 ppid=271154 exit_code=0   duration=10ms comm=sh
+2026/04/20 04:42:20 [PROCESS] pid=4049146 ppid=2852483 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:42:20 [PROCESS] pid=4049153 ppid=4049146 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:42:20 [EXIT]    pid=4049154 ppid=4049146 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 04:42:20 [EXIT]    pid=4049153 ppid=4049146 exit_code=0   duration=21ms comm=runc:[0:PARENT]
+2026/04/20 04:42:20 [EXIT]    pid=4049146 ppid=2852483 exit_code=0   duration=84ms comm=runc
+2026/04/20 04:42:20 [PROCESS] pid=4049155 ppid=2852483 uid=0      mnt_ns=4026532370 container=order-processor-localstack               path=/usr/bin/curl
+2026/04/20 04:42:20 [FILE]    pid=4049155 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/etc/passwd
+2026/04/20 04:42:20 [2026-04-20 04:42:20] ALERT level=MEDIUM rule=sensitive_file_access container=order-processor-localstack pid=4049155 ppid=2852483 uid=0 comm=curl msg=Container accessed system file: /etc/passwd
+2026/04/20 04:42:20 [EXIT]    pid=4049155 ppid=2852483 exit_code=0   duration=77ms comm=curl
+2026/04/20 04:42:21 [PROCESS] pid=4049161 ppid=2869676 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:42:21 [PROCESS] pid=4049167 ppid=4049161 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:42:21 [EXIT]    pid=4049169 ppid=4049161 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 04:42:21 [EXIT]    pid=4049167 ppid=4049161 exit_code=0   duration=20ms comm=runc:[0:PARENT]
+2026/04/20 04:42:21 [EXIT]    pid=4049161 ppid=2869676 exit_code=0   duration=84ms comm=runc
+2026/04/20 04:42:21 [PROCESS] pid=4049170 ppid=2869676 uid=0      mnt_ns=4026532760 container=order-processor-gateway                  path=/usr/bin/curl
+2026/04/20 04:42:21 [EXIT]    pid=4049170 ppid=2869676 exit_code=0   duration=74ms comm=curl
+2026/04/20 04:42:24 [EXIT]    pid=4049142 ppid=4049065 exit_code=0   duration=10897ms comm=python3
+2026/04/20 04:42:24 [PROCESS] pid=4049176 ppid=4049065 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 04:42:25 [PROCESS] pid=4049178 ppid=704    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/getconf
+2026/04/20 04:42:25 [EXIT]    pid=4049178 ppid=704    exit_code=0   duration=2ms comm=getconf
+2026/04/20 04:42:26 [EXIT]    pid=4049176 ppid=4049065 exit_code=0   duration=1857ms comm=python3
+2026/04/20 04:42:26 [PROCESS] pid=4049179 ppid=4049065 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 04:42:28 [PROCESS] pid=4049180 ppid=4049034 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/docker
+2026/04/20 04:42:28 [EXIT]    pid=4049180 ppid=4049034 exit_code=0   duration=83ms comm=docker
+2026/04/20 04:42:30 [PROCESS] pid=4049187 ppid=2852483 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:42:30 [PROCESS] pid=4049193 ppid=4049187 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:42:30 [EXIT]    pid=4049195 ppid=4049187 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 04:42:30 [EXIT]    pid=4049193 ppid=4049187 exit_code=0   duration=7ms comm=runc:[0:PARENT]
+2026/04/20 04:42:30 [EXIT]    pid=4049187 ppid=2852483 exit_code=0   duration=64ms comm=runc
+2026/04/20 04:42:30 [PROCESS] pid=4049196 ppid=4049187 uid=0      mnt_ns=4026532370 container=order-processor-localstack               path=/usr/bin/curl
+2026/04/20 04:42:30 [FILE]    pid=4049196 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/etc/passwd
+2026/04/20 04:42:30 [2026-04-20 04:42:30] ALERT level=MEDIUM rule=sensitive_file_access container=order-processor-localstack pid=4049196 ppid=2852483 uid=0 comm=curl msg=Container accessed system file: /etc/passwd
+2026/04/20 04:42:30 [EXIT]    pid=4049196 ppid=2852483 exit_code=0   duration=89ms comm=curl
+2026/04/20 04:42:31 [EXIT]    pid=4049179 ppid=4049065 exit_code=0   duration=5205ms comm=python3
+2026/04/20 04:42:31 [PROCESS] pid=4049202 ppid=4049065 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 04:42:33 [PROCESS] pid=4049203 ppid=271154 uid=1000   mnt_ns=4026531841 container=host                                     path=/bin/sh
+2026/04/20 04:42:33 [PROCESS] pid=4049204 ppid=4049203 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/ip
+2026/04/20 04:42:33 [EXIT]    pid=4049204 ppid=4049203 exit_code=0   duration=3ms comm=ip
+2026/04/20 04:42:33 [EXIT]    pid=4049203 ppid=271154 exit_code=0   duration=8ms comm=sh
+2026/04/20 04:42:34 [PROCESS] pid=4049205 ppid=2850888 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:42:34 [PROCESS] pid=4049213 ppid=4049205 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:42:34 [EXIT]    pid=4049214 ppid=4049205 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 04:42:34 [EXIT]    pid=4049213 ppid=4049205 exit_code=0   duration=25ms comm=runc:[0:PARENT]
+2026/04/20 04:42:34 [PROCESS] pid=4049221 ppid=2868312 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:42:34 [PROCESS] pid=4049226 ppid=4049221 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:42:34 [EXIT]    pid=4049229 ppid=4049221 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 04:42:34 [EXIT]    pid=4049226 ppid=4049221 exit_code=0   duration=30ms comm=runc:[0:PARENT]
+2026/04/20 04:42:34 [PROCESS] pid=4049215 ppid=4049205 uid=0      mnt_ns=4026532303 container=order-processor-redis                    path=/usr/local/bin/redis-cli
+2026/04/20 04:42:34 [EXIT]    pid=4049205 ppid=2850888 exit_code=0   duration=161ms comm=runc
+2026/04/20 04:42:34 [EXIT]    pid=4049215 ppid=2850888 exit_code=0   duration=128ms comm=redis-cli
+2026/04/20 04:42:34 [PROCESS] pid=4049230 ppid=4049221 uid=0      mnt_ns=4026532504 container=order-processor-inventory_service        path=/usr/bin/curl
+2026/04/20 04:42:34 [EXIT]    pid=4049221 ppid=2868312 exit_code=0   duration=139ms comm=runc
+2026/04/20 04:42:34 [FILE]    pid=4049230 ppid=2868312 uid=0      container=order-processor-inventory_service        comm=curl                 file=/etc/passwd
+2026/04/20 04:42:34 [2026-04-20 04:42:34] ALERT level=MEDIUM rule=sensitive_file_access container=order-processor-inventory_service pid=4049230 ppid=2868312 uid=0 comm=curl msg=Container accessed system file: /etc/passwd
+2026/04/20 04:42:34 [EXIT]    pid=4049230 ppid=2868312 exit_code=0   duration=114ms comm=curl
+2026/04/20 04:42:35 [PROCESS] pid=4049235 ppid=704    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/getconf
+2026/04/20 04:42:35 [EXIT]    pid=4049235 ppid=704    exit_code=0   duration=4ms comm=getconf
+2026/04/20 04:42:36 [PROCESS] pid=4049236 ppid=2869676 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:42:36 [PROCESS] pid=4049243 ppid=4049236 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:42:36 [EXIT]    pid=4049245 ppid=4049236 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 04:42:36 [EXIT]    pid=4049243 ppid=4049236 exit_code=0   duration=26ms comm=runc:[0:PARENT]
+2026/04/20 04:42:36 [EXIT]    pid=4049202 ppid=4049065 exit_code=0   duration=4711ms comm=python3
+2026/04/20 04:42:36 [PROCESS] pid=4049248 ppid=4049065 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 04:42:36 [EXIT]    pid=4049236 ppid=2869676 exit_code=0   duration=90ms comm=runc
+2026/04/20 04:42:36 [PROCESS] pid=4049246 ppid=2869676 uid=0      mnt_ns=4026532760 container=order-processor-gateway                  path=/usr/bin/curl
+2026/04/20 04:42:36 [EXIT]    pid=4049246 ppid=2869676 exit_code=0   duration=88ms comm=curl
+2026/04/20 04:42:36 [PROCESS] pid=4049252 ppid=2868372 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:42:36 [PROCESS] pid=4049258 ppid=4049252 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:42:36 [EXIT]    pid=4049260 ppid=4049252 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 04:42:36 [EXIT]    pid=4049258 ppid=4049252 exit_code=0   duration=23ms comm=runc:[0:PARENT]
+2026/04/20 04:42:36 [PROCESS] pid=4049262 ppid=2868272 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:42:36 [PROCESS] pid=4049261 ppid=4049252 uid=1000   mnt_ns=4026532630 container=order-processor-auth_service             path=/usr/bin/curl
+2026/04/20 04:42:36 [PROCESS] pid=4049274 ppid=4049262 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:42:36 [EXIT]    pid=4049252 ppid=2868372 exit_code=0   duration=95ms comm=runc
+2026/04/20 04:42:36 [EXIT]    pid=4049275 ppid=4049262 exit_code=0   duration=3ms comm=runc:[1:CHILD]
+2026/04/20 04:42:36 [EXIT]    pid=4049274 ppid=4049262 exit_code=0   duration=20ms comm=runc:[0:PARENT]
+2026/04/20 04:42:36 [FILE]    pid=4049261 ppid=2868372 uid=1000   container=order-processor-auth_service             comm=curl                 file=/etc/passwd
+2026/04/20 04:42:36 [2026-04-20 04:42:36] ALERT level=MEDIUM rule=sensitive_file_access container=order-processor-auth_service pid=4049261 ppid=2868372 uid=1000 comm=curl msg=Container accessed system file: /etc/passwd
+2026/04/20 04:42:36 [EXIT]    pid=4049261 ppid=2868372 exit_code=0   duration=113ms comm=curl
+2026/04/20 04:42:36 [EXIT]    pid=4049262 ppid=2868272 exit_code=0   duration=142ms comm=runc
+2026/04/20 04:42:36 [PROCESS] pid=4049276 ppid=2868272 uid=0      mnt_ns=4026532441 container=order-processor-user_service             path=/usr/bin/curl
+2026/04/20 04:42:36 [FILE]    pid=4049276 ppid=2868272 uid=0      container=order-processor-user_service             comm=curl                 file=/etc/passwd
+2026/04/20 04:42:36 [2026-04-20 04:42:36] ALERT level=MEDIUM rule=sensitive_file_access container=order-processor-user_service pid=4049276 ppid=2868272 uid=0 comm=curl msg=Container accessed system file: /etc/passwd
+2026/04/20 04:42:36 [EXIT]    pid=4049276 ppid=2868272 exit_code=0   duration=137ms comm=curl
+2026/04/20 04:42:40 [PROCESS] pid=4049284 ppid=2869781 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:42:40 [PROCESS] pid=4049291 ppid=4049284 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:42:40 [EXIT]    pid=4049292 ppid=4049284 exit_code=0   duration=0ms comm=runc:[1:CHILD]
+2026/04/20 04:42:40 [EXIT]    pid=4049291 ppid=4049284 exit_code=0   duration=7ms comm=runc:[0:PARENT]
+2026/04/20 04:42:40 [EXIT]    pid=4049284 ppid=2869781 exit_code=0   duration=98ms comm=runc
+2026/04/20 04:42:40 [PROCESS] pid=4049293 ppid=2869781 uid=0      mnt_ns=4026532825 container=order-processor-frontend                 path=/usr/bin/curl
+2026/04/20 04:42:40 [EXIT]    pid=4049293 ppid=2869781 exit_code=0   duration=85ms comm=curl
+2026/04/20 04:42:40 [PROCESS] pid=4049299 ppid=2852483 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:42:40 [PROCESS] pid=4049306 ppid=4049299 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:42:40 [EXIT]    pid=4049307 ppid=4049299 exit_code=0   duration=0ms comm=runc:[1:CHILD]
+2026/04/20 04:42:40 [EXIT]    pid=4049306 ppid=4049299 exit_code=0   duration=4ms comm=runc:[0:PARENT]
+2026/04/20 04:42:40 [EXIT]    pid=4049299 ppid=2852483 exit_code=0   duration=77ms comm=runc
+2026/04/20 04:42:40 [PROCESS] pid=4049308 ppid=2852483 uid=0      mnt_ns=4026532370 container=order-processor-localstack               path=/usr/bin/curl
+2026/04/20 04:42:40 [FILE]    pid=4049308 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/etc/passwd
+2026/04/20 04:42:40 [2026-04-20 04:42:40] ALERT level=MEDIUM rule=sensitive_file_access container=order-processor-localstack pid=4049308 ppid=2852483 uid=0 comm=curl msg=Container accessed system file: /etc/passwd
+2026/04/20 04:42:40 [EXIT]    pid=4049308 ppid=2852483 exit_code=0   duration=102ms comm=curl
+2026/04/20 04:42:42 [EXIT]    pid=4049248 ppid=4049065 exit_code=0   duration=6005ms comm=python3
+2026/04/20 04:42:42 [PROCESS] pid=4049315 ppid=4049065 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 04:42:45 [PROCESS] pid=4049316 ppid=704    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/getconf
+2026/04/20 04:42:45 [EXIT]    pid=4049316 ppid=704    exit_code=0   duration=2ms comm=getconf
+2026/04/20 04:42:46 [EXIT]    pid=4049315 ppid=4049065 exit_code=0   duration=3996ms comm=python3
+2026/04/20 04:42:46 [PROCESS] pid=4049317 ppid=4049065 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 04:42:48 [PROCESS] pid=4049318 ppid=271154 uid=1000   mnt_ns=4026531841 container=host                                     path=/bin/sh
+2026/04/20 04:42:48 [PROCESS] pid=4049319 ppid=4049318 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/ip
+2026/04/20 04:42:48 [EXIT]    pid=4049319 ppid=4049318 exit_code=0   duration=4ms comm=ip
+2026/04/20 04:42:48 [EXIT]    pid=4049318 ppid=271154 exit_code=0   duration=9ms comm=sh
+2026/04/20 04:42:48 [EXIT]    pid=4049317 ppid=4049065 exit_code=0   duration=2498ms comm=python3
+2026/04/20 04:42:48 [PROCESS] pid=4049320 ppid=4049065 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 04:42:50 [PROCESS] pid=4049321 ppid=2852483 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:42:50 [PROCESS] pid=4049328 ppid=4049321 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:42:50 [EXIT]    pid=4049331 ppid=4049321 exit_code=0   duration=12ms comm=runc:[1:CHILD]
+2026/04/20 04:42:50 [EXIT]    pid=4049328 ppid=4049321 exit_code=0   duration=44ms comm=runc:[0:PARENT]
+2026/04/20 04:42:50 [EXIT]    pid=4049321 ppid=2852483 exit_code=0   duration=108ms comm=runc
+2026/04/20 04:42:50 [PROCESS] pid=4049332 ppid=2852483 uid=0      mnt_ns=4026532370 container=order-processor-localstack               path=/usr/bin/curl
+2026/04/20 04:42:50 [FILE]    pid=4049332 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/etc/passwd
+2026/04/20 04:42:50 [2026-04-20 04:42:50] ALERT level=MEDIUM rule=sensitive_file_access container=order-processor-localstack pid=4049332 ppid=2852483 uid=0 comm=curl msg=Container accessed system file: /etc/passwd
+2026/04/20 04:42:50 [EXIT]    pid=4049332 ppid=2852483 exit_code=0   duration=91ms comm=curl
+2026/04/20 04:42:50 [PROCESS] pid=4049337 ppid=2869092 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:42:50 [PROCESS] pid=4049344 ppid=4049337 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:42:50 [EXIT]    pid=4049346 ppid=4049337 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 04:42:50 [EXIT]    pid=4049344 ppid=4049337 exit_code=0   duration=23ms comm=runc:[0:PARENT]
+2026/04/20 04:42:51 [EXIT]    pid=4049337 ppid=2869092 exit_code=0   duration=92ms comm=runc
+2026/04/20 04:42:51 [PROCESS] pid=4049347 ppid=4049337 uid=0      mnt_ns=4026532695 container=order-processor-insights_service         path=/usr/bin/curl
+2026/04/20 04:42:51 [FILE]    pid=4049347 ppid=2869092 uid=0      container=order-processor-insights_service         comm=curl                 file=/etc/passwd
+2026/04/20 04:42:51 [2026-04-20 04:42:51] ALERT level=MEDIUM rule=sensitive_file_access container=order-processor-insights_service pid=4049347 ppid=2869092 uid=0 comm=curl msg=Container accessed system file: /etc/passwd
+2026/04/20 04:42:51 [EXIT]    pid=4049347 ppid=2869092 exit_code=0   duration=90ms comm=curl
+2026/04/20 04:42:51 [PROCESS] pid=4049353 ppid=2868362 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:42:51 [PROCESS] pid=4049361 ppid=4049353 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:42:51 [EXIT]    pid=4049362 ppid=4049353 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 04:42:51 [EXIT]    pid=4049361 ppid=4049353 exit_code=0   duration=6ms comm=runc:[0:PARENT]
+2026/04/20 04:42:51 [PROCESS] pid=4049363 ppid=4049353 uid=0      mnt_ns=4026532567 container=order-processor-order_service            path=/usr/bin/curl
+2026/04/20 04:42:51 [EXIT]    pid=4049353 ppid=2868362 exit_code=0   duration=88ms comm=runc
+2026/04/20 04:42:51 [FILE]    pid=4049363 ppid=2868362 uid=0      container=order-processor-order_service            comm=curl                 file=/etc/passwd
+2026/04/20 04:42:51 [2026-04-20 04:42:51] ALERT level=MEDIUM rule=sensitive_file_access container=order-processor-order_service pid=4049363 ppid=2868362 uid=0 comm=curl msg=Container accessed system file: /etc/passwd
+2026/04/20 04:42:51 [EXIT]    pid=4049363 ppid=2868362 exit_code=0   duration=283ms comm=curl
+2026/04/20 04:42:51 [EXIT]    pid=4049320 ppid=4049065 exit_code=0   duration=2573ms comm=python3
+2026/04/20 04:42:51 [PROCESS] pid=4049369 ppid=4049065 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 04:42:51 [PROCESS] pid=4049370 ppid=2869676 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:42:51 [PROCESS] pid=4049376 ppid=4049370 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:42:51 [EXIT]    pid=4049378 ppid=4049370 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 04:42:51 [EXIT]    pid=4049376 ppid=4049370 exit_code=0   duration=6ms comm=runc:[0:PARENT]
+2026/04/20 04:42:51 [EXIT]    pid=4049370 ppid=2869676 exit_code=0   duration=74ms comm=runc
+2026/04/20 04:42:51 [PROCESS] pid=4049379 ppid=2869676 uid=0      mnt_ns=4026532760 container=order-processor-gateway                  path=/usr/bin/curl
+2026/04/20 04:42:51 [EXIT]    pid=4049379 ppid=2869676 exit_code=0   duration=98ms comm=curl
+2026/04/20 04:42:51 [EXIT]    pid=4049369 ppid=4049065 exit_code=0   duration=355ms comm=python3
+2026/04/20 04:42:51 [PROCESS] pid=4049385 ppid=4049065 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 04:42:54 [EXIT]    pid=4049385 ppid=4049065 exit_code=0   duration=2767ms comm=python3
+2026/04/20 04:42:54 [PROCESS] pid=4049386 ppid=4049065 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 04:42:55 [PROCESS] pid=4049387 ppid=761    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/ip
+2026/04/20 04:42:55 [EXIT]    pid=4049387 ppid=761    exit_code=0   duration=9ms comm=ip
+2026/04/20 04:42:55 [PROCESS] pid=4049388 ppid=761    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/ip
+2026/04/20 04:42:55 [EXIT]    pid=4049388 ppid=761    exit_code=0   duration=15ms comm=ip
+2026/04/20 04:42:55 [PROCESS] pid=4049389 ppid=761    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/ip
+2026/04/20 04:42:55 [EXIT]    pid=4049389 ppid=761    exit_code=0   duration=6ms comm=ip
+2026/04/20 04:42:55 [PROCESS] pid=4049390 ppid=704    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/getconf
+2026/04/20 04:42:55 [EXIT]    pid=4049390 ppid=704    exit_code=0   duration=4ms comm=getconf
+2026/04/20 04:42:58 [PROCESS] pid=4049391 ppid=4049034 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/docker
+2026/04/20 04:42:58 [EXIT]    pid=4049391 ppid=4049034 exit_code=0   duration=82ms comm=docker
+2026/04/20 04:43:00 [PROCESS] pid=4049397 ppid=2852483 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:43:00 [PROCESS] pid=4049404 ppid=4049397 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:43:00 [EXIT]    pid=4049406 ppid=4049397 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 04:43:00 [EXIT]    pid=4049404 ppid=4049397 exit_code=0   duration=30ms comm=runc:[0:PARENT]
+2026/04/20 04:43:00 [EXIT]    pid=4049397 ppid=2852483 exit_code=0   duration=92ms comm=runc
+2026/04/20 04:43:00 [PROCESS] pid=4049407 ppid=2852483 uid=0      mnt_ns=4026532370 container=order-processor-localstack               path=/usr/bin/curl
+2026/04/20 04:43:00 [FILE]    pid=4049407 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/etc/passwd
+2026/04/20 04:43:00 [2026-04-20 04:43:00] ALERT level=MEDIUM rule=sensitive_file_access container=order-processor-localstack pid=4049407 ppid=2852483 uid=0 comm=curl msg=Container accessed system file: /etc/passwd
+2026/04/20 04:43:00 [EXIT]    pid=4049407 ppid=2852483 exit_code=0   duration=76ms comm=curl
+2026/04/20 04:43:01 [EXIT]    pid=4049386 ppid=4049065 exit_code=0   duration=6506ms comm=python3
+2026/04/20 04:43:01 [PROCESS] pid=4049413 ppid=4049065 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 04:43:03 [PROCESS] pid=4049414 ppid=271154 uid=1000   mnt_ns=4026531841 container=host                                     path=/bin/sh
+2026/04/20 04:43:03 [PROCESS] pid=4049415 ppid=4049414 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/ip
+2026/04/20 04:43:03 [EXIT]    pid=4049415 ppid=4049414 exit_code=0   duration=3ms comm=ip
+2026/04/20 04:43:03 [EXIT]    pid=4049414 ppid=271154 exit_code=0   duration=9ms comm=sh
+2026/04/20 04:43:04 [PROCESS] pid=4049416 ppid=2850888 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:43:04 [PROCESS] pid=4049424 ppid=4049416 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:43:04 [EXIT]    pid=4049425 ppid=4049416 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 04:43:04 [EXIT]    pid=4049424 ppid=4049416 exit_code=0   duration=27ms comm=runc:[0:PARENT]
+2026/04/20 04:43:04 [PROCESS] pid=4049426 ppid=4049416 uid=0      mnt_ns=4026532303 container=order-processor-redis                    path=/usr/local/bin/redis-cli
+2026/04/20 04:43:04 [EXIT]    pid=4049416 ppid=2850888 exit_code=0   duration=95ms comm=runc
+2026/04/20 04:43:04 [EXIT]    pid=4049426 ppid=2850888 exit_code=0   duration=56ms comm=redis-cli
+2026/04/20 04:43:05 [PROCESS] pid=4049432 ppid=704    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/getconf
+2026/04/20 04:43:05 [EXIT]    pid=4049432 ppid=704    exit_code=0   duration=1ms comm=getconf
+2026/04/20 04:43:05 [EXIT]    pid=4049413 ppid=4049065 exit_code=0   duration=4853ms comm=python3
+2026/04/20 04:43:05 [PROCESS] pid=4049433 ppid=4049065 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 04:43:06 [PROCESS] pid=4049434 ppid=2869676 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:43:06 [PROCESS] pid=4049440 ppid=4049434 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:43:06 [EXIT]    pid=4049442 ppid=4049434 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 04:43:06 [EXIT]    pid=4049440 ppid=4049434 exit_code=0   duration=7ms comm=runc:[0:PARENT]
+2026/04/20 04:43:06 [PROCESS] pid=4049443 ppid=4049434 uid=0      mnt_ns=4026532760 container=order-processor-gateway                  path=/usr/bin/curl
+2026/04/20 04:43:06 [EXIT]    pid=4049434 ppid=2869676 exit_code=0   duration=70ms comm=runc
+2026/04/20 04:43:06 [EXIT]    pid=4049443 ppid=2869676 exit_code=0   duration=76ms comm=curl
+2026/04/20 04:43:09 [EXIT]    pid=4049433 ppid=4049065 exit_code=0   duration=3278ms comm=python3
+2026/04/20 04:43:09 [EXIT]    pid=4049065 ppid=4018865 exit_code=0   duration=67425ms comm=run_all_tests.s
+2026/04/20 04:43:10 [PROCESS] pid=4049449 ppid=2852483 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:43:10 [PROCESS] pid=4049458 ppid=4049449 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:43:10 [EXIT]    pid=4049459 ppid=4049449 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 04:43:10 [EXIT]    pid=4049458 ppid=4049449 exit_code=0   duration=13ms comm=runc:[0:PARENT]
+2026/04/20 04:43:10 [PROCESS] pid=4049460 ppid=4049449 uid=0      mnt_ns=4026532370 container=order-processor-localstack               path=/usr/bin/curl
+2026/04/20 04:43:10 [EXIT]    pid=4049449 ppid=2852483 exit_code=0   duration=76ms comm=runc
+2026/04/20 04:43:10 [FILE]    pid=4049460 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/etc/passwd
+2026/04/20 04:43:10 [2026-04-20 04:43:10] ALERT level=MEDIUM rule=sensitive_file_access container=order-processor-localstack pid=4049460 ppid=2852483 uid=0 comm=curl msg=Container accessed system file: /etc/passwd
+2026/04/20 04:43:10 [EXIT]    pid=4049460 ppid=2852483 exit_code=0   duration=76ms comm=curl
+2026/04/20 04:43:14 [PROCESS] pid=4049466 ppid=4018865 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/cat
+2026/04/20 04:43:14 [EXIT]    pid=4049466 ppid=4018865 exit_code=0   duration=3ms comm=cat
+2026/04/20 04:43:15 [PROCESS] pid=4049467 ppid=704    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/getconf
+2026/04/20 04:43:15 [EXIT]    pid=4049467 ppid=704    exit_code=0   duration=2ms comm=getconf
+2026/04/20 04:43:17 [PROCESS] pid=4049468 ppid=4018865 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/docker
+2026/04/20 04:43:17 [PROCESS] pid=4049474 ppid=2868372 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:43:17 [PROCESS] pid=4049481 ppid=4049474 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:43:17 [EXIT]    pid=4049482 ppid=4049474 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 04:43:17 [EXIT]    pid=4049481 ppid=4049474 exit_code=0   duration=16ms comm=runc:[0:PARENT]
+2026/04/20 04:43:17 [PROCESS] pid=4049483 ppid=4049474 uid=1000   mnt_ns=4026532630 container=order-processor-auth_service             path=/usr/bin/cat
+2026/04/20 04:43:17 [EXIT]    pid=4049474 ppid=2868372 exit_code=0   duration=78ms comm=runc
+2026/04/20 04:43:17 [EXIT]    pid=4049483 ppid=2868372 exit_code=1   duration=49ms comm=cat
+2026/04/20 04:43:17 [2026-04-20 04:43:17] ALERT level=LOW rule=short_lived_failure container=unknown pid=4049483 ppid=0 uid=0 comm=cat msg=Process exited quickly with error — possible failed exploit
+2026/04/20 04:43:17 [EXIT]    pid=4049468 ppid=4018865 exit_code=1   duration=154ms comm=docker
+2026/04/20 04:43:18 [PROCESS] pid=4049490 ppid=271154 uid=1000   mnt_ns=4026531841 container=host                                     path=/bin/sh
+2026/04/20 04:43:18 [PROCESS] pid=4049491 ppid=4049490 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/ip
+2026/04/20 04:43:18 [EXIT]    pid=4049491 ppid=4049490 exit_code=0   duration=3ms comm=ip
+2026/04/20 04:43:18 [EXIT]    pid=4049490 ppid=271154 exit_code=0   duration=8ms comm=sh
+2026/04/20 04:43:21 [PROCESS] pid=4049492 ppid=2852483 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:43:21 [PROCESS] pid=4049499 ppid=4049492 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:43:21 [EXIT]    pid=4049501 ppid=4049492 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 04:43:21 [EXIT]    pid=4049499 ppid=4049492 exit_code=0   duration=13ms comm=runc:[0:PARENT]
+2026/04/20 04:43:21 [PROCESS] pid=4049502 ppid=4049492 uid=0      mnt_ns=4026532370 container=order-processor-localstack               path=/usr/bin/curl
+2026/04/20 04:43:21 [EXIT]    pid=4049492 ppid=2852483 exit_code=0   duration=78ms comm=runc
+2026/04/20 04:43:21 [FILE]    pid=4049502 ppid=2852483 uid=0      container=order-processor-localstack               comm=curl                 file=/etc/passwd
+2026/04/20 04:43:21 [2026-04-20 04:43:21] ALERT level=MEDIUM rule=sensitive_file_access container=order-processor-localstack pid=4049502 ppid=2852483 uid=0 comm=curl msg=Container accessed system file: /etc/passwd
+2026/04/20 04:43:21 [EXIT]    pid=4049502 ppid=2852483 exit_code=0   duration=80ms comm=curl
+2026/04/20 04:43:21 [PROCESS] pid=4049508 ppid=4018865 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/ls
+2026/04/20 04:43:21 [EXIT]    pid=4049508 ppid=4018865 exit_code=0   duration=3ms comm=ls
+2026/04/20 04:43:21 [PROCESS] pid=4049509 ppid=2869676 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 04:43:21 [PROCESS] pid=4049517 ppid=4049509 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 04:43:21 [EXIT]    pid=4049518 ppid=4049509 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 04:43:21 [EXIT]    pid=4049517 ppid=4049509 exit_code=0   duration=21ms comm=runc:[0:PARENT]
+2026/04/20 04:43:21 [PROCESS] pid=4049519 ppid=4049509 uid=0      mnt_ns=4026532760 container=order-processor-gateway                  path=/usr/bin/curl
+2026/04/20 04:43:21 [EXIT]    pid=4049509 ppid=2869676 exit_code=0   duration=78ms comm=runc
+2026/04/20 04:43:21 [FILE]    pid=2868345 ppid=2868312 uid=0      container=order-processor-inventory_service        comm=python               file=/root/.local/lib/python3.11/site-packages/certifi/cacert.pem
+2026/04/20 04:43:21 [2026-04-20 04:43:21] ALERT level=HIGH rule=sensitive_file_access container=order-processor-inventory_service pid=2868345 ppid=2868312 uid=0 comm=python msg=Container accessed sensitive file: /root/.local/lib/python3.11/site-packages/certifi/cacert.pem
+2026/04/20 04:43:21 [EXIT]    pid=4049519 ppid=2869676 exit_code=0   duration=70ms comm=curl
+2026/04/20 04:43:24 Stopping EDR monitor...
