@@ -3,6 +3,9 @@
 *_bpfeb.go linguist-generated=true
 go.sum linguist-generated=true
 
+# Legacy directory — old flat structure kept for reference, not active code
+legacy/ linguist-vendored=true
+
 # Documentation — excluded from language stats
 *.md linguist-documentation=true
 
