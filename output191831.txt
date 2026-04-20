@@ -1,0 +1,292 @@
+2026/04/20 01:31:07 EDR Monitor started — watching process execution and exits
+2026/04/20 01:31:07 Press Ctrl+C to stop
+2026/04/20 01:31:09 [PROCESS] pid=3980363 ppid=2869676 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 01:31:09 [PROCESS] pid=3980372 ppid=3980363 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 01:31:09 [EXIT]    pid=3980373 ppid=3980363 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 01:31:09 [EXIT]    pid=3980372 ppid=3980363 exit_code=0   duration=13ms comm=runc:[0:PARENT]
+2026/04/20 01:31:09 [EXIT]    pid=3980363 ppid=2869676 exit_code=0   duration=73ms comm=runc
+2026/04/20 01:31:09 [PROCESS] pid=3980374 ppid=2869676 uid=0      mnt_ns=4026532760 container=order-processor-gateway                  path=/usr/bin/curl
+2026/04/20 01:31:09 [2026-04-20 01:31:09] ALERT level=MEDIUM rule=curl_from_container container=order-processor-gateway pid=3980374 ppid=2869676 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 01:31:09 [EXIT]    pid=3980374 ppid=2869676 exit_code=0   duration=64ms comm=curl
+2026/04/20 01:31:09 [PROCESS] pid=3980381 ppid=2852483 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 01:31:09 [PROCESS] pid=3980388 ppid=3980381 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 01:31:09 [EXIT]    pid=3980389 ppid=3980381 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 01:31:09 [EXIT]    pid=3980388 ppid=3980381 exit_code=0   duration=14ms comm=runc:[0:PARENT]
+2026/04/20 01:31:09 [PROCESS] pid=3980390 ppid=3980381 uid=0      mnt_ns=4026532370 container=order-processor-localstack               path=/usr/bin/curl
+2026/04/20 01:31:09 [2026-04-20 01:31:09] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=3980390 ppid=3980381 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 01:31:09 [EXIT]    pid=3980381 ppid=2852483 exit_code=0   duration=72ms comm=runc
+2026/04/20 01:31:09 [EXIT]    pid=3980390 ppid=2852483 exit_code=0   duration=60ms comm=curl
+2026/04/20 01:31:10 [PROCESS] pid=3980396 ppid=3978833 uid=1000   mnt_ns=4026531841 container=host                                     path=./run_all_tests.sh
+2026/04/20 01:31:10 [PROCESS] pid=3980397 ppid=3980396 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/pip
+2026/04/20 01:31:11 [PROCESS] pid=3980398 ppid=3980397 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/lsb_release
+2026/04/20 01:31:11 [PROCESS] pid=3980398 ppid=3980397 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/.npm-global/bin/lsb_release
+2026/04/20 01:31:11 [PROCESS] pid=3980398 ppid=3980397 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/local/bin/lsb_release
+2026/04/20 01:31:11 [PROCESS] pid=3980398 ppid=3980397 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/lsb_release
+2026/04/20 01:31:11 [PROCESS] pid=3980399 ppid=3980398 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/getopt
+2026/04/20 01:31:11 [EXIT]    pid=3980399 ppid=3980398 exit_code=0   duration=3ms comm=getopt
+2026/04/20 01:31:11 [EXIT]    pid=3980401 ppid=3980400 exit_code=0   duration=0ms comm=lsb_release
+2026/04/20 01:31:11 [PROCESS] pid=3980403 ppid=3980400 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/tr
+2026/04/20 01:31:11 [PROCESS] pid=3980402 ppid=3980400 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/cut
+2026/04/20 01:31:11 [EXIT]    pid=3980402 ppid=3980400 exit_code=0   duration=2ms comm=cut
+2026/04/20 01:31:11 [EXIT]    pid=3980403 ppid=3980400 exit_code=0   duration=2ms comm=tr
+2026/04/20 01:31:11 [EXIT]    pid=3980400 ppid=3980398 exit_code=0   duration=3ms comm=lsb_release
+2026/04/20 01:31:11 [EXIT]    pid=3980405 ppid=3980404 exit_code=0   duration=0ms comm=lsb_release
+2026/04/20 01:31:11 [PROCESS] pid=3980406 ppid=3980404 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/cut
+2026/04/20 01:31:11 [EXIT]    pid=3980406 ppid=3980404 exit_code=0   duration=1ms comm=cut
+2026/04/20 01:31:11 [EXIT]    pid=3980404 ppid=3980398 exit_code=0   duration=2ms comm=lsb_release
+2026/04/20 01:31:11 [EXIT]    pid=3980408 ppid=3980407 exit_code=0   duration=0ms comm=lsb_release
+2026/04/20 01:31:11 [PROCESS] pid=3980409 ppid=3980407 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/tr
+2026/04/20 01:31:11 [EXIT]    pid=3980409 ppid=3980407 exit_code=0   duration=1ms comm=tr
+2026/04/20 01:31:11 [EXIT]    pid=3980407 ppid=3980398 exit_code=0   duration=2ms comm=lsb_release
+2026/04/20 01:31:11 [EXIT]    pid=3980411 ppid=3980410 exit_code=0   duration=0ms comm=lsb_release
+2026/04/20 01:31:11 [PROCESS] pid=3980412 ppid=3980410 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/tr
+2026/04/20 01:31:11 [EXIT]    pid=3980412 ppid=3980410 exit_code=0   duration=1ms comm=tr
+2026/04/20 01:31:11 [EXIT]    pid=3980410 ppid=3980398 exit_code=0   duration=2ms comm=lsb_release
+2026/04/20 01:31:11 [EXIT]    pid=3980398 ppid=3980397 exit_code=0   duration=17ms comm=lsb_release
+2026/04/20 01:31:11 [PROCESS] pid=3980413 ppid=3980397 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/uname
+2026/04/20 01:31:11 [PROCESS] pid=3980413 ppid=3980397 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/.npm-global/bin/uname
+2026/04/20 01:31:11 [PROCESS] pid=3980413 ppid=3980397 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/local/bin/uname
+2026/04/20 01:31:11 [PROCESS] pid=3980413 ppid=3980397 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/uname
+2026/04/20 01:31:11 [EXIT]    pid=3980413 ppid=3980397 exit_code=0   duration=1ms comm=uname
+2026/04/20 01:31:11 [EXIT]    pid=3980397 ppid=3980396 exit_code=0   duration=870ms comm=pip
+2026/04/20 01:31:11 [PROCESS] pid=3980414 ppid=3980396 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 01:31:12 [EXIT]    pid=3980414 ppid=3980396 exit_code=0   duration=763ms comm=python3
+2026/04/20 01:31:12 [PROCESS] pid=3980415 ppid=3980396 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 01:31:12 [EXIT]    pid=3980415 ppid=3980396 exit_code=0   duration=218ms comm=python3
+2026/04/20 01:31:12 [PROCESS] pid=3980416 ppid=3980396 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 01:31:15 [EXIT]    pid=3980416 ppid=3980396 exit_code=0   duration=2799ms comm=python3
+2026/04/20 01:31:15 [PROCESS] pid=3980417 ppid=3980396 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 01:31:15 [PROCESS] pid=3980418 ppid=704    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/getconf
+2026/04/20 01:31:15 [EXIT]    pid=3980418 ppid=704    exit_code=0   duration=1ms comm=getconf
+2026/04/20 01:31:17 [EXIT]    pid=3980417 ppid=3980396 exit_code=0   duration=2088ms comm=python3
+2026/04/20 01:31:17 [PROCESS] pid=3980419 ppid=3980396 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 01:31:17 [PROCESS] pid=3980420 ppid=2869781 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 01:31:17 [PROCESS] pid=3980427 ppid=3980420 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 01:31:17 [EXIT]    pid=3980428 ppid=3980420 exit_code=0   duration=0ms comm=runc:[1:CHILD]
+2026/04/20 01:31:17 [EXIT]    pid=3980427 ppid=3980420 exit_code=0   duration=12ms comm=runc:[0:PARENT]
+2026/04/20 01:31:17 [EXIT]    pid=3980420 ppid=2869781 exit_code=0   duration=85ms comm=runc
+2026/04/20 01:31:17 [PROCESS] pid=3980429 ppid=2869781 uid=0      mnt_ns=4026532825 container=order-processor-frontend                 path=/usr/bin/curl
+2026/04/20 01:31:17 [2026-04-20 01:31:17] ALERT level=MEDIUM rule=curl_from_container container=order-processor-frontend pid=3980429 ppid=2869781 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 01:31:17 [EXIT]    pid=3980429 ppid=2869781 exit_code=0   duration=73ms comm=curl
+2026/04/20 01:31:19 [PROCESS] pid=3980435 ppid=2852483 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 01:31:19 [PROCESS] pid=3980442 ppid=3980435 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 01:31:19 [EXIT]    pid=3980444 ppid=3980435 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 01:31:19 [EXIT]    pid=3980442 ppid=3980435 exit_code=0   duration=23ms comm=runc:[0:PARENT]
+2026/04/20 01:31:20 [PROCESS] pid=3980445 ppid=3980435 uid=0      mnt_ns=4026532370 container=order-processor-localstack               path=/usr/bin/curl
+2026/04/20 01:31:20 [2026-04-20 01:31:20] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=3980445 ppid=3980435 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 01:31:20 [EXIT]    pid=3980435 ppid=2852483 exit_code=0   duration=89ms comm=runc
+2026/04/20 01:31:20 [EXIT]    pid=3980445 ppid=2852483 exit_code=0   duration=96ms comm=curl
+2026/04/20 01:31:21 [PROCESS] pid=3980451 ppid=2868362 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 01:31:21 [PROCESS] pid=3980452 ppid=2869092 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 01:31:21 [PROCESS] pid=3980463 ppid=3980451 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 01:31:21 [PROCESS] pid=3980464 ppid=3980452 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 01:31:21 [EXIT]    pid=3980468 ppid=3980451 exit_code=0   duration=22ms comm=runc:[1:CHILD]
+2026/04/20 01:31:21 [EXIT]    pid=3980463 ppid=3980451 exit_code=0   duration=37ms comm=runc:[0:PARENT]
+2026/04/20 01:31:21 [EXIT]    pid=3980470 ppid=3980452 exit_code=0   duration=5ms comm=runc:[1:CHILD]
+2026/04/20 01:31:21 [EXIT]    pid=3980464 ppid=3980452 exit_code=0   duration=59ms comm=runc:[0:PARENT]
+2026/04/20 01:31:21 [PROCESS] pid=3980471 ppid=3980452 uid=0      mnt_ns=4026532695 container=order-processor-insights_service         path=/usr/bin/curl
+2026/04/20 01:31:21 [2026-04-20 01:31:21] ALERT level=MEDIUM rule=curl_from_container container=order-processor-insights_service pid=3980471 ppid=3980452 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 01:31:21 [EXIT]    pid=3980452 ppid=2869092 exit_code=0   duration=129ms comm=runc
+2026/04/20 01:31:21 [EXIT]    pid=3980451 ppid=2868362 exit_code=0   duration=146ms comm=runc
+2026/04/20 01:31:21 [PROCESS] pid=3980469 ppid=2868362 uid=0      mnt_ns=4026532567 container=order-processor-order_service            path=/usr/bin/curl
+2026/04/20 01:31:21 [2026-04-20 01:31:21] ALERT level=MEDIUM rule=curl_from_container container=order-processor-order_service pid=3980469 ppid=2868362 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 01:31:21 [EXIT]    pid=3980471 ppid=2869092 exit_code=0   duration=113ms comm=curl
+2026/04/20 01:31:21 [EXIT]    pid=3980469 ppid=2868362 exit_code=0   duration=133ms comm=curl
+2026/04/20 01:31:21 [EXIT]    pid=3980419 ppid=3980396 exit_code=0   duration=3871ms comm=python3
+2026/04/20 01:31:21 [PROCESS] pid=3980481 ppid=3980396 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 01:31:22 [PROCESS] pid=3980482 ppid=271154 uid=1000   mnt_ns=4026531841 container=host                                     path=/bin/sh
+2026/04/20 01:31:22 [PROCESS] pid=3980483 ppid=3980482 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/ip
+2026/04/20 01:31:22 [EXIT]    pid=3980483 ppid=3980482 exit_code=0   duration=7ms comm=ip
+2026/04/20 01:31:22 [EXIT]    pid=3980482 ppid=271154 exit_code=0   duration=13ms comm=sh
+2026/04/20 01:31:24 [PROCESS] pid=3980484 ppid=2869676 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 01:31:24 [PROCESS] pid=3980491 ppid=3980484 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 01:31:24 [EXIT]    pid=3980492 ppid=3980484 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 01:31:24 [EXIT]    pid=3980491 ppid=3980484 exit_code=0   duration=25ms comm=runc:[0:PARENT]
+2026/04/20 01:31:24 [PROCESS] pid=3980493 ppid=3980484 uid=0      mnt_ns=4026532760 container=order-processor-gateway                  path=/usr/bin/curl
+2026/04/20 01:31:24 [2026-04-20 01:31:24] ALERT level=MEDIUM rule=curl_from_container container=order-processor-gateway pid=3980493 ppid=3980484 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 01:31:24 [EXIT]    pid=3980484 ppid=2869676 exit_code=0   duration=113ms comm=runc
+2026/04/20 01:31:24 [EXIT]    pid=3980493 ppid=2869676 exit_code=0   duration=96ms comm=curl
+2026/04/20 01:31:24 [PROCESS] pid=3980499 ppid=2850888 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 01:31:24 [PROCESS] pid=3980506 ppid=3980499 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 01:31:24 [EXIT]    pid=3980507 ppid=3980499 exit_code=0   duration=0ms comm=runc:[1:CHILD]
+2026/04/20 01:31:24 [EXIT]    pid=3980506 ppid=3980499 exit_code=0   duration=18ms comm=runc:[0:PARENT]
+2026/04/20 01:31:24 [EXIT]    pid=3980499 ppid=2850888 exit_code=0   duration=85ms comm=runc
+2026/04/20 01:31:24 [PROCESS] pid=3980508 ppid=2850888 uid=0      mnt_ns=4026532303 container=order-processor-redis                    path=/usr/local/bin/redis-cli
+2026/04/20 01:31:24 [EXIT]    pid=3980508 ppid=2850888 exit_code=0   duration=62ms comm=redis-cli
+2026/04/20 01:31:25 [PROCESS] pid=3980514 ppid=704    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/getconf
+2026/04/20 01:31:25 [EXIT]    pid=3980514 ppid=704    exit_code=0   duration=1ms comm=getconf
+2026/04/20 01:31:30 [PROCESS] pid=3980515 ppid=2852483 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 01:31:30 [PROCESS] pid=3980522 ppid=3980515 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 01:31:30 [EXIT]    pid=3980523 ppid=3980515 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 01:31:30 [EXIT]    pid=3980522 ppid=3980515 exit_code=0   duration=21ms comm=runc:[0:PARENT]
+2026/04/20 01:31:30 [PROCESS] pid=3980524 ppid=3980515 uid=0      mnt_ns=4026532370 container=order-processor-localstack               path=/usr/bin/curl
+2026/04/20 01:31:30 [2026-04-20 01:31:30] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=3980524 ppid=3980515 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 01:31:30 [EXIT]    pid=3980515 ppid=2852483 exit_code=0   duration=117ms comm=runc
+2026/04/20 01:31:30 [EXIT]    pid=3980524 ppid=2852483 exit_code=0   duration=109ms comm=curl
+2026/04/20 01:31:34 [EXIT]    pid=3980481 ppid=3980396 exit_code=0   duration=12563ms comm=python3
+2026/04/20 01:31:34 [PROCESS] pid=3980530 ppid=3980396 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 01:31:35 [PROCESS] pid=3980531 ppid=704    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/getconf
+2026/04/20 01:31:35 [EXIT]    pid=3980531 ppid=704    exit_code=0   duration=1ms comm=getconf
+2026/04/20 01:31:36 [EXIT]    pid=3980530 ppid=3980396 exit_code=0   duration=2001ms comm=python3
+2026/04/20 01:31:36 [PROCESS] pid=3980532 ppid=3980396 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 01:31:37 [PROCESS] pid=3980533 ppid=271154 uid=1000   mnt_ns=4026531841 container=host                                     path=/bin/sh
+2026/04/20 01:31:37 [PROCESS] pid=3980534 ppid=3980533 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/ip
+2026/04/20 01:31:37 [EXIT]    pid=3980534 ppid=3980533 exit_code=0   duration=3ms comm=ip
+2026/04/20 01:31:37 [EXIT]    pid=3980533 ppid=271154 exit_code=0   duration=17ms comm=sh
+2026/04/20 01:31:37 [PROCESS] pid=3980535 ppid=3980328 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/docker
+2026/04/20 01:31:37 [EXIT]    pid=3980535 ppid=3980328 exit_code=0   duration=64ms comm=docker
+2026/04/20 01:31:39 [PROCESS] pid=3980543 ppid=2096863 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/sshd
+2026/04/20 01:31:39 [PROCESS] pid=3980545 ppid=2869676 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 01:31:39 [PROCESS] pid=3980552 ppid=3980545 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 01:31:39 [EXIT]    pid=3980554 ppid=3980545 exit_code=0   duration=7ms comm=runc:[1:CHILD]
+2026/04/20 01:31:39 [EXIT]    pid=3980552 ppid=3980545 exit_code=0   duration=27ms comm=runc:[0:PARENT]
+2026/04/20 01:31:39 [EXIT]    pid=3980545 ppid=2869676 exit_code=0   duration=76ms comm=runc
+2026/04/20 01:31:39 [PROCESS] pid=3980555 ppid=2869676 uid=0      mnt_ns=4026532760 container=order-processor-gateway                  path=/usr/bin/curl
+2026/04/20 01:31:39 [2026-04-20 01:31:39] ALERT level=MEDIUM rule=curl_from_container container=order-processor-gateway pid=3980555 ppid=2869676 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 01:31:39 [EXIT]    pid=3980555 ppid=2869676 exit_code=0   duration=74ms comm=curl
+2026/04/20 01:31:40 [PROCESS] pid=3980561 ppid=2852483 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 01:31:40 [PROCESS] pid=3980568 ppid=3980561 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 01:31:40 [EXIT]    pid=3980570 ppid=3980561 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 01:31:40 [EXIT]    pid=3980568 ppid=3980561 exit_code=0   duration=17ms comm=runc:[0:PARENT]
+2026/04/20 01:31:40 [EXIT]    pid=3980544 ppid=3980543 exit_code=255 duration=1034ms comm=sshd
+2026/04/20 01:31:40 [EXIT]    pid=3980543 ppid=2096863 exit_code=255 duration=1062ms comm=sshd
+2026/04/20 01:31:40 [EXIT]    pid=3980561 ppid=2852483 exit_code=0   duration=77ms comm=runc
+2026/04/20 01:31:40 [PROCESS] pid=3980571 ppid=2852483 uid=0      mnt_ns=4026532370 container=order-processor-localstack               path=/usr/bin/curl
+2026/04/20 01:31:40 [2026-04-20 01:31:40] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=3980571 ppid=2852483 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 01:31:40 [EXIT]    pid=3980571 ppid=2852483 exit_code=0   duration=71ms comm=curl
+2026/04/20 01:31:41 [EXIT]    pid=3980532 ppid=3980396 exit_code=0   duration=5131ms comm=python3
+2026/04/20 01:31:41 [PROCESS] pid=3980577 ppid=3980396 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 01:31:45 [EXIT]    pid=3980577 ppid=3980396 exit_code=0   duration=4282ms comm=python3
+2026/04/20 01:31:45 [PROCESS] pid=3980578 ppid=3980396 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 01:31:45 [PROCESS] pid=3980579 ppid=704    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/getconf
+2026/04/20 01:31:45 [EXIT]    pid=3980579 ppid=704    exit_code=0   duration=1ms comm=getconf
+2026/04/20 01:31:50 [PROCESS] pid=3980580 ppid=2852483 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 01:31:50 [PROCESS] pid=3980587 ppid=3980580 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 01:31:50 [EXIT]    pid=3980588 ppid=3980580 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 01:31:50 [EXIT]    pid=3980587 ppid=3980580 exit_code=0   duration=16ms comm=runc:[0:PARENT]
+2026/04/20 01:31:50 [EXIT]    pid=3980580 ppid=2852483 exit_code=0   duration=82ms comm=runc
+2026/04/20 01:31:50 [PROCESS] pid=3980589 ppid=2852483 uid=0      mnt_ns=4026532370 container=order-processor-localstack               path=/usr/bin/curl
+2026/04/20 01:31:50 [2026-04-20 01:31:50] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=3980589 ppid=2852483 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 01:31:50 [EXIT]    pid=3980589 ppid=2852483 exit_code=0   duration=99ms comm=curl
+2026/04/20 01:31:51 [EXIT]    pid=3980578 ppid=3980396 exit_code=0   duration=5649ms comm=python3
+2026/04/20 01:31:51 [PROCESS] pid=3980595 ppid=3980396 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 01:31:52 [PROCESS] pid=3980596 ppid=271154 uid=1000   mnt_ns=4026531841 container=host                                     path=/bin/sh
+2026/04/20 01:31:52 [PROCESS] pid=3980597 ppid=3980596 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/ip
+2026/04/20 01:31:52 [EXIT]    pid=3980597 ppid=3980596 exit_code=0   duration=3ms comm=ip
+2026/04/20 01:31:52 [EXIT]    pid=3980596 ppid=271154 exit_code=0   duration=8ms comm=sh
+2026/04/20 01:31:54 [PROCESS] pid=3980598 ppid=2869676 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 01:31:54 [PROCESS] pid=3980606 ppid=3980598 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 01:31:54 [EXIT]    pid=3980607 ppid=3980598 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 01:31:54 [EXIT]    pid=3980606 ppid=3980598 exit_code=0   duration=20ms comm=runc:[0:PARENT]
+2026/04/20 01:31:54 [PROCESS] pid=3980614 ppid=2850888 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 01:31:54 [PROCESS] pid=3980608 ppid=3980598 uid=0      mnt_ns=4026532760 container=order-processor-gateway                  path=/usr/bin/curl
+2026/04/20 01:31:54 [2026-04-20 01:31:54] ALERT level=MEDIUM rule=curl_from_container container=order-processor-gateway pid=3980608 ppid=3980598 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 01:31:54 [EXIT]    pid=3980598 ppid=2869676 exit_code=0   duration=110ms comm=runc
+2026/04/20 01:31:54 [EXIT]    pid=3980608 ppid=2869676 exit_code=0   duration=72ms comm=curl
+2026/04/20 01:31:54 [PROCESS] pid=3980620 ppid=3980614 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 01:31:54 [EXIT]    pid=3980621 ppid=3980614 exit_code=0   duration=2ms comm=runc:[1:CHILD]
+2026/04/20 01:31:54 [EXIT]    pid=3980620 ppid=3980614 exit_code=0   duration=14ms comm=runc:[0:PARENT]
+2026/04/20 01:31:54 [PROCESS] pid=3980622 ppid=3980614 uid=0      mnt_ns=4026532303 container=order-processor-redis                    path=/usr/local/bin/redis-cli
+2026/04/20 01:31:54 [EXIT]    pid=3980614 ppid=2850888 exit_code=0   duration=115ms comm=runc
+2026/04/20 01:31:54 [EXIT]    pid=3980622 ppid=2850888 exit_code=0   duration=55ms comm=redis-cli
+2026/04/20 01:31:55 [EXIT]    pid=3980595 ppid=3980396 exit_code=0   duration=4065ms comm=python3
+2026/04/20 01:31:55 [PROCESS] pid=3980628 ppid=3980396 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 01:31:55 [PROCESS] pid=3980629 ppid=704    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/getconf
+2026/04/20 01:31:55 [EXIT]    pid=3980629 ppid=704    exit_code=0   duration=1ms comm=getconf
+2026/04/20 01:31:57 [EXIT]    pid=3980628 ppid=3980396 exit_code=0   duration=2340ms comm=python3
+2026/04/20 01:31:57 [PROCESS] pid=3980630 ppid=3980396 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 01:31:59 [EXIT]    pid=3980630 ppid=3980396 exit_code=0   duration=2295ms comm=python3
+2026/04/20 01:31:59 [PROCESS] pid=3980631 ppid=3980396 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 01:32:00 [EXIT]    pid=3980631 ppid=3980396 exit_code=0   duration=212ms comm=python3
+2026/04/20 01:32:00 [PROCESS] pid=3980632 ppid=3980396 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 01:32:00 [PROCESS] pid=3980633 ppid=761    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/ip
+2026/04/20 01:32:00 [EXIT]    pid=3980633 ppid=761    exit_code=0   duration=5ms comm=ip
+2026/04/20 01:32:00 [PROCESS] pid=3980634 ppid=761    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/ip
+2026/04/20 01:32:00 [EXIT]    pid=3980634 ppid=761    exit_code=0   duration=2ms comm=ip
+2026/04/20 01:32:00 [PROCESS] pid=3980635 ppid=761    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/ip
+2026/04/20 01:32:00 [EXIT]    pid=3980635 ppid=761    exit_code=0   duration=3ms comm=ip
+2026/04/20 01:32:00 [PROCESS] pid=3980636 ppid=2852483 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 01:32:00 [PROCESS] pid=3980642 ppid=3980636 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 01:32:00 [EXIT]    pid=3980644 ppid=3980636 exit_code=0   duration=0ms comm=runc:[1:CHILD]
+2026/04/20 01:32:00 [EXIT]    pid=3980642 ppid=3980636 exit_code=0   duration=18ms comm=runc:[0:PARENT]
+2026/04/20 01:32:00 [PROCESS] pid=3980645 ppid=3980636 uid=0      mnt_ns=4026532370 container=order-processor-localstack               path=/usr/bin/curl
+2026/04/20 01:32:00 [2026-04-20 01:32:00] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=3980645 ppid=3980636 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 01:32:00 [EXIT]    pid=3980636 ppid=2852483 exit_code=0   duration=72ms comm=runc
+2026/04/20 01:32:00 [EXIT]    pid=3980645 ppid=2852483 exit_code=0   duration=67ms comm=curl
+2026/04/20 01:32:01 [PROCESS] pid=3980651 ppid=2868312 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 01:32:01 [PROCESS] pid=3980659 ppid=3980651 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 01:32:01 [EXIT]    pid=3980660 ppid=3980651 exit_code=0   duration=0ms comm=runc:[1:CHILD]
+2026/04/20 01:32:01 [EXIT]    pid=3980659 ppid=3980651 exit_code=0   duration=16ms comm=runc:[0:PARENT]
+2026/04/20 01:32:01 [EXIT]    pid=3980651 ppid=2868312 exit_code=0   duration=76ms comm=runc
+2026/04/20 01:32:01 [PROCESS] pid=3980661 ppid=2868312 uid=0      mnt_ns=4026532504 container=order-processor-inventory_service        path=/usr/bin/curl
+2026/04/20 01:32:01 [EXIT]    pid=3980661 ppid=2868312 exit_code=0   duration=105ms comm=curl
+2026/04/20 01:32:02 [EXIT]    pid=3980632 ppid=3980396 exit_code=0   duration=2707ms comm=python3
+2026/04/20 01:32:02 [PROCESS] pid=3980667 ppid=3980396 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 01:32:05 [PROCESS] pid=3980668 ppid=704    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/getconf
+2026/04/20 01:32:05 [EXIT]    pid=3980668 ppid=704    exit_code=0   duration=2ms comm=getconf
+2026/04/20 01:32:07 [PROCESS] pid=3980669 ppid=2868372 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 01:32:07 [PROCESS] pid=3980676 ppid=3980669 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 01:32:07 [EXIT]    pid=3980678 ppid=3980669 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 01:32:07 [EXIT]    pid=3980676 ppid=3980669 exit_code=0   duration=24ms comm=runc:[0:PARENT]
+2026/04/20 01:32:07 [PROCESS] pid=3980685 ppid=271154 uid=1000   mnt_ns=4026531841 container=host                                     path=/bin/sh
+2026/04/20 01:32:07 [PROCESS] pid=3980686 ppid=3980685 uid=1000   mnt_ns=4026531841 container=host                                     path=/usr/bin/ip
+2026/04/20 01:32:07 [EXIT]    pid=3980686 ppid=3980685 exit_code=0   duration=9ms comm=ip
+2026/04/20 01:32:07 [EXIT]    pid=3980685 ppid=271154 exit_code=0   duration=14ms comm=sh
+2026/04/20 01:32:07 [PROCESS] pid=3980687 ppid=3980328 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/docker
+2026/04/20 01:32:07 [PROCESS] pid=3980692 ppid=2868272 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 01:32:07 [PROCESS] pid=3980679 ppid=3980669 uid=1000   mnt_ns=4026532630 container=order-processor-auth_service             path=/usr/bin/curl
+2026/04/20 01:32:07 [2026-04-20 01:32:07] ALERT level=MEDIUM rule=curl_from_container container=order-processor-auth_service pid=3980679 ppid=3980669 uid=1000 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 01:32:07 [EXIT]    pid=3980669 ppid=2868372 exit_code=0   duration=145ms comm=runc
+2026/04/20 01:32:07 [EXIT]    pid=3980687 ppid=3980328 exit_code=0   duration=91ms comm=docker
+2026/04/20 01:32:07 [PROCESS] pid=3980700 ppid=3980692 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 01:32:07 [EXIT]    pid=3980701 ppid=3980692 exit_code=0   duration=0ms comm=runc:[1:CHILD]
+2026/04/20 01:32:07 [EXIT]    pid=3980700 ppid=3980692 exit_code=0   duration=11ms comm=runc:[0:PARENT]
+2026/04/20 01:32:07 [EXIT]    pid=3980679 ppid=2868372 exit_code=0   duration=184ms comm=curl
+2026/04/20 01:32:07 [EXIT]    pid=3980692 ppid=2868272 exit_code=0   duration=152ms comm=runc
+2026/04/20 01:32:07 [PROCESS] pid=3980702 ppid=2868272 uid=0      mnt_ns=4026532441 container=order-processor-user_service             path=/usr/bin/curl
+2026/04/20 01:32:07 [2026-04-20 01:32:07] ALERT level=MEDIUM rule=curl_from_container container=order-processor-user_service pid=3980702 ppid=2868272 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 01:32:07 [EXIT]    pid=3980702 ppid=2868272 exit_code=0   duration=109ms comm=curl
+2026/04/20 01:32:09 [EXIT]    pid=3980667 ppid=3980396 exit_code=0   duration=6223ms comm=python3
+2026/04/20 01:32:09 [PROCESS] pid=3980708 ppid=3980396 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 01:32:09 [PROCESS] pid=3980709 ppid=2869676 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 01:32:09 [PROCESS] pid=3980715 ppid=3980709 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 01:32:09 [EXIT]    pid=3980717 ppid=3980709 exit_code=0   duration=1ms comm=runc:[1:CHILD]
+2026/04/20 01:32:09 [EXIT]    pid=3980715 ppid=3980709 exit_code=0   duration=5ms comm=runc:[0:PARENT]
+2026/04/20 01:32:10 [EXIT]    pid=3980709 ppid=2869676 exit_code=0   duration=73ms comm=runc
+2026/04/20 01:32:10 [PROCESS] pid=3980718 ppid=3980709 uid=0      mnt_ns=4026532760 container=order-processor-gateway                  path=/usr/bin/curl
+2026/04/20 01:32:10 [2026-04-20 01:32:10] ALERT level=MEDIUM rule=curl_from_container container=order-processor-gateway pid=3980718 ppid=3980709 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 01:32:10 [EXIT]    pid=3980718 ppid=2869676 exit_code=0   duration=71ms comm=curl
+2026/04/20 01:32:10 [PROCESS] pid=3980724 ppid=2852483 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 01:32:10 [PROCESS] pid=3980731 ppid=3980724 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 01:32:10 [EXIT]    pid=3980733 ppid=3980724 exit_code=0   duration=0ms comm=runc:[1:CHILD]
+2026/04/20 01:32:10 [EXIT]    pid=3980731 ppid=3980724 exit_code=0   duration=4ms comm=runc:[0:PARENT]
+2026/04/20 01:32:10 [PROCESS] pid=3980734 ppid=3980724 uid=0      mnt_ns=4026532370 container=order-processor-localstack               path=/usr/bin/curl
+2026/04/20 01:32:10 [2026-04-20 01:32:10] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=3980734 ppid=3980724 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 01:32:10 [EXIT]    pid=3980724 ppid=2852483 exit_code=0   duration=60ms comm=runc
+2026/04/20 01:32:10 [EXIT]    pid=3980734 ppid=2852483 exit_code=0   duration=62ms comm=curl
+2026/04/20 01:32:13 [EXIT]    pid=3967719 ppid=3967712 exit_code=255 duration=2048565ms comm=sshd
+2026/04/20 01:32:13 [EXIT]    pid=3967720 ppid=1      exit_code=0   duration=2048405ms comm=bash
+2026/04/20 01:32:13 [EXIT]    pid=3967712 ppid=2096863 exit_code=255 duration=2049258ms comm=sshd
+2026/04/20 01:32:13 [EXIT]    pid=3980708 ppid=3980396 exit_code=0   duration=4638ms comm=python3
+2026/04/20 01:32:13 [PROCESS] pid=3980740 ppid=3980396 uid=1000   mnt_ns=4026531841 container=host                                     path=/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/venv/bin/python3
+2026/04/20 01:32:15 [PROCESS] pid=3980741 ppid=704    uid=0      mnt_ns=4026531841 container=host                                     path=/usr/bin/getconf
+2026/04/20 01:32:15 [EXIT]    pid=3980741 ppid=704    exit_code=0   duration=2ms comm=getconf
+2026/04/20 01:32:16 [EXIT]    pid=3980740 ppid=3980396 exit_code=0   duration=3127ms comm=python3
+2026/04/20 01:32:16 [EXIT]    pid=3980396 ppid=3978833 exit_code=0   duration=65876ms comm=run_all_tests.s
+2026/04/20 01:32:18 [PROCESS] pid=3980742 ppid=2869781 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 01:32:18 [PROCESS] pid=3980750 ppid=3980742 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 01:32:18 [EXIT]    pid=3980751 ppid=3980742 exit_code=0   duration=3ms comm=runc:[1:CHILD]
+2026/04/20 01:32:18 [EXIT]    pid=3980750 ppid=3980742 exit_code=0   duration=13ms comm=runc:[0:PARENT]
+2026/04/20 01:32:18 [PROCESS] pid=3980752 ppid=3980742 uid=0      mnt_ns=4026532825 container=order-processor-frontend                 path=/usr/bin/curl
+2026/04/20 01:32:18 [2026-04-20 01:32:18] ALERT level=MEDIUM rule=curl_from_container container=order-processor-frontend pid=3980752 ppid=3980742 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 01:32:18 [EXIT]    pid=3980742 ppid=2869781 exit_code=0   duration=78ms comm=runc
+2026/04/20 01:32:18 [EXIT]    pid=3980752 ppid=2869781 exit_code=0   duration=68ms comm=curl
+2026/04/20 01:32:20 [PROCESS] pid=3980758 ppid=2852483 uid=0      mnt_ns=4026531841 container=host                                     path=/usr/sbin/runc
+2026/04/20 01:32:20 [PROCESS] pid=3980765 ppid=3980758 uid=0      mnt_ns=4026531841 container=host                                     path=/proc/self/exe
+2026/04/20 01:32:20 [EXIT]    pid=3980767 ppid=3980758 exit_code=0   duration=4ms comm=runc:[1:CHILD]
+2026/04/20 01:32:20 [EXIT]    pid=3980765 ppid=3980758 exit_code=0   duration=16ms comm=runc:[0:PARENT]
+2026/04/20 01:32:20 [PROCESS] pid=3980768 ppid=3980758 uid=0      mnt_ns=4026532370 container=order-processor-localstack               path=/usr/bin/curl
+2026/04/20 01:32:20 [2026-04-20 01:32:20] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=3980768 ppid=3980758 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+2026/04/20 01:32:20 [EXIT]    pid=3980758 ppid=2852483 exit_code=0   duration=81ms comm=runc
+2026/04/20 01:32:20 [EXIT]    pid=3980768 ppid=2852483 exit_code=0   duration=75ms comm=curl
+2026/04/20 01:32:21 Stopping EDR monitor...
