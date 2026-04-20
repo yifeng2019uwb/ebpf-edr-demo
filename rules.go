@@ -105,6 +105,12 @@ func checkProcessRules(event ProcessEvent, container string) *Alert {
 func checkExitRules(event ExitEvent, container string, ppid uint32) *Alert {
 	comm := cstring(event.Comm[:])
 
+	// never alert on host processes — mirrors checkProcessRules behavior
+	// host python3/bash from integration tests and SSH sessions exit non-zero constantly
+	if container == "host" {
+		return nil
+	}
+
 	for _, w := range exitWhitelist {
 		if comm == w {
 			return nil
