@@ -27,6 +27,31 @@ import (
 const TaskCommLen = 128 // must match #define TASK_COMM_LEN 128 in execsnoop.h
 
 // ─────────────────────────────────────────────
+// cstring — convert a fixed-size byte array to Go string using C semantics
+// ─────────────────────────────────────────────
+//
+// WHY NOT bytes.TrimRight(b, "\x00")?
+//
+// bpf_probe_read_user_str writes: "curl\0" then leaves the rest of the buffer
+// untouched (bpf_ringbuf_reserve does NOT zero-initialize memory).
+// So bytes[5..127] may contain garbage from a previous ring buffer slot.
+// bytes.TrimRight scans from the RIGHT — it removes trailing nulls, but stops
+// at the first non-null byte from the right.  If there's any garbage after
+// the null terminator, TrimRight includes it in the output.
+//
+// bpf_get_current_comm uses strncpy — which DOES zero-pad to the full size —
+// so comm is safe either way.  filename (via bpf_probe_read_user_str) is NOT
+// zero-padded, so it MUST use IndexByte.
+//
+// IndexByte finds the FIRST null byte and slices there — correct C-string behavior.
+func cstring(b []byte) string {
+	if i := bytes.IndexByte(b, 0); i >= 0 {
+		return string(b[:i])
+	}
+	return string(b)
+}
+
+// ─────────────────────────────────────────────
 // Event structs — must EXACTLY match C structs in .h files
 // Field order, type, and size must be identical
 // Go reads raw bytes from kernel and maps them to these structs
@@ -241,7 +266,7 @@ func main() {
 			// event.Comm[:] = entire 128-byte array as slice
 			// bytes.TrimRight removes trailing \x00 null bytes
 			// Without trim: "/usr/bin/curl\x00\x00\x00..." — garbage output
-			comm := string(bytes.TrimRight(event.Comm[:], "\x00"))
+			comm := cstring(event.Comm[:])
 
 			container := resolveContainer(event.MntNsId)
 			log.Printf("[PROCESS] pid=%-6d ppid=%-6d uid=%-6d mnt_ns=%-10d container=%-40s path=%s",
@@ -273,7 +298,7 @@ func main() {
 				continue
 			}
 
-			comm := string(bytes.TrimRight(event.Comm[:], "\x00"))
+			comm := cstring(event.Comm[:])
 			durationMs := event.DurationNs / 1_000_000 // convert ns to ms
 
 			log.Printf("[EXIT]    pid=%-6d ppid=%-6d exit_code=%-3d duration=%dms comm=%s",
@@ -303,8 +328,8 @@ func main() {
 				continue
 			}
 
-			comm := string(bytes.TrimRight(event.Comm[:], "\x00"))
-			filename := string(bytes.TrimRight(event.Filename[:], "\x00"))
+			comm := cstring(event.Comm[:])
+			filename := cstring(event.Filename[:])
 			container := resolveContainer(uint32(event.MntNsId))
 
 			// only log sensitive file access — skip routine opens to reduce noise

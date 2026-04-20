@@ -3,7 +3,6 @@
 package main
 
 import (
-	"bytes"
 	"path/filepath"
 	"strings"
 )
@@ -78,7 +77,7 @@ func isWhitelisted(comm string) bool {
 // ─────────────────────────────────────────────
 
 func checkProcessRules(event ProcessEvent, container string) *Alert {
-	comm := string(bytes.TrimRight(event.Comm[:], "\x00"))
+	comm := cstring(event.Comm[:])
 
 	// Never alert on whitelisted processes
 	if isWhitelisted(comm) {
@@ -173,8 +172,8 @@ func checkFileRules(event FileEvent, container string) *Alert {
 		return nil
 	}
 
-	filename := string(bytes.TrimRight(event.Filename[:], "\x00"))
-	comm := string(bytes.TrimRight(event.Comm[:], "\x00"))
+	filename := cstring(event.Filename[:])
+	comm := cstring(event.Comm[:])
 
 	for _, prefix := range sensitiveFilePrefixes {
 		if strings.HasPrefix(filename, prefix) {
@@ -217,7 +216,7 @@ var exitWhitelist = []string{
 }
 
 func checkExitRules(event ExitEvent) *Alert {
-	comm := string(bytes.TrimRight(event.Comm[:], "\x00"))
+	comm := cstring(event.Comm[:])
 
 	for _, w := range exitWhitelist {
 		if comm == w {
