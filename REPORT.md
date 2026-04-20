@@ -17,18 +17,22 @@ Target workload: [cloud-native-order-processor](https://github.com/yifeng2019uwb
 | `execsnoop.bpf.c` | `tracepoint/syscalls/sys_enter_execve` | Process execution — pid, ppid, uid, mnt_ns_id, executable path |
 | `exitsnoop.bpf.c` | `tracepoint/sched/sched_process_exit` | Process exit — pid, exit code, duration |
 | `opensnoop.bpf.c` | `sys_enter_openat` + `sys_exit_openat` | File access — pid, comm, filename, return code |
+| `lsm-connect.bpf.c` | `lsm/socket_connect` | Outbound connections — pid, comm, dst_ip, dst_port, mnt_ns_id |
 
 All compiled via `bpf2go` → Go wrappers auto-generated.
 
 **opensnoop uses a two-probe pattern**: entry captures filename and process context into a BPF hash map; exit checks the return value and emits only if `ret >= 0` (success) or `ret == -EACCES/-EPERM` (access denied to existing file). Files that do not exist (`-ENOENT`) are dropped — this eliminates probe noise from curl checking `~/.curlrc` while still catching `cat /etc/shadow` from a non-root user.
 
+**lsm-connect is audit-only**: always returns `0` — never blocks. The `lsm/socket_connect` hook fires before every `connect()` syscall with no TOCTOU gap. Loopback (127.x.x.x) is filtered in BPF to reduce ring buffer traffic. All other private IP range checks (RFC 1918) are done in Go so policy can change without recompiling BPF.
+
 ### Go Userspace Agent (`main.go`)
 
 - Loads and attaches all eBPF programs using `cilium/ebpf`
 - Reads process events via **perf buffer** (`execsnoop`)
-- Reads exit and file events via **ring buffer** (`exitsnoop`, `opensnoop`)
-- Three concurrent goroutines, one per monitor
+- Reads exit, file, and network events via **ring buffer** (`exitsnoop`, `opensnoop`, `lsm-connect`)
+- Four concurrent goroutines, one per monitor
 - pid→container cache: populated at exec time, consumed at exit time — fixes `container=unknown` in exit alerts
+- Network byte order conversion for lsm-connect IP/port: IP extracted byte-by-byte, port byte-swapped
 - Graceful shutdown on `Ctrl+C`
 
 ### Detection Rules (`rules.go`)
@@ -58,12 +62,21 @@ curl intentionally excluded from process rules — health checks, smoke tests, a
 
 | Rule | Trigger | Severity |
 |------|---------|----------|
-| `short_lived_failure` | Non-zero exit + duration < 100ms | LOW |
+| `short_lived_failure` | Non-zero exit + duration < `shortLivedThresholdMs` (100ms) | LOW |
+
+**Network rules:**
+
+| Rule | Trigger | Severity |
+|------|---------|----------|
+| `external_connect_allowed` | Container in `externalAllowedContainers` connects to external IP | LOW (audit) |
+| `unauthorized_external_connect` | Any other container connects to external IP | HIGH |
+
+Private IPs (RFC 1918: 10.x, 172.16.x, 192.168.x, 169.254.x) are always allowed — Docker bridge, service mesh, internal traffic. Only `inventory_service` is permitted external access (CoinGecko market data).
 
 **Whitelists:**
 - Process: `sshd`, `runc`, `dockerd`, `containerd` — never alert
 - Host processes filtered via `mnt_ns` — no host-level false positives
-- File: `runc:[2:INIT]`, `runc:[1:CHILD]`, `curl` — skip `/etc/passwd` (runtime user resolution)
+- File: `runc:[2:INIT]`, `runc:[1:CHILD]`, `runc`, `curl` — skip `/etc/passwd` (runtime user resolution)
 - Exit: `gpasswd`, `cmp`, `https` — expected non-zero exits
 
 ### Container Correlation (`container.go`)
@@ -96,26 +109,39 @@ Exit events use the pid cache (populated at exec time). Processes running before
 
 ## Validation
 
-### Detections confirmed working
+All 7 test cases in `VALIDATION.md` were executed via `validate.sh` against live containers on the GCP VM. The full CNOP integration test suite ran concurrently to verify no false positives under real service load.
 
-| Attack | Expected Alert | Status |
-|--------|---------------|--------|
-| `docker exec auth_service cat /etc/shadow` | HIGH `sensitive_file_access` | ✅ |
-| `cat /etc/shadow` as uid=1000 (EACCES) | HIGH `sensitive_file_access` | ✅ |
-| Shell spawn inside container | CRITICAL `shell_spawn_container` | ✅ |
-| Container name resolved correctly | `container=order-processor-auth_service` | ✅ |
+### Attack detections — all confirmed
 
-### No false positives during normal operation
+| Test | Attack | Alert | Result |
+|------|--------|-------|--------|
+| T1 | Shell spawn in container | CRITICAL `shell_spawn_container` | ✅ |
+| T2 | `wget` executed in container | HIGH `network_tool_container` | ✅ |
+| T3 | `cat /etc/shadow` (EACCES) | HIGH `sensitive_file_access` | ✅ |
+| T4 | Read `/root/.ssh/id_rsa` | CRITICAL `sensitive_file_access` | ✅ |
+| T5 | Unauthorized external connect (8.8.8.8) | HIGH `unauthorized_external_connect` | ✅ |
+| T6 | inventory_service → CoinGecko | LOW `external_connect_allowed` | ✅ |
+| T7 | Host reads Docker overlay2 filesystem | CRITICAL `host_reads_container_fs` | ✅ |
 
-- Ran full CNOP integration test suite while agent running — no spurious alerts
-- Health checks (`curl localhost`) — no alert (correctly excluded from process rules)
+### No false positives from normal service traffic
+
+- Health checks (`curl localhost`) — no alert
 - Python `certifi` CA bundle reads — no alert (`.pem` not in suffix list)
 - Container startup (`runc` reading `/etc/passwd`) — no alert (whitelisted)
+- inventory_service → CoinGecko during background load — LOW audit log only (not HIGH)
+
+### Known remaining noise (low severity, pending fix)
+
+| Noise | Cause | Fix |
+|-------|-------|-----|
+| LOW `short_lived_failure` for `runc`/`runc:[2:INIT]` on every `docker exec` | Not in `exitWhitelist` | Add to `exitWhitelist` |
+| MEDIUM `sensitive_file_access` for `id` reading `/etc/passwd` on shell spawn | Not in `fileCommWhitelist` | Add `id` to whitelist |
+| LOW `short_lived_failure` for `python3` `container=host` from integration test runner | No host filter in `checkExitRules` | Add `if container == "host" { return nil }` |
 
 ### Evidence
 
-- `legacy/screenshots/` — alert firing alongside integration tests
-- `alerts/alert.log` — sample alert output
+- `snapshots/validateTest200950.png` — full validate.sh run output
+- `alerts/alert.log` — all 7 alerts confirmed
 
 ---
 
@@ -139,8 +165,7 @@ Exit events use the pid cache (populated at exec time). Processes running before
 
 ## What's Next
 
+- Add host filter to `checkExitRules` — suppress noise from host python3/bash exit events
+- Add `id` to `fileCommWhitelist` — suppress MEDIUM noise on every shell spawn
+- Add `runc` variants to `exitWhitelist` — suppress LOW noise on every `docker exec`
 - Restore `.pem` rule with `/site-packages/` path exception
-- `lsm-connect.bpf.c` — network enforcement: only `inventory_service` → `api.coingecko.com`
-- Wire lsm-connect into `main.go`
-- Go unit tests — `rules_test.go`, `container_test.go`
-- Final validation — all rules trigger + integration tests pass simultaneously

@@ -16,8 +16,8 @@ Build a working EDR agent that monitors containerized services using Go + cilium
 
 ### What we build
 - 2 detection monitors: process monitor (execsnoop) + file monitor (opensnoop)
-- 1 enforcement hook: lsm-connect (block suspicious connections at kernel level)
-- Go userspace agent that reads events, matches detection rules, and emits JSON alerts
+- 1 network monitor: lsm-connect (audit outbound connections at kernel level — audit mode, not blocking)
+- Go userspace agent that reads events, matches detection rules, and emits structured alerts
 - Each monitor validated against real container behavior before moving on
 
 ### Out of scope
@@ -79,7 +79,7 @@ ssh -L 8080:localhost:8080 <user>@<GCP_VM_IP>
 │  (detect)                (detect)               │
 │                                                 │
 │  lsm/socket_connect                             │
-│  (block — returns -EPERM)                       │
+│  (audit — always returns 0)                     │
 │         │                    │                  │
 │         └────────────────────┘                  │
 │                          │                      │
@@ -106,8 +106,7 @@ ssh -L 8080:localhost:8080 <user>@<GCP_VM_IP>
 └─────────────────────────────────────────────────┘
 ```
 
-> Phase 1–4: Audit mode only (print JSON alert)
-> Phase 5: Enforce mode (future — requires thorough whitelist validation first)
+> All monitors are audit-only — alerts emitted, no blocking. Safe for a live demo environment.
 
 **What to learn for each part (from [bpf-developer-tutorial](https://github.com/eunomia-bpf/bpf-developer-tutorial)):**
 
@@ -155,13 +154,36 @@ So any of these happening at runtime is suspicious:
 - TBD during implementation
 
 ### Response Mode
-- Phase 1–4: Audit only — JSON alert to stdout
-- Phase 5 (if time allows): narrow enforce demo only
+Audit only — structured alert to stdout and `alerts/alert.log`.
+No blocking. Safe for a live demo environment.
 
 ## 4. Threat Model
-<!-- What we detect and why -->
-- [ ] Detection rules table (Det ID, hook, logic, MITRE, severity)
-- [ ] Known false positives / whitelists
+
+### Detection Rules
+
+| Rule | Hook | Trigger | Severity |
+|------|------|---------|----------|
+| `shell_spawn_container` | execsnoop | bash/sh/zsh/dash spawned inside container | CRITICAL |
+| `unknown_namespace_process` | execsnoop | Process in namespace that is neither host nor any known container | CRITICAL |
+| `host_reads_container_fs` | opensnoop | Host process reads `/var/lib/docker/overlay2/` | CRITICAL |
+| `sensitive_file_access` | opensnoop | SSH keys (`/root/.ssh/`, `/home/.ssh/`) | CRITICAL |
+| `network_tool_container` | execsnoop | nc, ncat, wget executed inside container | HIGH |
+| `sensitive_file_access` | opensnoop | `/etc/shadow`, `/run/secrets/`, `/proc/1/`, `.key`, `id_rsa`, `.env` | HIGH |
+| `unauthorized_external_connect` | lsm-connect | Container connects to external IP — not in allowlist | HIGH |
+| `sensitive_file_access` | opensnoop | `/etc/passwd`, `/etc/group` | MEDIUM |
+| `external_connect_allowed` | lsm-connect | `inventory_service` connects to external IP (CoinGecko audit log) | LOW |
+| `short_lived_failure` | exitsnoop | Non-zero exit + duration < 100ms | LOW |
+
+### Known False Positives / Whitelists
+
+| Whitelist | Suppresses |
+|-----------|-----------|
+| `whitelistComm` (process) | `sshd`, `runc`, `dockerd`, `containerd` — never alert on process rules |
+| `fileCommWhitelist` | `runc`, `runc:[1:CHILD]`, `runc:[2:INIT]`, `curl` — read `/etc/passwd` during init |
+| `exitWhitelist` | `gpasswd`, `cmp`, `https` — expected non-zero exits |
+| `externalAllowedContainers` | `inventory_service` — only container permitted external API access |
+| Host namespace filter | All `container=host` processes skipped in process and file rules |
+| ENOENT drop in opensnoop | Files that don't exist never emit — suppresses config file probing noise |
 
 ## 5. Implementation Plan
 
@@ -173,25 +195,37 @@ So any of these happening at runtime is suspicious:
 - [x] File monitor — opensnoop (two-probe enter+exit, ring buffer) ✅ validated
 - [x] pid→container cache — fixes unknown container and wrong ppid in exit events
 - [x] Hybrid namespace strategy — unknown-ns CRITICAL, host overlay CRITICAL, immediate rescan on miss
-- [ ] Restore .pem rule with path exception for CA bundles
-- [ ] Network enforcement — lsm-connect (socket_connect LSM hook, ring buffer)
-- [ ] Unit tests — rules, container resolver
-- [ ] Final validation — all rules trigger + integration tests pass
+- [x] Network monitor — lsm-connect (socket_connect LSM hook, ring buffer, audit mode) ✅ validated
+- [x] Network rules — RFC 1918 filter, externalAllowedContainers allowlist, unauthorized external HIGH
+- [x] Named constants — shortLivedThresholdMs, nsRefreshInterval, externalAllowedContainers
+- [x] Validation suite — VALIDATION.md + validate.sh, 7 test cases, concurrent integration traffic ✅
+- [ ] Noise fixes — host filter in checkExitRules, `id` in fileCommWhitelist, runc in exitWhitelist
+- [ ] Restore .pem rule with path exception for `/site-packages/` and `/certifi/`
 
 ## 6. Validation
-<!-- How to verify it works -->
-    ### Manual test scenarios
-    - [ ] Manual test scenarios (trigger → expected alert)
-    - [ ] Enforce mode verification
 
-    ### Integration test validation
-    - Run `run_all_tests.sh` while monitor active
-    - Verify: no false positive alerts during normal test run
-    - Verify: alerts trigger when test intentionally violates rules
+See `VALIDATION.md` for full test procedure and `validate.sh` for automated execution.
 
-    ### Evidence
-    - Screenshots of alerts triggering
-    - Alert log showing correct severity/rule/pid
-    - Integration test output showing tests pass alongside monitor
+### Manual test scenarios — all confirmed ✅
+
+| Test | Command | Expected | Result |
+|------|---------|----------|--------|
+| T1 Shell spawn | `docker exec auth_service bash -c "id"` | CRITICAL `shell_spawn_container` | ✅ |
+| T2 Network tool | `docker exec auth_service wget http://1.1.1.1` | HIGH `network_tool_container` | ✅ |
+| T3 Shadow file | `docker exec auth_service cat /etc/shadow` | HIGH `sensitive_file_access` | ✅ |
+| T4 SSH key | `docker exec auth_service cat /root/.ssh/id_rsa` | CRITICAL `sensitive_file_access` | ✅ |
+| T5 Unauthorized connect | python3 socket to 8.8.8.8:80 from auth_service | HIGH `unauthorized_external_connect` | ✅ |
+| T6 Authorized connect | inventory_service → CoinGecko | LOW `external_connect_allowed` | ✅ |
+| T7 Host reads container FS | `cat /var/lib/docker/overlay2/.../etc/hostname` | CRITICAL `host_reads_container_fs` | ✅ |
+
+### Integration test validation ✅
+
+- Run `run_all_tests.sh all` concurrently while attack tests fire
+- No CRITICAL or HIGH alerts from normal service traffic
+- inventory_service → CoinGecko generates LOW audit log only
+
+### Evidence
+- `snapshots/validateTest200950.png` — full validate.sh terminal output
+- `alerts/alert.log` — all 7 alerts confirmed in real output
 
 
