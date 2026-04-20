@@ -53,12 +53,14 @@ var networkBinaries = []string{
 // exitWhitelist — processes that legitimately exit quickly with non-zero codes.
 // Suppresses LOW short_lived_failure noise for known-good tools.
 var exitWhitelist = []string{
-	"gpasswd",      // Docker modifies groups during container startup
-	"cmp",          // file comparison — non-zero means files differ, not an error
-	"https",        // GCP guest agent helper
-	"runc",         // container runtime — exits non-zero during docker exec setup
+	"gpasswd",        // Docker modifies groups during container startup
+	"cmp",            // file comparison — non-zero means files differ, not an error
+	"https",          // GCP guest agent helper
+	"runc",           // container runtime — exits non-zero during docker exec setup
 	"runc:[1:CHILD]", // runc child process — transient, exits immediately
 	"runc:[2:INIT]",  // runc init process — transient, exits immediately
+	"which",          // exits 1 when binary not found — normal search behavior
+	"mkdir",          // exits non-zero when directory already exists (EEXIST) — expected in scripts
 }
 
 // ── File policy ───────────────────────────────────────────────────────────────
@@ -72,6 +74,7 @@ var fileCommWhitelist = []string{
 	"curl",           // calls getpwuid() to find home directory before looking up ~/.curlrc
 	"id",             // reads /etc/passwd and /etc/group by design — that is its only purpose
 	"systemd-logind", // session manager reads /etc/passwd, /proc/1/ during login events — runs in private mount ns
+	"bash",           // getpwuid() at startup reads /etc/passwd for prompt/PS1 — shell_spawn CRITICAL already fires
 }
 
 // Sensitive file paths — severity reflects actual risk.
