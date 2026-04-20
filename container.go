@@ -146,9 +146,10 @@ func dockerIDToName() map[string]string {
 }
 
 // containerIDFromCgroup reads /proc/<pid>/cgroup and extracts the full Docker container ID.
-// Docker cgroup path example:
+// Handles both cgroup formats:
 //
-//	12:devices:/docker/a3f8c2d1b4e5f6...64chars...
+//	cgroupv1: 12:devices:/docker/a3f8c2d1b4e5...64chars...
+//	cgroupv2: 0::/system.slice/docker-a3f8c2d1b4e5...64chars....scope
 func containerIDFromCgroup(pid string) string {
 	path := fmt.Sprintf("/proc/%s/cgroup", pid)
 	f, err := os.Open(path)
@@ -160,16 +161,28 @@ func containerIDFromCgroup(pid string) string {
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		line := scanner.Text()
-		if !strings.Contains(line, "/docker/") {
-			continue
+
+		// cgroupv1: .../docker/<id>
+		if strings.Contains(line, "/docker/") {
+			parts := strings.Split(line, "/docker/")
+			if len(parts) >= 2 {
+				id := strings.TrimSpace(parts[len(parts)-1])
+				if len(id) >= 12 {
+					return id
+				}
+			}
 		}
-		parts := strings.Split(line, "/docker/")
-		if len(parts) < 2 {
-			continue
-		}
-		id := strings.TrimSpace(parts[len(parts)-1])
-		if len(id) >= 12 {
-			return id // full 64-char container ID
+
+		// cgroupv2: ...docker-<id>.scope
+		if strings.Contains(line, "docker-") && strings.Contains(line, ".scope") {
+			start := strings.Index(line, "docker-") + len("docker-")
+			end := strings.LastIndex(line, ".scope")
+			if end > start {
+				id := line[start:end]
+				if len(id) >= 12 {
+					return id
+				}
+			}
 		}
 	}
 	return ""
