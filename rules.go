@@ -1,5 +1,9 @@
 //go:build linux
 
+// rules.go — detection logic only.
+// All allow/block lists and thresholds live in policy.go.
+// All event structs and converters live in processors.go.
+
 package main
 
 import (
@@ -8,48 +12,6 @@ import (
 	"path/filepath"
 	"strings"
 )
-
-// ─────────────────────────────────────────────
-// Whitelist — known good processes, never alert
-// ─────────────────────────────────────────────
-
-var whitelistComm = []string{
-	"sshd",       // your SSH access from laptop
-	"runc",       // Docker container runtime
-	"dockerd",    // Docker daemon
-	"containerd", // container runtime
-	"ip",         // OpenClaw heartbeat
-	"getconf",    // GCP guest agent
-}
-
-// ─────────────────────────────────────────────
-// Detection lists
-// ─────────────────────────────────────────────
-
-var shellBinaries = []string{
-	"/bash", "/sh", "/zsh", "/dash",
-}
-
-var networkBinaries = []string{
-	"/nc", "/ncat", "/wget",
-	// curl intentionally excluded — destination-aware detection handled in lsm-connect
-}
-
-// ─────────────────────────────────────────────
-// Network policy
-// ─────────────────────────────────────────────
-
-// allowedMarketAPI is the only external domain any service may connect to.
-// Enforced in lsm-connect network rules — only containers in externalAllowedContainers
-// may make external connections, and their destination is logged for audit.
-const allowedMarketAPI = "api.coingecko.com"
-
-// externalAllowedContainers — containers permitted to make external network connections.
-// All other containers connecting outside private IP ranges will trigger HIGH alert.
-// Add entries here when a new service needs external API access.
-var externalAllowedContainers = []string{
-	"order-processor-inventory_service", // calls CoinGecko for live market data
-}
 
 // ─────────────────────────────────────────────
 // Helper functions
@@ -140,17 +102,6 @@ func checkProcessRules(event ProcessEvent, container string) *Alert {
 // Exit rules
 // ─────────────────────────────────────────────
 
-// shortLivedThresholdMs is the maximum process duration (in milliseconds) that,
-// combined with a non-zero exit code, is considered suspicious — possible failed exploit.
-const shortLivedThresholdMs = 100
-
-// System tools that legitimately exit quickly with non-zero codes — not suspicious
-var exitWhitelist = []string{
-	"gpasswd", // Docker modifies groups during container startup
-	"cmp",     // file comparison — non-zero means files differ, not an error
-	"https",   // GCP guest agent helper
-}
-
 func checkExitRules(event ExitEvent, container string, ppid uint32) *Alert {
 	comm := cstring(event.Comm[:])
 
@@ -181,53 +132,6 @@ func checkExitRules(event ExitEvent, container string, ppid uint32) *Alert {
 // ─────────────────────────────────────────────
 // File access rules
 // ─────────────────────────────────────────────
-
-// Processes that legitimately read /etc/passwd or other system files as part of
-// normal startup — suppress to avoid noise on every container start or HTTP request.
-//
-// runc:[2:INIT] / runc:[1:CHILD] / runc — read /etc/passwd to resolve user IDs
-// curl — calls getpwuid() to find home directory before looking up ~/.curlrc
-//        curl detection (destination-aware) is handled in lsm-connect, not here
-var fileCommWhitelist = []string{
-	"runc:[2:INIT]",
-	"runc:[1:CHILD]",
-	"runc",
-	"curl",
-}
-
-// Sensitive file paths — severity reflects actual risk.
-//
-// CRITICAL — credential material, direct privilege escalation
-// HIGH     — secrets, private keys, container escape indicators
-// MEDIUM   — world-readable system files: suspicious from some processes, normal for others
-//
-// NOTE: /root/.curlrc and similar config probes are suppressed naturally by the
-// sys_exit_openat hook — files that don't exist return ENOENT (ret < 0) and are dropped
-// before reaching Go. Only successful opens reach checkFileRules.
-var criticalFilePrefixes = []string{
-	"/root/.ssh/",    // SSH private keys and authorized_keys
-	"/home/.ssh/",    // user SSH keys
-}
-
-var highFilePrefixes = []string{
-	"/etc/shadow",    // password hashes — no legitimate app reads this at runtime
-	"/run/secrets/",  // Docker secrets mount
-	"/proc/1/",       // host init process — container escape indicator
-}
-
-var highFileSuffixes = []string{
-	".key",       // private keys
-	// .pem intentionally excluded — too broad: Python certifi, CA bundles, cert chains
-	// all use .pem extension. Private keys are caught by .key and id_* names below.
-	"id_rsa",     // SSH private key
-	"id_ed25519", // SSH private key
-	".env",       // environment secrets
-}
-
-var mediumFilePrefixes = []string{
-	"/etc/passwd", // user accounts — world-readable but unexpected from app code
-	"/etc/group",  // group memberships
-}
 
 func checkFileRules(event FileEvent, container string) *Alert {
 	filename := cstring(event.Filename[:])
@@ -331,22 +235,6 @@ func checkFileRules(event FileEvent, container string) *Alert {
 // ─────────────────────────────────────────────
 // Network rules
 // ─────────────────────────────────────────────
-
-// privateNets — RFC 1918 + link-local ranges that are always allowed.
-// Initialized once at startup. Loopback (127.x.x.x) is filtered in BPF already.
-var privateNets []*net.IPNet
-
-func init() {
-	for _, cidr := range []string{
-		"10.0.0.0/8",     // RFC 1918 — private class A
-		"172.16.0.0/12",  // RFC 1918 — private class B (includes Docker bridge 172.17.x)
-		"192.168.0.0/16", // RFC 1918 — private class C
-		"169.254.0.0/16", // link-local (APIPA)
-	} {
-		_, n, _ := net.ParseCIDR(cidr)
-		privateNets = append(privateNets, n)
-	}
-}
 
 func isPrivateIP(ip net.IP) bool {
 	for _, n := range privateNets {

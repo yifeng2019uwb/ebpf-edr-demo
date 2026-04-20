@@ -10,7 +10,6 @@ import (
 	"bytes"
 	"encoding/binary" // standard Go library — parse raw bytes into structs
 	"log"
-	"net"
 	"os"
 	"os/signal"
 	"syscall"
@@ -20,109 +19,6 @@ import (
 	"github.com/cilium/ebpf/ringbuf" // read from BPF_MAP_TYPE_RINGBUF (new pattern)
 	"github.com/cilium/ebpf/rlimit"  // remove memory lock limit for eBPF
 )
-
-// ─────────────────────────────────────────────
-// Constants — must match values in .h files
-// ─────────────────────────────────────────────
-
-const TaskCommLen = 128 // must match #define TASK_COMM_LEN 128 in execsnoop.h
-
-// ─────────────────────────────────────────────
-// cstring — convert a fixed-size byte array to Go string using C semantics
-// ─────────────────────────────────────────────
-//
-// WHY NOT bytes.TrimRight(b, "\x00")?
-//
-// bpf_probe_read_user_str writes: "curl\0" then leaves the rest of the buffer
-// untouched (bpf_ringbuf_reserve does NOT zero-initialize memory).
-// So bytes[5..127] may contain garbage from a previous ring buffer slot.
-// bytes.TrimRight scans from the RIGHT — it removes trailing nulls, but stops
-// at the first non-null byte from the right.  If there's any garbage after
-// the null terminator, TrimRight includes it in the output.
-//
-// bpf_get_current_comm uses strncpy — which DOES zero-pad to the full size —
-// so comm is safe either way.  filename (via bpf_probe_read_user_str) is NOT
-// zero-padded, so it MUST use IndexByte.
-//
-// IndexByte finds the FIRST null byte and slices there — correct C-string behavior.
-func cstring(b []byte) string {
-	if i := bytes.IndexByte(b, 0); i >= 0 {
-		return string(b[:i])
-	}
-	return string(b)
-}
-
-// ─────────────────────────────────────────────
-// Event structs — must EXACTLY match C structs in .h files
-// Field order, type, and size must be identical
-// Go reads raw bytes from kernel and maps them to these structs
-// Uppercase fields = exported (required for binary.Read to access them)
-// ─────────────────────────────────────────────
-
-// ProcessEvent matches execsnoop.h struct event
-// Captures: which process was executed, by whom, and from which container
-// Field order + types must EXACTLY match C struct layout (no padding gaps)
-type ProcessEvent struct {
-	Pid     int32             // process ID (from kernel tgid)
-	Ppid    int32             // parent process ID (who spawned this)
-	Uid     int32             // user ID (0=root, 1000=your user)
-	MntNsId uint32            // mount namespace ID — which container this belongs to
-	Comm    [TaskCommLen]byte // binary path e.g. /usr/bin/curl (128 bytes)
-}
-
-// FileEvent matches opensnoop.h struct file_event
-// Captures: which file was opened, by which process, from which container
-// sizeof = 8+4+4+4+4+128+256 = 408 bytes, no implicit padding
-type FileEvent struct {
-	MntNsId  uint64              // offset 0   — mount namespace ID
-	Pid      int32               // offset 8   — process ID
-	Ppid     int32               // offset 12  — parent process ID
-	Uid      uint32              // offset 16  — user ID
-	Pad      uint32              // offset 20  — explicit padding
-	Comm     [TaskCommLen]byte   // offset 24  — process name (e.g. "python3")
-	Filename [256]byte           // offset 152 — file path being opened
-}
-
-// ExitEvent matches exitsnoop.h struct event
-// Captures: which process exited, how long it ran, exit code
-// Field order MUST match C struct exactly — binary.Read maps raw bytes directly
-// sizeof(C struct) = 8+4+4+4+4+128 = 152 bytes, no implicit padding
-type ExitEvent struct {
-	DurationNs uint64            // offset 0  — duration in nanoseconds
-	Pid        uint32            // offset 8  — process ID
-	Ppid       uint32            // offset 12 — parent process ID
-	ExitCode   uint32            // offset 16 — exit code (0=normal)
-	Pad        uint32            // offset 20 — matches explicit pad in C struct
-	Comm       [TaskCommLen]byte // offset 24 — process name
-}
-
-// NetEvent matches lsm-connect.h struct net_event
-// Captures: which process made a network connection, to which IP/port
-// sizeof = 8+4+2+2+4+4+4+4+128 = 160 bytes, no implicit padding
-type NetEvent struct {
-	MntNsId uint64            // offset 0  — mount namespace ID
-	DstIp   uint32            // offset 8  — destination IP (network byte order)
-	DstPort uint16            // offset 12 — destination port (network byte order)
-	Pad1    uint16            // offset 14 — explicit padding
-	Pid     int32             // offset 16 — process ID
-	Ppid    int32             // offset 20 — parent process ID
-	Uid     uint32            // offset 24 — user ID
-	Pad2    uint32            // offset 28 — explicit padding
-	Comm    [TaskCommLen]byte // offset 32 — process name
-}
-
-// netIP converts the DstIp field (network byte order, read as little-endian uint32)
-// back to a net.IP suitable for comparison and display.
-// See lsm-connect.h for the byte-order explanation.
-func netIP(n uint32) net.IP {
-	return net.IPv4(byte(n), byte(n>>8), byte(n>>16), byte(n>>24))
-}
-
-// netPort converts the DstPort field (network byte order, read as little-endian uint16)
-// to host byte order by swapping the two bytes.
-func netPort(n uint16) uint16 {
-	return (n >> 8) | (n << 8)
-}
 
 // ─────────────────────────────────────────────
 // Main entry point

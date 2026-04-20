@@ -288,6 +288,29 @@ when pid cache misses. Requires exitsnoop BPF struct change + Go ExitEvent updat
 
 ---
 
+### Ingress detection (lsm/socket_accept) — decided against
+
+Discussed: adding `SEC("lsm/socket_accept")` to detect inbound connections — port scanners,
+unexpected listeners, reverse shell callbacks.
+
+**Decision: out of scope for this project.**
+
+Reasons:
+1. **Noise**: every inter-service API call (gateway → auth, gateway → inventory, etc.) triggers
+   socket_accept. Without a container-level allowlist of expected inbound sources, every
+   legitimate request fires an event. The order-processor has ~8 services making constant calls.
+2. **Already covered**: the reverse shell scenario (attacker plants a listener, connects back)
+   is already caught by `shell_spawn_container` CRITICAL (bash spawned) and
+   `network_tool_container` HIGH (nc/ncat executed). Ingress would add a third alert for the
+   same attack.
+3. **Where it adds value**: detecting unexpected listening containers, or external scanners
+   hitting internal services. Both require knowing which containers *should* accept connections —
+   another policy list to maintain. Better fit for a dedicated network security tool.
+
+If revisited: reuse `net_event` struct, add a `direction` flag (0=outbound, 1=inbound).
+
+---
+
 ## Rule Philosophy (learned from trial and error)
 
 1. **Never remove a rule just to reduce noise** — that creates a blind spot. Tune it instead.
