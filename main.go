@@ -181,17 +181,29 @@ func main() {
 	}
 	defer exitTp.Close()
 
-	// Attach opensnoop — file access monitor
-	fileTp, err := link.Tracepoint(
+	// Attach opensnoop — two probes: enter captures filename, exit checks return value
+	// Only emits when ret >= 0 (file actually opened) — drops ENOENT/EACCES probes
+	fileEnterTp, err := link.Tracepoint(
 		"syscalls",
 		"sys_enter_openat",
-		fileObjs.TracepointSyscallsSysEnterOpenat,
+		fileObjs.HandleEnter,
 		nil,
 	)
 	if err != nil {
-		log.Fatalf("attaching file tracepoint: %v", err)
+		log.Fatalf("attaching file enter tracepoint: %v", err)
 	}
-	defer fileTp.Close()
+	defer fileEnterTp.Close()
+
+	fileExitTp, err := link.Tracepoint(
+		"syscalls",
+		"sys_exit_openat",
+		fileObjs.HandleExit,
+		nil,
+	)
+	if err != nil {
+		log.Fatalf("attaching file exit tracepoint: %v", err)
+	}
+	defer fileExitTp.Close()
 
 	// Step 4: Open readers for each eBPF map
 	// execsnoop uses PERF_EVENT_ARRAY (old pattern) → perf.NewReader

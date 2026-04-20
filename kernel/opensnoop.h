@@ -3,7 +3,8 @@
 //   - original had no header file (only bpf_printk stub)
 //   - added full file_event struct with mnt_ns_id, pid, ppid, uid, comm, filename
 //   - field order chosen to avoid implicit C alignment padding
-// opensnoop.h — shared struct between opensnoop.bpf.c and Go userspace
+// opensnoop.h — struct file_event shared between opensnoop.bpf.c and Go userspace
+// struct pending_open (BPF-internal scratch space) is defined in opensnoop.bpf.c only
 #ifndef __OPENSNOOP_H
 #define __OPENSNOOP_H
 

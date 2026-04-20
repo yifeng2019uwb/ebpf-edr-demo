@@ -5,6 +5,8 @@
 //   - added mnt_ns_id via BPF_CORE_READ for container correlation
 //   - changed from perf buffer to ring buffer (BPF_MAP_TYPE_RINGBUF) — lower overhead
 //   - filtered to process-level opens only (tgid == tid)
+//   - split into enter+exit probes: only emit on successful open (ret >= 0)
+//     eliminates false positives from config file probing (curl ~/.curlrc, etc.)
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 
 #include "vmlinux.h"
@@ -14,45 +16,113 @@
 
 char LICENSE[] SEC("license") = "GPL";
 
+// Ring buffer — emits successfully opened file events to Go userspace
 struct {
 	__uint(type, BPF_MAP_TYPE_RINGBUF);
 	__uint(max_entries, 256 * 1024);
 } rb SEC(".maps");
 
-SEC("tracepoint/syscalls/sys_enter_openat")
-int tracepoint__syscalls__sys_enter_openat(struct trace_event_raw_sys_enter *ctx)
-{
-	struct task_struct *task;
-	struct file_event *e;
-	u64 id;
-	u32 tgid, tid;
+// ── Two-probe pattern ────────────────────────────────────────────────────────
+// Problem with a single sys_enter hook: we emit an event for every openat()
+// call, including probes for files that do not exist (e.g. curl checks
+// ~/.curlrc on every invocation — gets ENOENT, never reads the file).
+// This generates HIGH alerts for harmless config-file probing.
+//
+// Solution: split into enter + exit.
+//   sys_enter_openat — capture filename + process context, store in hash map
+//   sys_exit_openat  — read return value; emit ONLY if ret >= 0 (file opened)
+//
+// ret >= 0 = valid file descriptor: the file was actually opened.
+// ret <  0 = errno (ENOENT, EACCES, …): syscall failed, no file was read.
+//
+// pending_opens is a per-tid scratch space between the two probes.
+// Keyed by tid (not tgid) so concurrent threads don't overwrite each other.
+// ────────────────────────────────────────────────────────────────────────────
 
-	id   = bpf_get_current_pid_tgid();
-	tgid = id >> 32;
-	tid  = (u32)id;
+// BPF-internal only — NOT shared with Go userspace.
+// Stores event data between sys_enter and sys_exit.
+struct pending_open {
+	__u64 mnt_ns_id;
+	int   pid;
+	int   ppid;
+	__u32 uid;
+	__u32 _pad;                        // explicit pad — keeps struct size 8-byte aligned
+	char  comm[TASK_COMM_LEN];
+	char  filename[MAX_FILENAME_LEN];
+};
+
+struct {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__uint(max_entries, 10240);        // max concurrent in-flight opens
+	__type(key,   __u32);             // tid
+	__type(value, struct pending_open);
+} pending_opens SEC(".maps");
+
+// sys_enter_openat — capture filename and process context.
+// Does NOT emit yet — we don't know if the open will succeed.
+SEC("tracepoint/syscalls/sys_enter_openat")
+int handle_enter(struct trace_event_raw_sys_enter *ctx)
+{
+	u64 id   = bpf_get_current_pid_tgid();
+	u32 tgid = id >> 32;
+	u32 tid  = (u32)id;
 
 	// ignore thread-level calls — only track process-level opens
 	if (tgid != tid)
 		return 0;
 
-	// reserve space in ring buffer
-	e = bpf_ringbuf_reserve(&rb, sizeof(*e), 0);
+	struct pending_open po = {};
+	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+
+	po.mnt_ns_id = BPF_CORE_READ(task, nsproxy, mnt_ns, ns.inum);
+	po.pid       = tgid;
+	po.ppid      = BPF_CORE_READ(task, real_parent, tgid);
+	po.uid       = (u32)bpf_get_current_uid_gid();
+	po._pad      = 0;
+
+	bpf_get_current_comm(&po.comm, sizeof(po.comm));
+
+	// args[1] is the filename pointer passed to openat syscall
+	// must read from user space here — pointer is valid at entry time
+	char *filename_ptr = (char *)BPF_CORE_READ(ctx, args[1]);
+	bpf_probe_read_user_str(po.filename, sizeof(po.filename), filename_ptr);
+
+	bpf_map_update_elem(&pending_opens, &tid, &po, BPF_ANY);
+	return 0;
+}
+
+// sys_exit_openat — emit event ONLY if the open succeeded.
+// ctx->ret >= 0: valid fd returned, file was actually opened → emit alert.
+// ctx->ret <  0: syscall failed (ENOENT, EACCES, …) → drop silently.
+SEC("tracepoint/syscalls/sys_exit_openat")
+int handle_exit(struct trace_event_raw_sys_exit *ctx)
+{
+	u64 id  = bpf_get_current_pid_tgid();
+	u32 tid = (u32)id;
+
+	struct pending_open *po = bpf_map_lookup_elem(&pending_opens, &tid);
+	if (!po)
+		return 0;
+
+	// always delete — whether we emit or not, entry is done
+	bpf_map_delete_elem(&pending_opens, &tid);
+
+	// file was not opened — ENOENT, EACCES, etc.  No real access occurred.
+	if (ctx->ret < 0)
+		return 0;
+
+	struct file_event *e = bpf_ringbuf_reserve(&rb, sizeof(*e), 0);
 	if (!e)
 		return 0;
 
-	task = (struct task_struct *)bpf_get_current_task();
-
-	e->mnt_ns_id = BPF_CORE_READ(task, nsproxy, mnt_ns, ns.inum);
-	e->pid       = tgid;
-	e->ppid      = BPF_CORE_READ(task, real_parent, tgid);
-	e->uid       = (u32)bpf_get_current_uid_gid();
+	e->mnt_ns_id = po->mnt_ns_id;
+	e->pid       = po->pid;
+	e->ppid      = po->ppid;
+	e->uid       = po->uid;
 	e->pad       = 0;
 
-	bpf_get_current_comm(&e->comm, sizeof(e->comm));
-
-	// args[1] is the filename pointer passed to openat syscall
-	char *filename_ptr = (char *)BPF_CORE_READ(ctx, args[1]);
-	bpf_probe_read_user_str(e->filename, sizeof(e->filename), filename_ptr);
+	__builtin_memcpy(e->comm,     po->comm,     sizeof(e->comm));
+	__builtin_memcpy(e->filename, po->filename, sizeof(e->filename));
 
 	bpf_ringbuf_submit(e, 0);
 	return 0;
