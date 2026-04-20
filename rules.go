@@ -11,7 +11,6 @@ import (
 // Whitelist — known good processes, never alert
 // ─────────────────────────────────────────────
 
-// Processes always allowed regardless of context
 var whitelistComm = []string{
 	"sshd",       // your SSH access from laptop
 	"runc",       // Docker container runtime
@@ -31,23 +30,19 @@ var shellBinaries = []string{
 
 var networkBinaries = []string{
 	"/nc", "/ncat", "/wget",
-	// NOTE: curl excluded here — handled separately with context
+	// curl intentionally excluded — destination-aware detection handled in lsm-connect
 }
 
 // ─────────────────────────────────────────────
-// Network policy — per container
+// Network policy
 // ─────────────────────────────────────────────
-
-// Containers allowed to make external HTTP/curl calls (process-level check)
-// Add more here if a new service needs external API access
-var curlAllowedContainers = []string{
-	"order-processor-inventory_service", // calls CoinGecko for market data
-}
 
 // allowedMarketAPI is the only external domain inventory_service may connect to.
-// Enforced at network level in lsm-connect rules (not here — execsnoop has no URL).
+// NOTE: curl detection belongs in lsm-connect, not here.
+// execsnoop sees the binary name but not the destination — it cannot distinguish
+// "curl http://localhost/health" (health check) from "curl https://evil.com" (attack).
+// lsm-connect hooks the network connection and enforces this constant at the IP level.
 const allowedMarketAPI = "api.coingecko.com"
-
 
 // ─────────────────────────────────────────────
 // Helper functions
@@ -79,17 +74,16 @@ func isWhitelisted(comm string) bool {
 func checkProcessRules(event ProcessEvent, container string) *Alert {
 	comm := cstring(event.Comm[:])
 
-	// Never alert on whitelisted processes
 	if isWhitelisted(comm) {
 		return nil
 	}
 
-	// Never alert on host processes — only watch containers
+	// never alert on host processes — only watch containers
 	if container == "host" {
 		return nil
 	}
 
-	// Alert: shell spawned from container (any uid — shells in containers are unexpected)
+	// Alert: shell spawned inside a container — possible RCE
 	if matchesSuffix(comm, shellBinaries) {
 		return &Alert{
 			Level:     "CRITICAL",
@@ -103,7 +97,7 @@ func checkProcessRules(event ProcessEvent, container string) *Alert {
 		}
 	}
 
-	// Alert: network tools from containers
+	// Alert: raw network tools (nc, ncat, wget) from containers
 	if matchesSuffix(comm, networkBinaries) {
 		return &Alert{
 			Level:     "HIGH",
@@ -117,113 +111,12 @@ func checkProcessRules(event ProcessEvent, container string) *Alert {
 		}
 	}
 
-	// Alert: curl from container
-	// some services are allowed to call external APIs — see curlAllowedContainers
-	if strings.HasSuffix(comm, "/curl") {
-		for _, allowed := range curlAllowedContainers {
-			if container == allowed {
-				return nil // expected — this container is allowed to use curl
-			}
-		}
-		return &Alert{
-			Level:     "MEDIUM",
-			Rule:      "curl_from_container",
-			Message:   "curl executed from container — verify if expected",
-			Pid:       event.Pid,
-			Ppid:      event.Ppid,
-			Uid:       event.Uid,
-			Comm:      comm,
-			Container: container,
-		}
-	}
-
-	return nil // clean
+	return nil
 }
 
 // ─────────────────────────────────────────────
 // Exit rules
 // ─────────────────────────────────────────────
-
-// ─────────────────────────────────────────────
-// File access rules
-// ─────────────────────────────────────────────
-
-// Container runtime processes that legitimately read /etc/passwd during startup
-// runc:[2:INIT] — container init process, reads passwd to resolve user IDs
-// runc:[1:CHILD] — intermediate runc process during container creation
-// These fire on every container start — not suspicious
-var fileCommWhitelist = []string{
-	"runc:[2:INIT]",
-	"runc:[1:CHILD]",
-	"runc",
-}
-
-// Sensitive files — access from containers should alert
-// Any service reading these at runtime (not startup) is suspicious
-var sensitiveFilePrefixes = []string{
-	"/etc/shadow",        // password hashes
-	"/etc/passwd",        // user accounts
-	"/root/",             // root home directory
-	"/run/secrets/",      // Docker secrets
-	"/proc/1/",           // host init process — container escape indicator
-}
-
-var sensitiveFileSuffixes = []string{
-	".key",     // private keys
-	".pem",     // certificates / private keys
-	".env",     // environment secrets
-	"id_rsa",   // SSH private key
-	"id_ed25519", // SSH private key
-}
-
-func checkFileRules(event FileEvent, container string) *Alert {
-	// only watch container processes
-	if container == "host" || container == "" {
-		return nil
-	}
-
-	filename := cstring(event.Filename[:])
-	comm := cstring(event.Comm[:])
-
-	// skip container runtime processes — they read /etc/passwd at startup legitimately
-	for _, w := range fileCommWhitelist {
-		if comm == w {
-			return nil
-		}
-	}
-
-	for _, prefix := range sensitiveFilePrefixes {
-		if strings.HasPrefix(filename, prefix) {
-			return &Alert{
-				Level:     "HIGH",
-				Rule:      "sensitive_file_access",
-				Message:   "Container accessed sensitive file: " + filename,
-				Pid:       event.Pid,
-				Ppid:      event.Ppid,
-				Uid:       int32(event.Uid),
-				Comm:      comm,
-				Container: container,
-			}
-		}
-	}
-
-	for _, suffix := range sensitiveFileSuffixes {
-		if strings.HasSuffix(filename, suffix) {
-			return &Alert{
-				Level:     "HIGH",
-				Rule:      "sensitive_file_access",
-				Message:   "Container accessed sensitive file: " + filename,
-				Pid:       event.Pid,
-				Ppid:      event.Ppid,
-				Uid:       int32(event.Uid),
-				Comm:      comm,
-				Container: container,
-			}
-		}
-	}
-
-	return nil
-}
 
 // System tools that legitimately exit quickly with non-zero codes — not suspicious
 var exitWhitelist = []string{
@@ -251,10 +144,132 @@ func checkExitRules(event ExitEvent) *Alert {
 			Message:   "Process exited quickly with error — possible failed exploit",
 			Pid:       int32(event.Pid),
 			Comm:      comm,
-			Container: "unknown", // exit events don't carry mnt_ns yet
+			Container: "unknown", // exit events don't carry mnt_ns — fix: pid→container cache
 		}
 	}
 
 	return nil
 }
 
+// ─────────────────────────────────────────────
+// File access rules
+// ─────────────────────────────────────────────
+
+// Container runtime processes that legitimately read /etc/passwd during startup.
+// runc reads passwd to resolve user IDs before exec — fires on every container start.
+var fileCommWhitelist = []string{
+	"runc:[2:INIT]",
+	"runc:[1:CHILD]",
+	"runc",
+}
+
+// Sensitive file paths — severity reflects actual risk.
+//
+// CRITICAL — credential material, direct privilege escalation
+// HIGH     — secrets, private keys, container escape indicators
+// MEDIUM   — world-readable system files: suspicious from some processes, normal for others
+//
+// NOTE: /root/.curlrc and similar config probes are suppressed naturally by the
+// sys_exit_openat hook — files that don't exist return ENOENT (ret < 0) and are dropped
+// before reaching Go. Only successful opens reach checkFileRules.
+var criticalFilePrefixes = []string{
+	"/root/.ssh/",    // SSH private keys and authorized_keys
+	"/home/.ssh/",    // user SSH keys
+}
+
+var highFilePrefixes = []string{
+	"/etc/shadow",    // password hashes — no legitimate app reads this at runtime
+	"/run/secrets/",  // Docker secrets mount
+	"/proc/1/",       // host init process — container escape indicator
+}
+
+var highFileSuffixes = []string{
+	".key",       // private keys
+	".pem",       // certificates / private keys
+	"id_rsa",     // SSH private key
+	"id_ed25519", // SSH private key
+	".env",       // environment secrets
+}
+
+var mediumFilePrefixes = []string{
+	"/etc/passwd", // user accounts — world-readable but unexpected from app code
+	"/etc/group",  // group memberships
+}
+
+func checkFileRules(event FileEvent, container string) *Alert {
+	if container == "host" || container == "" {
+		return nil
+	}
+
+	filename := cstring(event.Filename[:])
+	comm := cstring(event.Comm[:])
+
+	// skip container runtime — reads /etc/passwd during container init
+	for _, w := range fileCommWhitelist {
+		if comm == w {
+			return nil
+		}
+	}
+
+	for _, prefix := range criticalFilePrefixes {
+		if strings.HasPrefix(filename, prefix) {
+			return &Alert{
+				Level:     "CRITICAL",
+				Rule:      "sensitive_file_access",
+				Message:   "Container accessed SSH credential file: " + filename,
+				Pid:       event.Pid,
+				Ppid:      event.Ppid,
+				Uid:       int32(event.Uid),
+				Comm:      comm,
+				Container: container,
+			}
+		}
+	}
+
+	for _, prefix := range highFilePrefixes {
+		if strings.HasPrefix(filename, prefix) {
+			return &Alert{
+				Level:     "HIGH",
+				Rule:      "sensitive_file_access",
+				Message:   "Container accessed sensitive file: " + filename,
+				Pid:       event.Pid,
+				Ppid:      event.Ppid,
+				Uid:       int32(event.Uid),
+				Comm:      comm,
+				Container: container,
+			}
+		}
+	}
+
+	for _, suffix := range highFileSuffixes {
+		if strings.HasSuffix(filename, suffix) {
+			return &Alert{
+				Level:     "HIGH",
+				Rule:      "sensitive_file_access",
+				Message:   "Container accessed sensitive file: " + filename,
+				Pid:       event.Pid,
+				Ppid:      event.Ppid,
+				Uid:       int32(event.Uid),
+				Comm:      comm,
+				Container: container,
+			}
+		}
+	}
+
+	for _, prefix := range mediumFilePrefixes {
+		if strings.HasPrefix(filename, prefix) {
+			return &Alert{
+				Level:     "MEDIUM",
+				Rule:      "sensitive_file_access",
+				Message:   "Container accessed system file: " + filename,
+				Pid:       event.Pid,
+				Ppid:      event.Ppid,
+				Uid:       int32(event.Uid),
+				Comm:      comm,
+				Container: container,
+			}
+		}
+	}
+
+	return nil
+}
