@@ -5,13 +5,27 @@ Run on the GCP VM while the EDR agent is running.
 
 ---
 
+## Test Strategy
+
+Attack tests run while the full order-processor integration test suite runs concurrently in the
+background. This validates two things at once:
+
+1. **Attack detection** — each threat rule fires at the correct severity
+2. **No false positives** — normal API traffic does not produce CRITICAL or HIGH alerts
+
+The integration tests simulate realistic service load: auth, orders, inventory, user balance calls.
+The EDR must discriminate between this normal traffic and the injected attack events.
+
+---
+
 ## Prerequisites
 
 - EDR agent running: `sudo ./ebpf-edr-demo`
 - All 8 order-processor containers running: `docker ps`
-- Two terminals open:
+- Three terminals open:
   - Terminal 1: `tail -f alerts/alert.log` — watch alerts in real time
-  - Terminal 2: run `sudo ./validate.sh` — execute test cases
+  - Terminal 2: `tail -f /tmp/integ_tests.log` — watch integration test output
+  - Terminal 3: run `sudo ./validate.sh` — execute test cases
 
 ---
 
@@ -54,8 +68,9 @@ docker exec order-processor-auth_service wget --timeout=2 -q http://1.1.1.1 2>/d
 level=HIGH rule=network_tool_container container=order-processor-auth_service comm=wget
 ```
 
-**Note**: Detection fires on binary execution, not network connection. If `wget` is not installed in
-the container, use `nc` or `ncat` — any binary in `networkBinaries` triggers this rule.
+**Note**: Detection fires on binary execution, not network connection. Python uvicorn containers do
+not ship with `wget` — the validate script installs it first via `apt-get`. This also mirrors
+realistic attacker behavior: install tools after gaining initial container access.
 
 ---
 
@@ -202,7 +217,7 @@ No legitimate application reads container overlay mounts directly.
 
 ## Results Checklist
 
-Run all tests and verify each fires:
+**Attack detection — all must fire:**
 
 - [ ] T1 — CRITICAL `shell_spawn_container`
 - [ ] T2 — HIGH `network_tool_container`
@@ -211,3 +226,9 @@ Run all tests and verify each fires:
 - [ ] T5 — HIGH `unauthorized_external_connect`
 - [ ] T6 — LOW `external_connect_allowed` (inventory_service)
 - [ ] T7 — CRITICAL `host_reads_container_fs`
+
+**False positive check — none of these must appear during integration tests:**
+
+- [ ] No CRITICAL alerts from normal API traffic
+- [ ] No HIGH alerts from normal API traffic
+- [ ] Integration tests pass (services remain healthy under EDR observation)
