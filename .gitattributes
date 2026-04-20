@@ -6,9 +6,9 @@ go.sum linguist-generated=true
 # Documentation — excluded from language stats
 *.md linguist-documentation=true
 
-# Language overrides
-kernel/*.bpf.c linguist-language=C
-kernel/*.h     linguist-language=C
+# BPF kernel programs — exclude from language stats (compiled glue, Go is primary)
+kernel/*.bpf.c linguist-generated=true
+kernel/*.h     linguist-generated=true
 
 # Line endings
 * text=auto
