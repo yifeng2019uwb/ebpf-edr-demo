@@ -28,4 +28,210 @@
 %!(EXTRA string=/usr/bin/curl, string=curl executed from container — verify if expected)[2026-04-19 04:50:33] ALERT level=MEDIUM rule=curl_from_container pid=3543319 comm=%!s(int32=3543308) msg=%!s(int32=0)
 %!(EXTRA string=/usr/bin/curl, string=curl executed from container — verify if expected)[2026-04-19 04:50:36] ALERT level=MEDIUM rule=curl_from_container pid=3543337 comm=%!s(int32=3543327) msg=%!s(int32=0)
 %!(EXTRA string=/usr/bin/curl, string=curl executed from container — verify if expected)[2026-04-19 04:50:43] ALERT level=MEDIUM rule=curl_from_container pid=3543373 comm=%!s(int32=3543364) msg=%!s(int32=0)
-%!(EXTRA string=/usr/bin/curl, string=curl executed from container — verify if expected)
+%!(EXTRA string=/usr/bin/curl, string=curl executed from container — verify if expected)[2026-04-19 04:59:12] ALERT level=MEDIUM rule=curl_from_container pid=3546212 ppid=3546201 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-19 04:59:12] ALERT level=MEDIUM rule=curl_from_container pid=3546217 ppid=3546195 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-19 04:59:19] ALERT level=MEDIUM rule=curl_from_container pid=3546255 ppid=3546244 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-19 04:59:24] ALERT level=MEDIUM rule=curl_from_container pid=3546271 ppid=3546261 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-19 04:59:29] ALERT level=MEDIUM rule=curl_from_container pid=3546294 ppid=3546283 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-19 04:59:39] ALERT level=MEDIUM rule=curl_from_container pid=3546316 ppid=3546307 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-19 04:59:39] ALERT level=MEDIUM rule=curl_from_container pid=3546332 ppid=3546323 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-19 04:59:49] ALERT level=MEDIUM rule=curl_from_container pid=3546389 ppid=3546379 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-19 04:59:52] ALERT level=MEDIUM rule=curl_from_container pid=3546405 ppid=3546395 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-19 04:59:55] ALERT level=MEDIUM rule=curl_from_container pid=3546421 ppid=3546412 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-19 04:59:59] ALERT level=MEDIUM rule=curl_from_container pid=3546440 ppid=3546430 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-19 05:00:00] ALERT level=MEDIUM rule=curl_from_container pid=3546455 ppid=3546446 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-19 05:00:02] ALERT level=MEDIUM rule=curl_from_container pid=3546476 ppid=2868272 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-19 05:00:10] ALERT level=MEDIUM rule=curl_from_container pid=3546510 ppid=3546499 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-19 05:00:10] ALERT level=MEDIUM rule=curl_from_container pid=3546525 ppid=3546516 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-19 05:00:12] ALERT level=MEDIUM rule=curl_from_container pid=3546550 ppid=3546531 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-19 05:00:12] ALERT level=MEDIUM rule=curl_from_container pid=3546551 ppid=3546532 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-19 05:00:20] ALERT level=MEDIUM rule=curl_from_container pid=3547029 ppid=3547020 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-19 05:00:25] ALERT level=MEDIUM rule=curl_from_container pid=3547068 ppid=2869676 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-19 05:00:30] ALERT level=MEDIUM rule=curl_from_container pid=3547086 ppid=3547077 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-19 05:00:40] ALERT level=MEDIUM rule=curl_from_container pid=3547102 ppid=3547093 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-19 05:00:40] ALERT level=MEDIUM rule=curl_from_container pid=3547117 ppid=3547107 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-19 05:00:50] ALERT level=MEDIUM rule=curl_from_container pid=3547152 ppid=3547143 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-19 05:00:52] ALERT level=MEDIUM rule=curl_from_container pid=3547167 ppid=3547158 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-19 05:00:55] ALERT level=MEDIUM rule=curl_from_container pid=3547182 ppid=3547173 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-19 05:00:59] ALERT level=MEDIUM rule=curl_from_container pid=3547200 ppid=2869781 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-19 05:01:00] ALERT level=MEDIUM rule=curl_from_container pid=3547216 ppid=3547207 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-19 05:01:02] ALERT level=MEDIUM rule=curl_from_container pid=3547247 ppid=2868272 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 00:57:34] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967494 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:34] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967495 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:34] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967496 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:34] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967497 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:34] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967498 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:34] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967501 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:34] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967502 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:34] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967503 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:34] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967504 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:34] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967505 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:34] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967508 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:34] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967509 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:34] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967510 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:34] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967511 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:34] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967512 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:34] ALERT level=MEDIUM rule=curl_from_container container=unknown(ns=4026532370) pid=3967522 ppid=3967513 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 00:57:39] ALERT level=MEDIUM rule=curl_from_container container=unknown(ns=4026532760) pid=3967542 ppid=3967533 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 00:57:40] ALERT level=MEDIUM rule=curl_from_container container=unknown(ns=4026532504) pid=3967558 ppid=3967548 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 00:57:44] ALERT level=MEDIUM rule=curl_from_container container=unknown(ns=4026532370) pid=3967574 ppid=3967564 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 00:57:45] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967585 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:45] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967586 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:45] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967587 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:45] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967588 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:45] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967589 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:45] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967592 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:45] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967593 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:45] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967594 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:45] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967595 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:45] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967596 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:45] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967599 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:45] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967600 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:45] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967601 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:45] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967602 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:45] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967603 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:48] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967626 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:48] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967627 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:48] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967628 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:48] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967629 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:48] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967630 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:48] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967633 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:48] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967634 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:48] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967635 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:48] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967636 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:48] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967637 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:48] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967640 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:48] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967641 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:48] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967642 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:48] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967643 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 00:57:48] ALERT level=LOW rule=short_lived_failure container=unknown pid=3967644 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 01:00:14] ALERT level=MEDIUM rule=curl_from_container container=unknown(ns=4026532825) pid=3968393 ppid=2869781 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:00:15] ALERT level=MEDIUM rule=curl_from_container container=unknown(ns=4026532695) pid=3968424 ppid=2869092 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:00:15] ALERT level=MEDIUM rule=curl_from_container container=unknown(ns=4026532567) pid=3968418 ppid=2868362 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:00:16] ALERT level=MEDIUM rule=curl_from_container container=unknown(ns=4026532370) pid=3968442 ppid=3968432 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:00:19] ALERT level=LOW rule=short_lived_failure container=unknown pid=3968486 ppid=0 uid=0 comm=https msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 01:00:19] ALERT level=LOW rule=short_lived_failure container=unknown pid=3968566 ppid=0 uid=0 comm=cmp msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 01:00:19] ALERT level=LOW rule=short_lived_failure container=unknown pid=3968568 ppid=0 uid=0 comm=cmp msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 01:00:20] ALERT level=LOW rule=short_lived_failure container=unknown pid=3968809 ppid=0 uid=0 comm=cmp msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 01:00:20] ALERT level=LOW rule=short_lived_failure container=unknown pid=3968811 ppid=0 uid=0 comm=cmp msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 01:00:21] ALERT level=LOW rule=short_lived_failure container=unknown pid=3968900 ppid=0 uid=0 comm=cmp msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 01:00:21] ALERT level=LOW rule=short_lived_failure container=unknown pid=3968902 ppid=0 uid=0 comm=cmp msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 01:00:25] ALERT level=MEDIUM rule=curl_from_container container=unknown(ns=4026532760) pid=3968937 ppid=2869676 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:00:26] ALERT level=MEDIUM rule=curl_from_container container=unknown(ns=4026532370) pid=3968970 ppid=2852483 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:00:37] ALERT level=MEDIUM rule=curl_from_container container=unknown(ns=4026532370) pid=3968989 ppid=3968979 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:00:40] ALERT level=MEDIUM rule=curl_from_container container=unknown(ns=4026532504) pid=3969005 ppid=3968996 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:00:40] ALERT level=MEDIUM rule=curl_from_container container=unknown(ns=4026532760) pid=3969023 ppid=3969010 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:00:47] ALERT level=MEDIUM rule=curl_from_container container=unknown(ns=4026532370) pid=3969047 ppid=3969037 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:00:48] ALERT level=LOW rule=short_lived_failure container=unknown pid=3969077 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 01:00:48] ALERT level=LOW rule=short_lived_failure container=unknown pid=3969078 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 01:00:48] ALERT level=LOW rule=short_lived_failure container=unknown pid=3969079 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 01:00:48] ALERT level=LOW rule=short_lived_failure container=unknown pid=3969080 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 01:00:48] ALERT level=LOW rule=short_lived_failure container=unknown pid=3969081 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 01:00:48] ALERT level=LOW rule=short_lived_failure container=unknown pid=3969084 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 01:00:48] ALERT level=LOW rule=short_lived_failure container=unknown pid=3969085 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 01:00:48] ALERT level=LOW rule=short_lived_failure container=unknown pid=3969086 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 01:00:48] ALERT level=LOW rule=short_lived_failure container=unknown pid=3969087 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 01:00:48] ALERT level=LOW rule=short_lived_failure container=unknown pid=3969088 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 01:00:48] ALERT level=LOW rule=short_lived_failure container=unknown pid=3969091 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 01:00:48] ALERT level=LOW rule=short_lived_failure container=unknown pid=3969092 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 01:00:48] ALERT level=LOW rule=short_lived_failure container=unknown pid=3969093 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 01:00:48] ALERT level=LOW rule=short_lived_failure container=unknown pid=3969094 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 01:00:48] ALERT level=LOW rule=short_lived_failure container=unknown pid=3969095 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 01:00:55] ALERT level=MEDIUM rule=curl_from_container container=unknown(ns=4026532760) pid=3969107 ppid=3969098 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:00:57] ALERT level=MEDIUM rule=curl_from_container container=unknown(ns=4026532370) pid=3969123 ppid=2852483 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:01:03] ALERT level=MEDIUM rule=curl_from_container container=unknown(ns=4026532630) pid=3969148 ppid=3969131 uid=1000 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:01:03] ALERT level=MEDIUM rule=curl_from_container container=unknown(ns=4026532441) pid=3969155 ppid=2868272 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:01:07] ALERT level=MEDIUM rule=curl_from_container container=unknown(ns=4026532370) pid=3969191 ppid=3969182 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:01:11] ALERT level=MEDIUM rule=curl_from_container container=unknown(ns=4026532760) pid=3969208 ppid=3969197 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:01:26] ALERT level=MEDIUM rule=curl_from_container container=unknown(ns=4026532760) pid=3969349 ppid=2869676 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:01:27] ALERT level=MEDIUM rule=curl_from_container container=unknown(ns=4026532370) pid=3969364 ppid=3969355 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:02:38] ALERT level=MEDIUM rule=curl_from_container container=unknown(ns=4026532370) pid=3969728 ppid=3969719 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:02:41] ALERT level=MEDIUM rule=curl_from_container container=unknown(ns=4026532504) pid=3969744 ppid=3969735 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:02:41] ALERT level=MEDIUM rule=curl_from_container container=unknown(ns=4026532760) pid=3969762 ppid=3969751 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:02:48] ALERT level=MEDIUM rule=curl_from_container container=unknown(ns=4026532370) pid=3969798 ppid=3969770 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:02:56] ALERT level=MEDIUM rule=curl_from_container container=unknown(ns=4026532760) pid=3969818 ppid=3969808 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:02:59] ALERT level=MEDIUM rule=curl_from_container container=unknown(ns=4026532370) pid=3969845 ppid=2852483 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:03:03] ALERT level=MEDIUM rule=curl_from_container container=unknown(ns=4026532630) pid=3969867 ppid=2868372 uid=1000 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:03:03] ALERT level=MEDIUM rule=curl_from_container container=unknown(ns=4026532441) pid=3969877 ppid=2868272 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:03:09] ALERT level=MEDIUM rule=curl_from_container container=unknown(ns=4026532370) pid=3969896 ppid=2852483 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:03:11] ALERT level=MEDIUM rule=curl_from_container container=unknown(ns=4026532760) pid=3969914 ppid=3969905 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:03:14] ALERT level=MEDIUM rule=curl_from_container container=unknown(ns=4026532825) pid=3969931 ppid=3969921 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:03:16] ALERT level=MEDIUM rule=curl_from_container container=unknown(ns=4026532567) pid=3969956 ppid=3969938 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:03:16] ALERT level=MEDIUM rule=curl_from_container container=unknown(ns=4026532695) pid=3969957 ppid=2869092 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:03:19] ALERT level=MEDIUM rule=curl_from_container container=unknown(ns=4026532370) pid=3969993 ppid=2852483 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:03:27] ALERT level=MEDIUM rule=curl_from_container container=unknown(ns=4026532760) pid=3970016 ppid=3970007 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:03:29] ALERT level=MEDIUM rule=curl_from_container container=unknown(ns=4026532370) pid=3970037 ppid=2852483 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:03:39] ALERT level=MEDIUM rule=curl_from_container container=unknown(ns=4026532370) pid=3970057 ppid=3970048 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:03:41] ALERT level=MEDIUM rule=curl_from_container container=unknown(ns=4026532504) pid=3970073 ppid=3970063 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:03:42] ALERT level=MEDIUM rule=curl_from_container container=unknown(ns=4026532760) pid=3970089 ppid=3970079 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:12:26] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=3973385 ppid=3973375 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:12:30] ALERT level=MEDIUM rule=curl_from_container container=order-processor-gateway pid=3973401 ppid=3973391 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:12:36] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=3973418 ppid=3973408 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:12:46] ALERT level=MEDIUM rule=curl_from_container container=order-processor-gateway pid=3973436 ppid=2869676 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:12:46] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=3973452 ppid=3973443 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:12:56] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=3973535 ppid=2852483 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:13:01] ALERT level=MEDIUM rule=curl_from_container container=order-processor-gateway pid=3973554 ppid=3973545 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:13:04] ALERT level=MEDIUM rule=curl_from_container container=order-processor-auth_service pid=3973570 ppid=2868372 uid=1000 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:13:04] ALERT level=MEDIUM rule=curl_from_container container=order-processor-user_service pid=3973586 ppid=2868272 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:13:06] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=3973606 ppid=2852483 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:13:15] ALERT level=MEDIUM rule=curl_from_container container=order-processor-frontend pid=3973621 ppid=2869781 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:13:16] ALERT level=MEDIUM rule=curl_from_container container=order-processor-gateway pid=3973637 ppid=2869676 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:13:16] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=3973652 ppid=2852483 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:13:18] ALERT level=MEDIUM rule=curl_from_container container=order-processor-insights_service pid=3973669 ppid=3973659 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:13:18] ALERT level=MEDIUM rule=curl_from_container container=order-processor-order_service pid=3973684 ppid=2868362 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:13:19] ALERT level=LOW rule=short_lived_failure container=unknown pid=3973695 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 01:13:19] ALERT level=LOW rule=short_lived_failure container=unknown pid=3973696 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 01:13:19] ALERT level=LOW rule=short_lived_failure container=unknown pid=3973697 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 01:13:19] ALERT level=LOW rule=short_lived_failure container=unknown pid=3973698 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 01:13:19] ALERT level=LOW rule=short_lived_failure container=unknown pid=3973699 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 01:13:19] ALERT level=LOW rule=short_lived_failure container=unknown pid=3973702 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 01:13:19] ALERT level=LOW rule=short_lived_failure container=unknown pid=3973703 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 01:13:19] ALERT level=LOW rule=short_lived_failure container=unknown pid=3973704 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 01:13:19] ALERT level=LOW rule=short_lived_failure container=unknown pid=3973705 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 01:13:19] ALERT level=LOW rule=short_lived_failure container=unknown pid=3973706 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 01:13:19] ALERT level=LOW rule=short_lived_failure container=unknown pid=3973709 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 01:13:19] ALERT level=LOW rule=short_lived_failure container=unknown pid=3973710 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 01:13:19] ALERT level=LOW rule=short_lived_failure container=unknown pid=3973711 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 01:13:19] ALERT level=LOW rule=short_lived_failure container=unknown pid=3973712 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 01:13:19] ALERT level=LOW rule=short_lived_failure container=unknown pid=3973713 ppid=0 uid=0 comm=gpasswd msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 01:13:26] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=3973750 ppid=3973740 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:13:31] ALERT level=MEDIUM rule=curl_from_container container=order-processor-gateway pid=3973768 ppid=2869676 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:13:36] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=3973788 ppid=3973778 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:13:46] ALERT level=MEDIUM rule=curl_from_container container=order-processor-gateway pid=3973812 ppid=2869676 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:13:47] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=3973827 ppid=3973818 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:13:57] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=3973884 ppid=2852483 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:14:01] ALERT level=MEDIUM rule=curl_from_container container=order-processor-gateway pid=3973900 ppid=3973890 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:14:04] ALERT level=MEDIUM rule=curl_from_container container=order-processor-auth_service pid=3973916 ppid=3973906 uid=1000 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:14:05] ALERT level=MEDIUM rule=curl_from_container container=order-processor-user_service pid=3973932 ppid=3973922 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:14:07] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=3973950 ppid=3973941 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:14:16] ALERT level=MEDIUM rule=curl_from_container container=order-processor-frontend pid=3973967 ppid=3973957 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:14:16] ALERT level=MEDIUM rule=curl_from_container container=order-processor-gateway pid=3973982 ppid=3973973 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:14:17] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=3973997 ppid=3973988 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:14:18] ALERT level=MEDIUM rule=curl_from_container container=order-processor-insights_service pid=3974013 ppid=2869092 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:14:18] ALERT level=MEDIUM rule=curl_from_container container=order-processor-order_service pid=3974028 ppid=3974019 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:15:48] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=3974458 ppid=3974448 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:15:58] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=3974527 ppid=3974518 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:16:02] ALERT level=MEDIUM rule=curl_from_container container=order-processor-gateway pid=3974546 ppid=2869676 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:16:05] ALERT level=MEDIUM rule=curl_from_container container=order-processor-auth_service pid=3974563 ppid=3974553 uid=1000 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:16:05] ALERT level=MEDIUM rule=curl_from_container container=order-processor-user_service pid=3974579 ppid=3974570 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:16:08] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=3974599 ppid=3974589 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:16:16] ALERT level=MEDIUM rule=curl_from_container container=order-processor-frontend pid=3974616 ppid=3974607 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:16:17] ALERT level=MEDIUM rule=curl_from_container container=order-processor-gateway pid=3974639 ppid=3974630 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:16:18] ALERT level=MEDIUM rule=curl_from_container container=order-processor-order_service pid=3974668 ppid=2868362 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:16:18] ALERT level=MEDIUM rule=curl_from_container container=order-processor-insights_service pid=3974654 ppid=2869092 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:16:19] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=3974683 ppid=3974674 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:16:29] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=3974722 ppid=2852483 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:16:32] ALERT level=MEDIUM rule=curl_from_container container=order-processor-gateway pid=3974739 ppid=3974729 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:16:39] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=3974759 ppid=2852483 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:16:48] ALERT level=MEDIUM rule=curl_from_container container=order-processor-gateway pid=3974783 ppid=3974775 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:16:49] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=3974799 ppid=2852483 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:16:59] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=3974837 ppid=2852483 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:17:03] ALERT level=MEDIUM rule=curl_from_container container=order-processor-gateway pid=3974873 ppid=2869676 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:17:05] ALERT level=MEDIUM rule=curl_from_container container=order-processor-auth_service pid=3974890 ppid=3974880 uid=1000 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:17:05] ALERT level=MEDIUM rule=curl_from_container container=order-processor-user_service pid=3974905 ppid=2868272 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:17:09] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=3974926 ppid=2852483 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:17:16] ALERT level=MEDIUM rule=curl_from_container container=order-processor-frontend pid=3974943 ppid=2869781 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:17:18] ALERT level=MEDIUM rule=curl_from_container container=order-processor-gateway pid=3974965 ppid=3974955 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:17:18] ALERT level=MEDIUM rule=curl_from_container container=order-processor-order_service pid=3974982 ppid=2868362 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:17:18] ALERT level=MEDIUM rule=curl_from_container container=order-processor-insights_service pid=3974998 ppid=3974980 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
+[2026-04-20 01:17:19] ALERT level=MEDIUM rule=curl_from_container container=order-processor-localstack pid=3975017 ppid=3975007 uid=0 comm=/usr/bin/curl msg=curl executed from container — verify if expected
