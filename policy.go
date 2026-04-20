@@ -66,11 +66,12 @@ var exitWhitelist = []string{
 // fileCommWhitelist — processes that legitimately read system files as part of
 // normal startup or operation. Suppresses MEDIUM/HIGH noise from known-good tools.
 var fileCommWhitelist = []string{
-	"runc:[2:INIT]", // reads /etc/passwd to resolve user IDs during container init
+	"runc:[2:INIT]",  // reads /etc/passwd to resolve user IDs during container init
 	"runc:[1:CHILD]",
 	"runc",
-	"curl", // calls getpwuid() to find home directory before looking up ~/.curlrc
-	"id",   // reads /etc/passwd and /etc/group by design — that is its only purpose
+	"curl",           // calls getpwuid() to find home directory before looking up ~/.curlrc
+	"id",             // reads /etc/passwd and /etc/group by design — that is its only purpose
+	"systemd-logind", // session manager reads /etc/passwd, /proc/1/ during login events — runs in private mount ns
 }
 
 // Sensitive file paths — severity reflects actual risk.

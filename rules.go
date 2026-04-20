@@ -117,6 +117,12 @@ func checkProcessRules(event ProcessEvent, container string) *Alert {
 func checkExitRules(event ExitEvent, container string, ppid uint32) *Alert {
 	comm := cstring(event.Comm[:])
 
+	// skip if container is unknown — exit event arrived but exec was never cached
+	// (process started before EDR, or fork without exec). No container context = no reliable signal.
+	if container == "unknown" {
+		return nil
+	}
+
 	// never alert on host processes — mirrors checkProcessRules behavior
 	// host python3/bash from integration tests and SSH sessions exit non-zero constantly
 	if container == "host" {

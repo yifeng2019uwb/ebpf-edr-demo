@@ -85,13 +85,22 @@ sleep 3
 
 # ── T2: Network recon tool in container ──────────────────────────────────────
 
-header 2 7 "Network tool (wget) in container" "HIGH network_tool_container"
-# wget is not pre-installed in Python uvicorn containers — install it first.
-# This mirrors how an attacker would install tools after gaining container access.
-echo "  Installing wget in container..."
-docker exec "${TARGET}" apt-get update -qq 2>/dev/null || true
-docker exec "${TARGET}" apt-get install -y wget -q 2>/dev/null || true
-docker exec "${TARGET}" wget --timeout=2 -q http://1.1.1.1 2>/dev/null || true
+header 2 7 "Network tool in container" "HIGH network_tool_container"
+# Try nc first (netcat-openbsd ships in many Debian-based images).
+# Fall back to wget if nc is absent (requires apt-get install, which may fail
+# due to missing /var/lib/apt/lists/partial perms in hardened containers).
+if docker exec "${TARGET}" which nc > /dev/null 2>&1; then
+    echo "  Using nc (already installed)"
+    docker exec "${TARGET}" nc -w 2 1.1.1.1 80 2>/dev/null || true
+elif docker exec "${TARGET}" which ncat > /dev/null 2>&1; then
+    echo "  Using ncat (already installed)"
+    docker exec "${TARGET}" ncat -w 2 1.1.1.1 80 2>/dev/null || true
+else
+    echo "  nc/ncat not found — attempting apt-get install wget (may fail in hardened containers)"
+    docker exec "${TARGET}" apt-get update -qq 2>/dev/null || true
+    docker exec "${TARGET}" apt-get install -y wget -q 2>/dev/null || true
+    docker exec "${TARGET}" wget --timeout=2 -q http://1.1.1.1 2>/dev/null || true
+fi
 pass
 sleep 3
 
@@ -195,7 +204,7 @@ echo "    tail -20 ${LOG}"
 echo ""
 echo "  Expected attack alerts:"
 echo "    T1  CRITICAL shell_spawn_container"
-echo "    T2  HIGH     network_tool_container"
+echo "    T2  HIGH     network_tool_container      (nc / ncat / wget)"
 echo "    T3  HIGH     sensitive_file_access  (/etc/shadow)"
 echo "    T4  CRITICAL sensitive_file_access  (/root/.ssh/id_rsa)"
 echo "    T5  HIGH     unauthorized_external_connect"
