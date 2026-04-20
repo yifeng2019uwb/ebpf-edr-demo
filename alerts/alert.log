@@ -1,23 +1,35 @@
-[2026-04-20 04:41:59] ALERT level=MEDIUM rule=sensitive_file_access container=order-processor-localstack pid=4049059 ppid=2852483 uid=0 comm=curl msg=Container accessed system file: /etc/passwd
-[2026-04-20 04:42:10] ALERT level=MEDIUM rule=sensitive_file_access container=order-processor-localstack pid=4049137 ppid=2852483 uid=0 comm=curl msg=Container accessed system file: /etc/passwd
-[2026-04-20 04:42:20] ALERT level=MEDIUM rule=sensitive_file_access container=order-processor-localstack pid=4049155 ppid=2852483 uid=0 comm=curl msg=Container accessed system file: /etc/passwd
-[2026-04-20 04:42:30] ALERT level=MEDIUM rule=sensitive_file_access container=order-processor-localstack pid=4049196 ppid=2852483 uid=0 comm=curl msg=Container accessed system file: /etc/passwd
-[2026-04-20 04:42:34] ALERT level=MEDIUM rule=sensitive_file_access container=order-processor-inventory_service pid=4049230 ppid=2868312 uid=0 comm=curl msg=Container accessed system file: /etc/passwd
-[2026-04-20 04:42:36] ALERT level=MEDIUM rule=sensitive_file_access container=order-processor-auth_service pid=4049261 ppid=2868372 uid=1000 comm=curl msg=Container accessed system file: /etc/passwd
-[2026-04-20 04:42:36] ALERT level=MEDIUM rule=sensitive_file_access container=order-processor-user_service pid=4049276 ppid=2868272 uid=0 comm=curl msg=Container accessed system file: /etc/passwd
-[2026-04-20 04:42:40] ALERT level=MEDIUM rule=sensitive_file_access container=order-processor-localstack pid=4049308 ppid=2852483 uid=0 comm=curl msg=Container accessed system file: /etc/passwd
-[2026-04-20 04:42:50] ALERT level=MEDIUM rule=sensitive_file_access container=order-processor-localstack pid=4049332 ppid=2852483 uid=0 comm=curl msg=Container accessed system file: /etc/passwd
-[2026-04-20 04:42:51] ALERT level=MEDIUM rule=sensitive_file_access container=order-processor-insights_service pid=4049347 ppid=2869092 uid=0 comm=curl msg=Container accessed system file: /etc/passwd
-[2026-04-20 04:42:51] ALERT level=MEDIUM rule=sensitive_file_access container=order-processor-order_service pid=4049363 ppid=2868362 uid=0 comm=curl msg=Container accessed system file: /etc/passwd
-[2026-04-20 04:43:00] ALERT level=MEDIUM rule=sensitive_file_access container=order-processor-localstack pid=4049407 ppid=2852483 uid=0 comm=curl msg=Container accessed system file: /etc/passwd
-[2026-04-20 04:43:10] ALERT level=MEDIUM rule=sensitive_file_access container=order-processor-localstack pid=4049460 ppid=2852483 uid=0 comm=curl msg=Container accessed system file: /etc/passwd
-[2026-04-20 04:43:17] ALERT level=LOW rule=short_lived_failure container=unknown pid=4049483 ppid=0 uid=0 comm=cat msg=Process exited quickly with error — possible failed exploit
-[2026-04-20 04:43:21] ALERT level=MEDIUM rule=sensitive_file_access container=order-processor-localstack pid=4049502 ppid=2852483 uid=0 comm=curl msg=Container accessed system file: /etc/passwd
-[2026-04-20 04:43:21] ALERT level=HIGH rule=sensitive_file_access container=order-processor-inventory_service pid=2868345 ppid=2868312 uid=0 comm=python msg=Container accessed sensitive file: /root/.local/lib/python3.11/site-packages/certifi/cacert.pem
-[2026-04-20 05:22:47] ALERT level=HIGH rule=sensitive_file_access container=order-processor-auth_service pid=4063698 ppid=2868372 uid=1000 comm=cat msg=Container accessed sensitive file: /etc/shadow
-[2026-04-20 05:22:47] ALERT level=LOW rule=short_lived_failure container=order-processor-auth_service pid=4063698 ppid=2868372 uid=0 comm=cat msg=Process exited quickly with error — possible failed exploit
-[2026-04-20 05:22:52] ALERT level=LOW rule=short_lived_failure container=unknown pid=4063723 ppid=4018865 uid=0 comm=bash msg=Process exited quickly with error — possible failed exploit
-[2026-04-20 05:24:08] ALERT level=LOW rule=short_lived_failure container=unknown pid=4064160 ppid=4018865 uid=0 comm=bash msg=Process exited quickly with error — possible failed exploit
-[2026-04-20 05:39:59] ALERT level=LOW rule=short_lived_failure container=unknown pid=4069739 ppid=4018865 uid=0 comm=bash msg=Process exited quickly with error — possible failed exploit
-[2026-04-20 05:40:09] ALERT level=HIGH rule=sensitive_file_access container=order-processor-auth_service pid=4069800 ppid=2868372 uid=1000 comm=cat msg=Container accessed sensitive file: /etc/shadow
-[2026-04-20 05:40:09] ALERT level=LOW rule=short_lived_failure container=order-processor-auth_service pid=4069800 ppid=4069791 uid=0 comm=cat msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 16:40:19] ALERT level=LOW rule=external_connect_allowed container=order-processor-inventory_service pid=2868345 ppid=2868312 uid=0 comm=python msg=order-processor-inventory_service external connect to 104.20.41.132:443 (expected: api.coingecko.com)
+[2026-04-20 16:40:19] ALERT level=LOW rule=external_connect_allowed container=order-processor-inventory_service pid=2868345 ppid=2868312 uid=0 comm=python msg=order-processor-inventory_service external connect to 172.66.172.219:443 (expected: api.coingecko.com)
+[2026-04-20 16:40:19] ALERT level=LOW rule=external_connect_allowed container=order-processor-inventory_service pid=2868345 ppid=2868312 uid=0 comm=python msg=order-processor-inventory_service external connect to 104.20.41.132:443 (expected: api.coingecko.com)
+[2026-04-20 16:40:20] ALERT level=CRITICAL rule=shell_spawn_container container=order-processor-auth_service pid=108524 ppid=108514 uid=1000 comm=/usr/bin/bash msg=Shell spawned from container — possible RCE
+[2026-04-20 16:40:20] ALERT level=MEDIUM rule=sensitive_file_access container=order-processor-auth_service pid=108524 ppid=2868372 uid=1000 comm=bash msg=Container accessed system file: /etc/passwd
+[2026-04-20 16:40:20] ALERT level=MEDIUM rule=sensitive_file_access container=order-processor-auth_service pid=108524 ppid=2868372 uid=1000 comm=id msg=Container accessed system file: /etc/passwd
+[2026-04-20 16:40:20] ALERT level=MEDIUM rule=sensitive_file_access container=order-processor-auth_service pid=108524 ppid=2868372 uid=1000 comm=id msg=Container accessed system file: /etc/group
+[2026-04-20 16:40:20] ALERT level=MEDIUM rule=sensitive_file_access container=order-processor-auth_service pid=108524 ppid=2868372 uid=1000 comm=id msg=Container accessed system file: /etc/group
+[2026-04-20 16:40:22] ALERT level=LOW rule=short_lived_failure container=host pid=108569 ppid=108441 uid=0 comm=python3 msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 16:40:22] ALERT level=LOW rule=short_lived_failure container=host pid=108576 ppid=108441 uid=0 comm=python3 msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 16:40:22] ALERT level=LOW rule=short_lived_failure container=host pid=108583 ppid=108441 uid=0 comm=python3 msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 16:40:22] ALERT level=LOW rule=short_lived_failure container=host pid=108591 ppid=108441 uid=0 comm=python3 msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 16:40:22] ALERT level=LOW rule=short_lived_failure container=host pid=108606 ppid=108441 uid=0 comm=python3 msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 16:40:22] ALERT level=LOW rule=short_lived_failure container=host pid=108627 ppid=108441 uid=0 comm=python3 msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 16:40:22] ALERT level=LOW rule=short_lived_failure container=host pid=108639 ppid=108441 uid=0 comm=python3 msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 16:40:22] ALERT level=LOW rule=short_lived_failure container=host pid=108656 ppid=108441 uid=0 comm=python3 msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 16:40:22] ALERT level=LOW rule=short_lived_failure container=host pid=108663 ppid=108441 uid=0 comm=python3 msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 16:40:22] ALERT level=LOW rule=short_lived_failure container=host pid=108669 ppid=108441 uid=0 comm=python3 msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 16:40:22] ALERT level=LOW rule=short_lived_failure container=host pid=108673 ppid=108441 uid=0 comm=python3 msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 16:40:22] ALERT level=LOW rule=short_lived_failure container=host pid=108680 ppid=108441 uid=0 comm=python3 msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 16:40:22] ALERT level=LOW rule=short_lived_failure container=host pid=108691 ppid=108441 uid=0 comm=python3 msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 16:40:22] ALERT level=LOW rule=short_lived_failure container=host pid=108695 ppid=108441 uid=0 comm=python3 msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 16:40:22] ALERT level=LOW rule=short_lived_failure container=host pid=108699 ppid=108441 uid=0 comm=python3 msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 16:40:23] ALERT level=LOW rule=short_lived_failure container=host pid=108700 ppid=108441 uid=0 comm=python3 msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 16:40:23] ALERT level=LOW rule=short_lived_failure container=host pid=108704 ppid=108441 uid=0 comm=python3 msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 16:40:23] ALERT level=LOW rule=short_lived_failure container=host pid=108707 ppid=108441 uid=0 comm=python3 msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 16:40:28] ALERT level=HIGH rule=sensitive_file_access container=order-processor-auth_service pid=109119 ppid=2868372 uid=1000 comm=cat msg=Container accessed sensitive file: /etc/shadow
+[2026-04-20 16:40:31] ALERT level=CRITICAL rule=shell_spawn_container container=order-processor-auth_service pid=109156 ppid=2868372 uid=1000 comm=/usr/bin/bash msg=Shell spawned from container — possible RCE
+[2026-04-20 16:40:31] ALERT level=MEDIUM rule=sensitive_file_access container=order-processor-auth_service pid=109156 ppid=2868372 uid=1000 comm=bash msg=Container accessed system file: /etc/passwd
+[2026-04-20 16:40:31] ALERT level=LOW rule=short_lived_failure container=order-processor-auth_service pid=109162 ppid=109156 uid=0 comm=mkdir msg=Process exited quickly with error — possible failed exploit
+[2026-04-20 16:40:32] ALERT level=CRITICAL rule=sensitive_file_access container=order-processor-auth_service pid=109181 ppid=2868372 uid=1000 comm=cat msg=Container accessed SSH credential file: /root/.ssh/id_rsa
+[2026-04-20 16:40:36] ALERT level=HIGH rule=unauthorized_external_connect container=order-processor-auth_service pid=109235 ppid=2868372 uid=1000 comm=python3 msg=Container made unauthorized external connection to 8.8.8.8:80
+[2026-04-20 16:40:42] ALERT level=LOW rule=external_connect_allowed container=order-processor-inventory_service pid=109285 ppid=2868312 uid=0 comm=python3 msg=order-processor-inventory_service external connect to 209.97.132.148:443 (expected: api.coingecko.com)
+[2026-04-20 16:40:45] ALERT level=CRITICAL rule=host_reads_container_fs container=host pid=109350 ppid=108427 uid=0 comm=cat msg=Host process accessed Docker container filesystem: /var/lib/docker/overlay2/f86f442928dac89c8f6c8b68cd1d75aef96c870a79afe538757be46bbd9d0714/merged/etc/hostname
+[2026-04-20 16:40:48] ALERT level=LOW rule=short_lived_failure container=unknown pid=109374 ppid=109339 uid=0 comm=sshd msg=Process exited quickly with error — possible failed exploit

@@ -54,20 +54,20 @@ type lsmSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type lsmProgramSpecs struct {
-	RestrictConnect *ebpf.ProgramSpec `ebpf:"restrict_connect"`
+	HandleConnect *ebpf.ProgramSpec `ebpf:"handle_connect"`
 }
 
 // lsmMapSpecs contains maps before they are loaded into the kernel.
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type lsmMapSpecs struct {
+	Rb *ebpf.MapSpec `ebpf:"rb"`
 }
 
 // lsmVariableSpecs contains global variables before they are loaded into the kernel.
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type lsmVariableSpecs struct {
-	Blockme *ebpf.VariableSpec `ebpf:"blockme"`
 }
 
 // lsmObjects contains all objects after they have been loaded into the kernel.
@@ -90,29 +90,31 @@ func (o *lsmObjects) Close() error {
 //
 // It can be passed to loadLsmObjects or ebpf.CollectionSpec.LoadAndAssign.
 type lsmMaps struct {
+	Rb *ebpf.Map `ebpf:"rb"`
 }
 
 func (m *lsmMaps) Close() error {
-	return _LsmClose()
+	return _LsmClose(
+		m.Rb,
+	)
 }
 
 // lsmVariables contains all global variables after they have been loaded into the kernel.
 //
 // It can be passed to loadLsmObjects or ebpf.CollectionSpec.LoadAndAssign.
 type lsmVariables struct {
-	Blockme *ebpf.Variable `ebpf:"blockme"`
 }
 
 // lsmPrograms contains all programs after they have been loaded into the kernel.
 //
 // It can be passed to loadLsmObjects or ebpf.CollectionSpec.LoadAndAssign.
 type lsmPrograms struct {
-	RestrictConnect *ebpf.Program `ebpf:"restrict_connect"`
+	HandleConnect *ebpf.Program `ebpf:"handle_connect"`
 }
 
 func (p *lsmPrograms) Close() error {
 	return _LsmClose(
-		p.RestrictConnect,
+		p.HandleConnect,
 	)
 }
 
