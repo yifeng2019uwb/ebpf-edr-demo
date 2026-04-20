@@ -145,8 +145,21 @@ func checkProcessRules(event ProcessEvent, container string) *Alert {
 // Exit rules
 // ─────────────────────────────────────────────
 
+// System tools that legitimately exit quickly with non-zero codes — not suspicious
+var exitWhitelist = []string{
+	"gpasswd", // Docker modifies groups during container startup
+	"cmp",     // file comparison — non-zero means files differ, not an error
+	"https",   // GCP guest agent helper
+}
+
 func checkExitRules(event ExitEvent) *Alert {
 	comm := string(bytes.TrimRight(event.Comm[:], "\x00"))
+
+	for _, w := range exitWhitelist {
+		if comm == w {
+			return nil
+		}
+	}
 
 	// Alert: process exited with non-zero code AND very short duration
 	// Possible: crash, killed process, failed exploit attempt

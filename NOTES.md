@@ -31,6 +31,12 @@ Docker sets `HOSTNAME` env var to container ID (short hash), NOT container name.
 Reliable approach: `docker ps --no-trunc` → build full container ID → name map.
 Then `/proc/<pid>/cgroup` → extract container ID → look up name.
 
+Debian 12 / kernel 6.1 uses **cgroupv2** — path format is:
+`0::/system.slice/docker-<64char-id>.scope` (not `/docker/<id>`)
+Fixed: `containerIDFromCgroup` handles both cgroupv1 and cgroupv2 formats.
+
+**Validated ✅** — alert shows `container=order-processor-auth_service`, host processes show `container=host` and are silently skipped.
+
 ### ExitEvent struct alignment bug (fixed)
 Original C struct had implicit 4-byte padding before `duration_ns`:
 ```

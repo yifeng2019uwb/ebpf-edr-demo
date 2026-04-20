@@ -167,7 +167,7 @@ So any of these happening at runtime is suspicious:
 
 - [x] Process monitor — execsnoop (execve hook, perf buffer)
 - [x] Exit monitor — exitsnoop (sched_process_exit hook, ring buffer)
-- [x] Container correlation — mnt_ns_id via CO-RE, resolved to container name
+- [x] Container correlation — mnt_ns_id via CO-RE, resolved to container name ✅ validated
 - [x] Detection rules — shell spawn, network tools, curl, short-lived exit
 - [x] Alert output — structured log with container, pid, uid, comm, message
 - [ ] File monitor — opensnoop (openat hook, ring buffer)
