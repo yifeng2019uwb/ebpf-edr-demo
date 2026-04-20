@@ -1,4 +1,7 @@
 // download from https://github.com/eunomia-bpf/bpf-developer-tutorial
+// Change TASK_COMM_LEN in execsnoop.h to show full path of executed binary
+// Add mount namespace ID to identify which container spawned the process
+
 // SPDX-License-Identifier: (LGPL-2.1 OR BSD-2-Clause)
 #include <vmlinux.h>
 #include <bpf/bpf_helpers.h>
@@ -27,6 +30,8 @@ int tracepoint__syscalls__sys_enter_execve(struct trace_event_raw_sys_enter* ctx
 	event.uid = uid;
 	task = (struct task_struct*)bpf_get_current_task();
 	event.ppid = BPF_CORE_READ(task, real_parent, tgid);
+	// read mount namespace ID — lets userspace identify which container spawned this process
+	event.mnt_ns_id = BPF_CORE_READ(task, nsproxy, mnt_ns, ns.inum);
 	char *cmd_ptr = (char *) BPF_CORE_READ(ctx, args[0]);
 	bpf_probe_read_str(&event.comm, sizeof(event.comm), cmd_ptr);
 	bpf_perf_event_output(ctx, &events, BPF_F_CURRENT_CPU, &event, sizeof(event));

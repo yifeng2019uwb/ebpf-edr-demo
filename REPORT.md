@@ -31,18 +31,26 @@ Both compiled via `bpf2go` → Go wrappers auto-generated.
 
 | Rule | Trigger | Severity |
 |------|---------|----------|
-| `shell_spawn_container` | `bash`, `sh`, `zsh`, `dash` from uid=0 | CRITICAL |
-| `network_tool_container` | `nc`, `ncat`, `wget` from uid=0 | HIGH |
-| `curl_from_container` | `curl` from uid=0 | MEDIUM |
+| `shell_spawn_container` | `bash`, `sh`, `zsh`, `dash` inside any container | CRITICAL |
+| `network_tool_container` | `nc`, `ncat`, `wget` inside any container | HIGH |
+| `curl_from_container` | `curl` from non-allowed container | MEDIUM |
 | `short_lived_failure` | Process exits < 100ms with non-zero code | LOW |
 
 - Whitelist: `sshd`, `runc`, `dockerd`, `containerd` — never alert
-- uid=1000 shell spawns ignored — that's the operator SSH session
-- Network policy map defined per container (enforcement in future phase)
+- Host processes filtered via `mnt_ns` — no host-level false positives
+- `curlAllowedContainers` list: `inventory_service` allowed (calls CoinGecko). Easy to extend.
+- `allowedMarketAPI = "api.coingecko.com"` reserved for lsm-connect network enforcement
+
+### Container Correlation (`container.go`)
+
+- Reads `mnt_ns_id` from kernel via `BPF_CORE_READ(task, nsproxy, mnt_ns, ns.inum)`
+- At startup: calls `docker ps --no-trunc` to build container ID → name map
+- Resolves `mnt_ns_id → "order-processor-auth_service"` for every alert
+- Refreshes every 30s to catch new/stopped containers
 
 ### Alert Output (`alert.go`)
 
-- Structured alert format: `timestamp, level, rule, pid, ppid, uid, comm, message`
+- Structured alert format: `timestamp, level, rule, container, pid, ppid, uid, comm, message`
 - Writes to stdout (live monitoring)
 - Writes to `alerts/alert.log` (persistent record)
 - Extensible: TODO slots for Slack webhook and email
@@ -84,7 +92,7 @@ Both compiled via `bpf2go` → Go wrappers auto-generated.
 
 ## What's Next
 
-- Add `mnt_ns` to event structs — proper container vs host distinction
-- Rewrite `opensnoop.bpf.c` with ring buffer — file access monitoring
-- Rewrite `lsm-connect.bpf.c` with ring buffer — network enforcement layer
+- Rewrite `opensnoop.bpf.c` with ring buffer — file access monitoring (credential theft detection)
+- Rewrite `lsm-connect.bpf.c` with ring buffer — network enforcement layer (block + log connections)
+- Go unit tests — `rules_test.go`, `container_test.go`
 - Final validation: run all integration tests + trigger all detection rules

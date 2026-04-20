@@ -39,14 +39,16 @@ var networkBinaries = []string{
 // Network policy — per container
 // ─────────────────────────────────────────────
 
-// Only inventory service is allowed to call external APIs
-const inventoryContainer = "order-processor-inventory_service"
+// Containers allowed to make external HTTP/curl calls (process-level check)
+// Add more here if a new service needs external API access
+var curlAllowedContainers = []string{
+	"order-processor-inventory_service", // calls CoinGecko for market data
+}
 
-// Only this domain is allowed for inventory service
+// allowedMarketAPI is the only external domain inventory_service may connect to.
+// Enforced at network level in lsm-connect rules (not here — execsnoop has no URL).
 const allowedMarketAPI = "api.coingecko.com"
 
-// Internal Docker bridge prefix — always allowed
-const dockerBridgePrefix = "172."
 
 // ─────────────────────────────────────────────
 // Helper functions
@@ -75,7 +77,7 @@ func isWhitelisted(comm string) bool {
 // Process rules
 // ─────────────────────────────────────────────
 
-func checkProcessRules(event ProcessEvent) *Alert {
+func checkProcessRules(event ProcessEvent, container string) *Alert {
 	comm := string(bytes.TrimRight(event.Comm[:], "\x00"))
 
 	// Never alert on whitelisted processes
@@ -83,52 +85,56 @@ func checkProcessRules(event ProcessEvent) *Alert {
 		return nil
 	}
 
-	// Allow shells spawned by your user (uid=1000) — that's you via SSH
-	if matchesSuffix(comm, shellBinaries) && event.Uid == 1000 {
+	// Never alert on host processes — only watch containers
+	if container == "host" {
 		return nil
 	}
 
-	// Alert: shell spawned from container (uid=0, unexpected)
-	if matchesSuffix(comm, shellBinaries) && event.Uid == 0 {
+	// Alert: shell spawned from container (any uid — shells in containers are unexpected)
+	if matchesSuffix(comm, shellBinaries) {
 		return &Alert{
-			Level:   "CRITICAL",
-			Rule:    "shell_spawn_container",
-			Message: "Shell spawned from container — possible RCE",
-			Pid:     event.Pid,
-			Ppid:    event.Ppid,
-			Uid:     event.Uid,
-			Comm:    comm,
+			Level:     "CRITICAL",
+			Rule:      "shell_spawn_container",
+			Message:   "Shell spawned from container — possible RCE",
+			Pid:       event.Pid,
+			Ppid:      event.Ppid,
+			Uid:       event.Uid,
+			Comm:      comm,
+			Container: container,
 		}
 	}
 
 	// Alert: network tools from containers
-	if matchesSuffix(comm, networkBinaries) && event.Uid == 0 {
+	if matchesSuffix(comm, networkBinaries) {
 		return &Alert{
-			Level:   "HIGH",
-			Rule:    "network_tool_container",
-			Message: "Network tool executed from container — possible exfiltration",
-			Pid:     event.Pid,
-			Ppid:    event.Ppid,
-			Uid:     event.Uid,
-			Comm:    comm,
+			Level:     "HIGH",
+			Rule:      "network_tool_container",
+			Message:   "Network tool executed from container — possible exfiltration",
+			Pid:       event.Pid,
+			Ppid:      event.Ppid,
+			Uid:       event.Uid,
+			Comm:      comm,
+			Container: container,
 		}
 	}
 
-	// Alert: curl from container — check context
-	if strings.HasSuffix(comm, "/curl") && event.Uid == 0 {
-		// curl from containers needs container correlation
-		// Phase 2: check if container is inventory_service
-		// For now — alert on all curl from uid=0 except known health checks
-		// Health checks come from runc directly (ppid = runc pid)
-		// TODO: add container name check in Phase 2
+	// Alert: curl from container
+	// some services are allowed to call external APIs — see curlAllowedContainers
+	if strings.HasSuffix(comm, "/curl") {
+		for _, allowed := range curlAllowedContainers {
+			if container == allowed {
+				return nil // expected — this container is allowed to use curl
+			}
+		}
 		return &Alert{
-			Level:   "MEDIUM",
-			Rule:    "curl_from_container",
-			Message: "curl executed from container — verify if expected",
-			Pid:     event.Pid,
-			Ppid:    event.Ppid,
-			Uid:     event.Uid,
-			Comm:    comm,
+			Level:     "MEDIUM",
+			Rule:      "curl_from_container",
+			Message:   "curl executed from container — verify if expected",
+			Pid:       event.Pid,
+			Ppid:      event.Ppid,
+			Uid:       event.Uid,
+			Comm:      comm,
+			Container: container,
 		}
 	}
 
@@ -147,32 +153,15 @@ func checkExitRules(event ExitEvent) *Alert {
 	durationMs := event.DurationNs / 1_000_000
 	if event.ExitCode != 0 && durationMs < 100 {
 		return &Alert{
-			Level:   "LOW",
-			Rule:    "short_lived_failure",
-			Message: "Process exited quickly with error — possible failed exploit",
-			Pid:     int32(event.Pid),
-			Comm:    comm,
+			Level:     "LOW",
+			Rule:      "short_lived_failure",
+			Message:   "Process exited quickly with error — possible failed exploit",
+			Pid:       int32(event.Pid),
+			Comm:      comm,
+			Container: "unknown", // exit events don't carry mnt_ns yet
 		}
 	}
 
 	return nil
 }
 
-// ─────────────────────────────────────────────
-// Network rules (Phase 2 — container correlation needed)
-// For now: placeholder showing the policy intent
-// ─────────────────────────────────────────────
-
-// networkPolicy describes intended rules per container
-// Full enforcement requires container name from cgroup (Phase 2)
-var networkPolicy = map[string][]string{
-	// inventory_service — only allowed to call CoinGecko
-	inventoryContainer: {allowedMarketAPI},
-
-	// all other services — no external connections allowed
-	"order-processor-auth_service":      {},
-	"order-processor-order_service":     {},
-	"order-processor-user_service":      {},
-	"order-processor-gateway":           {},
-	"order-processor-insights_service":  {},
-}

@@ -145,8 +145,10 @@ So any of these happening at runtime is suspicious:
 - Specific paths TBD during implementation
 
 ### Container Correlation
-- Distinguish host processes from container processes using mount namespace ID (`mnt_ns`)
-- TBD during implementation
+- `mnt_ns_id` captured in kernel via `BPF_CORE_READ(task, nsproxy, mnt_ns, ns.inum)` — `__u32`
+- Userspace: `docker ps --no-trunc` at startup builds container ID → name map
+- `/proc/<pid>/cgroup` maps process → container ID → container name
+- Host processes identified by PID 1 namespace — silently skipped in rules
 
 ### Detection Engine
 - Rules in Go userspace: ID, severity, MITRE technique, match condition
@@ -163,15 +165,15 @@ So any of these happening at runtime is suspicious:
 
 ## 5. Implementation Plan
 
-**Day 1**
-- [x] Phase 1 — Process monitor (execsnoop) + exit monitor (exitsnoop) running together
-- [x] Ring buffer pattern learned via exitsnoop
-
-**Day 2**
-- [x] Phase 2 — Validate current monitors against CNOP — `curl_from_container` alert confirmed
-- [x] Phase 3 — Fix alert.go format string bug ✅ confirmed clean output
-- [ ] Phase 3b — Modify .bpf.c to add mnt_ns for container correlation
-- [ ] Phase 4 — lsm-connect compile + test (if time allows)
+- [x] Process monitor — execsnoop (execve hook, perf buffer)
+- [x] Exit monitor — exitsnoop (sched_process_exit hook, ring buffer)
+- [x] Container correlation — mnt_ns_id via CO-RE, resolved to container name
+- [x] Detection rules — shell spawn, network tools, curl, short-lived exit
+- [x] Alert output — structured log with container, pid, uid, comm, message
+- [ ] File monitor — opensnoop (openat hook, ring buffer)
+- [ ] Network enforcement — lsm-connect (socket_connect LSM hook, ring buffer)
+- [ ] Unit tests — rules, container resolver
+- [ ] Final validation — all rules trigger + integration tests pass
 
 ## 6. Validation
 <!-- How to verify it works -->
