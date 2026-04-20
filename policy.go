@@ -95,12 +95,18 @@ var highFilePrefixes = []string{
 
 var highFileSuffixes = []string{
 	".key",       // private keys
-	// .pem intentionally excluded — too broad: Python certifi, CA bundles, cert chains
-	// all use .pem extension. Private keys are caught by .key and id_* names below.
-	// TODO: restore .pem with path exception for /site-packages/ and /certifi/
+	".pem",       // private keys and certificates — CA bundles excluded via pemExcludePaths
 	"id_rsa",     // SSH private key
 	"id_ed25519", // SSH private key
 	".env",       // environment secrets
+}
+
+// pemExcludePaths — .pem paths that are CA certificate bundles, not private keys.
+// Python's certifi library and similar tools load these on every HTTPS request.
+// Any .pem file whose path contains one of these substrings is suppressed.
+var pemExcludePaths = []string{
+	"/site-packages/", // Python package CA bundles (certifi, requests, etc.)
+	"/certifi/",       // certifi library specifically
 }
 
 var mediumFilePrefixes = []string{

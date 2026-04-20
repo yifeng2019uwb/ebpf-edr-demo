@@ -89,6 +89,7 @@ header 2 7 "Network tool (wget) in container" "HIGH network_tool_container"
 # wget is not pre-installed in Python uvicorn containers — install it first.
 # This mirrors how an attacker would install tools after gaining container access.
 echo "  Installing wget in container..."
+docker exec "${TARGET}" apt-get update -qq 2>/dev/null || true
 docker exec "${TARGET}" apt-get install -y wget -q 2>/dev/null || true
 docker exec "${TARGET}" wget --timeout=2 -q http://1.1.1.1 2>/dev/null || true
 pass

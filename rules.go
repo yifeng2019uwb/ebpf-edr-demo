@@ -26,6 +26,18 @@ func matchesSuffix(comm string, list []string) bool {
 	return false
 }
 
+// isPemExcluded returns true if the .pem file is a CA bundle rather than a private key.
+// Python certifi and similar libraries load CA bundles on every HTTPS request —
+// flagging them as HIGH would fire on every API call made by inventory_service.
+func isPemExcluded(filename string) bool {
+	for _, path := range pemExcludePaths {
+		if strings.Contains(filename, path) {
+			return true
+		}
+	}
+	return false
+}
+
 func isWhitelisted(comm string) bool {
 	base := filepath.Base(comm)
 	for _, w := range whitelistComm {
@@ -207,6 +219,10 @@ func checkFileRules(event FileEvent, container string) *Alert {
 
 	for _, suffix := range highFileSuffixes {
 		if strings.HasSuffix(filename, suffix) {
+			// .pem files in Python package paths are CA bundles, not private keys
+			if suffix == ".pem" && isPemExcluded(filename) {
+				continue
+			}
 			return &Alert{
 				Level:     "HIGH",
 				Rule:      "sensitive_file_access",

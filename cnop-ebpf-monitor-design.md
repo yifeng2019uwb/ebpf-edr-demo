@@ -199,8 +199,8 @@ No blocking. Safe for a live demo environment.
 - [x] Network rules — RFC 1918 filter, externalAllowedContainers allowlist, unauthorized external HIGH
 - [x] Named constants — shortLivedThresholdMs, nsRefreshInterval, externalAllowedContainers
 - [x] Validation suite — VALIDATION.md + validate.sh, 7 test cases, concurrent integration traffic ✅
-- [ ] Noise fixes — host filter in checkExitRules, `id` in fileCommWhitelist, runc in exitWhitelist
-- [ ] Restore .pem rule with path exception for `/site-packages/` and `/certifi/`
+- [x] Noise fixes — host filter in checkExitRules, `id` in fileCommWhitelist, runc in exitWhitelist ✅
+- [x] Restore .pem rule with path exception for `/site-packages/` and `/certifi/` ✅
 
 ## 6. Validation
 
