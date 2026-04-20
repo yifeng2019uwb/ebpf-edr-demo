@@ -145,6 +145,70 @@ func checkProcessRules(event ProcessEvent, container string) *Alert {
 // Exit rules
 // ─────────────────────────────────────────────
 
+// ─────────────────────────────────────────────
+// File access rules
+// ─────────────────────────────────────────────
+
+// Sensitive files — access from containers should alert
+// Any service reading these at runtime (not startup) is suspicious
+var sensitiveFilePrefixes = []string{
+	"/etc/shadow",        // password hashes
+	"/etc/passwd",        // user accounts
+	"/root/",             // root home directory
+	"/run/secrets/",      // Docker secrets
+	"/proc/1/",           // host init process — container escape indicator
+}
+
+var sensitiveFileSuffixes = []string{
+	".key",     // private keys
+	".pem",     // certificates / private keys
+	".env",     // environment secrets
+	"id_rsa",   // SSH private key
+	"id_ed25519", // SSH private key
+}
+
+func checkFileRules(event FileEvent, container string) *Alert {
+	// only watch container processes
+	if container == "host" || container == "" {
+		return nil
+	}
+
+	filename := string(bytes.TrimRight(event.Filename[:], "\x00"))
+	comm := string(bytes.TrimRight(event.Comm[:], "\x00"))
+
+	for _, prefix := range sensitiveFilePrefixes {
+		if strings.HasPrefix(filename, prefix) {
+			return &Alert{
+				Level:     "HIGH",
+				Rule:      "sensitive_file_access",
+				Message:   "Container accessed sensitive file: " + filename,
+				Pid:       event.Pid,
+				Ppid:      event.Ppid,
+				Uid:       int32(event.Uid),
+				Comm:      comm,
+				Container: container,
+			}
+		}
+	}
+
+	for _, suffix := range sensitiveFileSuffixes {
+		if strings.HasSuffix(filename, suffix) {
+			return &Alert{
+				Level:     "HIGH",
+				Rule:      "sensitive_file_access",
+				Message:   "Container accessed sensitive file: " + filename,
+				Pid:       event.Pid,
+				Ppid:      event.Ppid,
+				Uid:       int32(event.Uid),
+				Comm:      comm,
+				Container: container,
+			}
+		}
+	}
+
+	return nil
+}
+
 // System tools that legitimately exit quickly with non-zero codes — not suspicious
 var exitWhitelist = []string{
 	"gpasswd", // Docker modifies groups during container startup
