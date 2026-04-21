@@ -1,22 +1,12 @@
-# Generated files — excluded from language stats
-*_bpfel.go linguist-generated=true
-*_bpfeb.go linguist-generated=true
-go.sum linguist-generated=true
+# 1. Mark C header files or large C boilerplate as 'documentation' or 'vendored' 
+# so they don't count towards the language percentage
+*.h linguist-documentation
+libbpf/** linguist-vendored
 
-# Legacy directory — old flat structure kept for reference, not active code
-legacy/ linguist-vendored=true
+# 2. Explicitly tell GitHub these are the 'main' detectable languages
+*.go linguist-detectable=true
+*.sh linguist-detectable=true
 
-# Documentation — excluded from language stats
-*.md linguist-documentation=true
-
-# BPF kernel programs — exclude from language stats (compiled glue, Go is primary)
-kernel/*.bpf.c linguist-generated=true
-kernel/*.h     linguist-generated=true
-
-# Line endings
-* text=auto
-*.go text eol=lf
-*.c  text eol=lf
-*.h  text eol=lf
-*.sh text eol=lf
-*.yml text eol=lf
+# 3. If you have a specific folder for your Go code, ensure it's not being ignored
+# e.g., if your go code is in /cmd or /pkg
+cmd/** linguist-detectable=true
