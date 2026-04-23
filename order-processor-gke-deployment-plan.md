@@ -106,14 +106,37 @@ No StatefulSet or PersistentVolumeClaim needed for dev/demo environment.
 
 ---
 
-## Auto-Scaling Simulation (HPA)
+## Scaling Simulation
 
-Each service gets a `HorizontalPodAutoscaler`:
-- Metrics Server must be installed in the GKE cluster
-- Scale based on CPU utilization (target: 50-70%)
-- Min replicas: 1, Max replicas: 3 (constrained by single-node capacity)
-- Integration tests drive CPU load, triggering scale-up events
-- eBPF agent must handle new pods appearing dynamically (cache rescan on miss)
+No real traffic exists to drive CPU-based HPA. Instead, use `kubectl scale` directly
+to manually trigger replica changes — gives full control over when pods appear and
+disappear, which is what we actually need to validate.
+
+```bash
+# scale up — new pods spin up, eBPF must detect new namespaces
+kubectl scale deployment auth-service --replicas=3 -n order-processor
+
+# scale back down — pods terminate
+kubectl scale deployment auth-service --replicas=1 -n order-processor
+```
+
+A simple shell script can cycle through all services:
+```bash
+for svc in auth-service user-service inventory-service order-service; do
+  kubectl scale deployment $svc --replicas=3 -n order-processor
+done
+# observe eBPF alerts, then scale back
+for svc in auth-service user-service inventory-service order-service; do
+  kubectl scale deployment $svc --replicas=1 -n order-processor
+done
+```
+
+**What this validates for eBPF:**
+- New pod spins up → new mnt_ns_id appears → K8sResolver cache miss → rescan → pod name resolved
+- Pod terminates → stale ns removed from cache
+- No false positives from normal pod lifecycle events
+
+No HPA, no Metrics Server needed.
 
 ---
 
@@ -156,7 +179,7 @@ Both answered by the same first GKE node deployment.
 | LocalStack manifest | Deployment + ClusterIP Service | Not started |
 | ConfigMap | `ENVIRONMENT=local`, `AWS_ENDPOINT_URL`, table names | Not started |
 | Secrets | JWT secret, Redis endpoint | Not started |
-| HPA | Per-service HPA + Metrics Server | Not started |
+| Scale script | Shell script to manually scale replicas up/down | Not started |
 | Gateway exposure | LoadBalancer Service for external access | Not started |
 | Integration test target | Point test runner at GKE external IP | Not started |
 
@@ -167,4 +190,3 @@ Both answered by the same first GKE node deployment.
 - GKE node machine type (affects how many replicas fit on a single node)
 - Image registry: GCR vs Artifact Registry
 - Whether a separate GKE overlay (`kubernetes/overlays/gke/`) is created or `prod/` is adapted in place
-- HPA replica counts (depends on node capacity from machine type choice)
