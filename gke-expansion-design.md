@@ -1,6 +1,6 @@
 # eBPF EDR — GKE Expansion Design
 
-> Status: **Planning / Discussion** — no decisions finalized, pending research items.
+> Status: **GKE order-processor deployment complete (2026-04-24) — eBPF GKE expansion ready to start.**
 > Discussion date: 2026-04-22
 
 ---
@@ -146,7 +146,8 @@ The agent binary sees all host processes via `hostPID: true`, same as running di
 
 ### Order-processor (GKE deployment)
 
-See `order-processor-gke-deployment-plan.md` (kept in this repo to avoid touching the order-processor project)
+**Complete** — all services running, all integration tests passing (auth ✓, inventory ✓, order ✓, user ✓).
+Gateway: `http://136.109.215.94:8080`. See `cloud-native-order-processor/gcp_gke/` for manifests and deploy scripts.
 
 ---
 
@@ -166,19 +167,23 @@ The gap is the build/toolchain setup, not the BPF program logic.
 
 ---
 
-## Open Research Items (blockers before final decision)
+## Research Findings (2026-04-23)
 
-| # | Question | How to answer | Blocks |
-|---|----------|---------------|--------|
-| R1 | What kernel version do GKE Ubuntu nodes run? | `kubectl describe node \| grep "Kernel Version"` after first deploy | CO-RE vs recompile decision |
-| R2 | Is `/sys/kernel/btf/vmlinux` present on GKE Ubuntu? | SSH to GKE node, `ls /sys/kernel/btf/vmlinux` | CO-RE approach |
+GKE node: `gke-order-processor--auth-service-poo-c67e95af-pkgr`
 
-Both answered with the same first GKE node deployment — one setup step, two answers.
+| # | Question | Answer |
+|---|----------|--------|
+| R1 | GKE Ubuntu kernel version | **6.8.0-1042-gke** (Ubuntu 24.04.3 LTS) |
+| R2 | BTF present on GKE Ubuntu? | **Yes** — Ubuntu 24.04 ships BTF by default at `/sys/kernel/btf/vmlinux` |
+
+**Key finding**: GKE kernel is **6.8**, existing VM is **6.1** — different major.minor versions.
+Compiled BPF objects from the existing VM will NOT load on GKE without CO-RE.
 
 ---
 
-## Decisions Not Yet Made
+## Decisions Made
 
-- CO-RE approach vs recompile-in-Dockerfile (depends on R1, R2)
-- HPA replica count per service (depends on GKE node size)
-- Whether VM1 ops-agent is set up as part of this phase or deferred
+- **CO-RE is the path forward** — BTF is available on GKE Ubuntu 24.04, code already uses `BPF_CORE_READ`. Build toolchain needs to emit BTF-annotated objects.
+- Recompile-in-Dockerfile approach deferred — CO-RE is cleaner and portable.
+- **HPA is deployed** (not manual kubectl scale) — CPU-based HPA for all 5 services; cluster autoscaler min 1 / max 3 nodes. Integration tests drive real CPU load to trigger scale events for eBPF to observe.
+- VM1 ops-agent deferred to a later phase.
