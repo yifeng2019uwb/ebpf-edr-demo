@@ -149,7 +149,7 @@ func containerIDFromK8sCgroup(pid string) string {
 	for scanner.Scan() {
 		line := scanner.Text()
 
-		if !strings.Contains(line, "/kubepods/") {
+		if !strings.Contains(line, "kubepods") {
 			continue
 		}
 
@@ -165,6 +165,10 @@ func containerIDFromK8sCgroup(pid string) string {
 		}
 
 		containerID := segments[len(segments)-1]
+		// cgroup v2 systemd format: "cri-containerd-<id>.scope"
+		if strings.HasPrefix(containerID, "cri-containerd-") && strings.HasSuffix(containerID, ".scope") {
+			containerID = strings.TrimSuffix(strings.TrimPrefix(containerID, "cri-containerd-"), ".scope")
+		}
 		if len(containerID) >= 12 {
 			return containerID
 		}
