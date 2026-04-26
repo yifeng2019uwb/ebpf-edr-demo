@@ -1,8 +1,3 @@
-//go:build linux
-
-// edr-monitor — EDR agent entry point.
-// Loads eBPF programs, wires the buffered pipeline, and emits structured alerts.
-// All detection logic lives in pkg/detector; workload resolution in pkg/workload.
 package main
 
 import (
@@ -12,6 +7,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -24,8 +20,21 @@ import (
 	"ebpf-edr-demo/pkg/workload"
 )
 
+const (
+	pendingRetryInterval = 3 * time.Second
+	pendingMaxRetries    = 3
+	pendingMaxAge        = 10 * time.Second
+)
+
+type pendingEntry struct {
+	ev        pipeline.EnrichedEvent
+	mntNsID   uint32
+	firstSeen time.Time
+	retries   int
+}
+
 func main() {
-	runtime := flag.String("runtime", "auto", "workload runtime: docker | k8s | auto")
+	runtime := flag.String("runtime", "auto", "docker | k8s")
 	flag.Parse()
 
 	handler, err := alert.NewHandler("alerts/alert.log")
@@ -35,9 +44,7 @@ func main() {
 	defer handler.Close()
 
 	resolver := workload.NewResolver(*runtime)
-	if err := resolver.Start(); err != nil {
-		log.Fatalf("starting resolver: %v", err)
-	}
+	resolver.Start()
 
 	loader, err := bpf.Load()
 	if err != nil {
@@ -50,23 +57,14 @@ func main() {
 	alertCh := make(chan alert.Alert, 64)
 
 	var dropped atomic.Int64
-	var alertCount atomic.Int64
+	var unknownNs atomic.Int64
 
-	log.Println("EDR Monitor started — watching process execution, file access, and network connections")
-	log.Printf("Runtime: %s | Press Ctrl+C to stop", *runtime)
+	var pendingMu sync.Mutex
+	pendingBuf := make(map[uint32][]pendingEntry)
 
-	// Metrics: log pipeline health every 10s
-	go func() {
-		ticker := time.NewTicker(10 * time.Second)
-		defer ticker.Stop()
-		for range ticker.C {
-			log.Printf("[METRICS] raw_pending=%d enr_pending=%d alert_pending=%d dropped=%d alerts=%d",
-				len(rawCh), len(enrichedCh), len(alertCh),
-				dropped.Load(), alertCount.Load())
-		}
-	}()
+	det := detector.NewRuleDetector()
 
-	// Producers: one goroutine per probe → rawCh
+	// Producers
 	go func() {
 		for {
 			rec, err := loader.ProcessRd.Read()
@@ -95,24 +93,83 @@ func main() {
 		}
 	}()
 
-	// Enricher: rawCh → enrichedCh
+	// Enricher
 	go func() {
 		for raw := range rawCh {
 			ev := enrich(raw, resolver)
 			if ev == nil {
 				continue
 			}
+
 			if ev.Type == pipeline.ProcessEventType {
-				comm := processor.CString(ev.Process.Comm[:])
-				log.Printf("[PROCESS] pid=%-6d ppid=%-6d uid=%-6d mnt_ns=%-10d service=%-30s path=%s",
-					ev.Process.Pid, ev.Process.Ppid, ev.Process.Uid, ev.Process.MntNsId, ev.Workload.Service, comm)
+				if processor.CString(ev.Process.Comm[:]) == "pause" {
+					continue
+				}
 			}
+
+			// pending-ns logic → NOW uses State
+			if ev.Workload.State == workload.StatePending {
+				nsID := mntNsIDOf(*ev)
+				pendingMu.Lock()
+				pendingBuf[nsID] = append(pendingBuf[nsID], pendingEntry{
+					ev: *ev, mntNsID: nsID, firstSeen: time.Now(),
+				})
+				pendingMu.Unlock()
+				continue
+			}
+
 			enrichedCh <- *ev
 		}
 	}()
 
-	// Detector: enrichedCh → alertCh (non-blocking drop on full)
-	det := detector.NewRuleDetector()
+	// Retry pending
+	go func() {
+		ticker := time.NewTicker(pendingRetryInterval)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			pendingMu.Lock()
+
+			for nsID, entries := range pendingBuf {
+				res := resolver.Resolve(nsID, 0)
+
+				// resolved
+				if res.State == workload.StateResolved {
+					for _, e := range entries {
+						ev := e.ev
+						ev.Workload = res
+						enrichedCh <- ev
+					}
+					delete(pendingBuf, nsID)
+					continue
+				}
+
+				// still pending
+				var remain []pendingEntry
+				for _, e := range entries {
+					if e.retries >= pendingMaxRetries || time.Since(e.firstSeen) > pendingMaxAge {
+						ev := e.ev
+						ev.Workload.State = workload.StateUnknown
+						unknownNs.Add(1)
+						enrichedCh <- ev
+					} else {
+						e.retries++
+						remain = append(remain, e)
+					}
+				}
+
+				if len(remain) == 0 {
+					delete(pendingBuf, nsID)
+				} else {
+					pendingBuf[nsID] = remain
+				}
+			}
+
+			pendingMu.Unlock()
+		}
+	}()
+
+	// Detector
 	go func() {
 		for ev := range enrichedCh {
 			for _, a := range det.Detect(ev) {
@@ -125,55 +182,70 @@ func main() {
 		}
 	}()
 
-	// Handler: alertCh → output
+	// Handler
 	go func() {
 		for a := range alertCh {
 			handler.Send(a)
-			alertCount.Add(1)
 		}
 	}()
 
+	// signal
 	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(sig, syscall.SIGINT)
 	<-sig
-	log.Println("Stopping EDR monitor...")
 }
 
 func enrich(raw pipeline.RawEvent, r workload.WorkloadResolver) *pipeline.EnrichedEvent {
 	switch raw.Source {
+
 	case "execsnoop":
 		var ev processor.ProcessEvent
-		if err := binary.Read(bytes.NewReader(raw.Data), binary.LittleEndian, &ev); err != nil {
-			log.Printf("parsing process event: %v", err)
-			return nil
-		}
-		id := r.Resolve(ev.MntNsId, uint32(ev.Pid))
+		binary.Read(bytes.NewReader(raw.Data), binary.LittleEndian, &ev)
+		res := r.Resolve(ev.MntNsId, uint32(ev.Pid))
+
 		return &pipeline.EnrichedEvent{
-			Type: pipeline.ProcessEventType, Process: &ev,
-			Workload: id, Timestamp: time.Now(),
+			Type:      pipeline.ProcessEventType,
+			Process:   &ev,
+			Workload:  res,
+			Timestamp: time.Now(),
 		}
+
 	case "opensnoop":
 		var ev processor.FileEvent
-		if err := binary.Read(bytes.NewReader(raw.Data), binary.LittleEndian, &ev); err != nil {
-			log.Printf("parsing file event: %v", err)
-			return nil
-		}
-		id := r.Resolve(uint32(ev.MntNsId), uint32(ev.Pid))
+		binary.Read(bytes.NewReader(raw.Data), binary.LittleEndian, &ev)
+		res := r.Resolve(uint32(ev.MntNsId), uint32(ev.Pid))
+
 		return &pipeline.EnrichedEvent{
-			Type: pipeline.FileEventType, File: &ev,
-			Workload: id, Timestamp: time.Now(),
+			Type:      pipeline.FileEventType,
+			File:      &ev,
+			Workload:  res,
+			Timestamp: time.Now(),
 		}
+
 	case "lsm-connect":
 		var ev processor.NetEvent
-		if err := binary.Read(bytes.NewReader(raw.Data), binary.LittleEndian, &ev); err != nil {
-			log.Printf("parsing net event: %v", err)
-			return nil
-		}
-		id := r.Resolve(uint32(ev.MntNsId), uint32(ev.Pid))
+		binary.Read(bytes.NewReader(raw.Data), binary.LittleEndian, &ev)
+		res := r.Resolve(uint32(ev.MntNsId), uint32(ev.Pid))
+
 		return &pipeline.EnrichedEvent{
-			Type: pipeline.NetEventType, Net: &ev,
-			Workload: id, Timestamp: time.Now(),
+			Type:      pipeline.NetEventType,
+			Net:       &ev,
+			Workload:  res,
+			Timestamp: time.Now(),
 		}
 	}
+
 	return nil
+}
+
+func mntNsIDOf(ev pipeline.EnrichedEvent) uint32 {
+	switch ev.Type {
+	case pipeline.ProcessEventType:
+		return ev.Process.MntNsId
+	case pipeline.FileEventType:
+		return uint32(ev.File.MntNsId)
+	case pipeline.NetEventType:
+		return uint32(ev.Net.MntNsId)
+	}
+	return 0
 }

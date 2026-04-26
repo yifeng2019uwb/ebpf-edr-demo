@@ -36,6 +36,12 @@
   - `cmd/edr-monitor/main.go`: buffered pipeline `rawCh(4096) → enrichedCh(1024) → alertCh(64)`; `--runtime` flag; metrics every 10s
   - `Makefile`: `GOOS=linux GOARCH=amd64` for cross-compile from macOS; updated `vet` targets
   - Deleted `pkg/container/container.go` — replaced by `pkg/workload/docker_resolver.go`
+  - **Validated on Docker VM** ✓ — `service=inventory-service`, `service=auth-service`, LOW/CRITICAL alerts correct
+- [x] Phase 2 — K8sResolver + pending-ns buffer
+  - `pkg/workload/k8s_resolver.go` — `K8sResolver`: K8s cgroup path parser (all 3 QoS classes), crictl subprocess for container metadata, self-filter (agent's own `mnt_ns_id` → "host"), 5s refresh interval
+  - `pkg/workload/resolver.go` — `NewResolver("k8s")` now returns `K8sResolver`
+  - `cmd/edr-monitor/main.go` — pause filter (`comm == "pause"` dropped in enricher); pending-ns retry loop (3s interval, max 3 retries / 10s → escalates to CRITICAL); `unknown_ns` + `pending_ns` in metrics
+  - Unit tests (cgroup parser, self-filter, pending retry) — noted, add before Phase 4
 
 ---
 
@@ -50,6 +56,56 @@ Must match Go struct field size exactly — `Comm [128]byte`.
 ### mnt_ns_id — use __u32 not __u64
 Kernel's `ns.inum` is `unsigned int` (32-bit). Use `__u32 mnt_ns_id` in C struct and `uint32` in Go.
 `BPF_CORE_READ(task, nsproxy, mnt_ns, ns.inum)` — requires kernel 5.8+ BTF (6.1 confirmed working).
+
+---
+
+### K8s cgroup path parsing — all 3 QoS classes
+
+K8s sets pod cgroup paths based on QoS class of the pod:
+```
+Guaranteed:  0::/kubepods/pod<uid>/<container-id>
+Burstable:   0::/kubepods/burstable/pod<uid>/<container-id>
+BestEffort:  0::/kubepods/besteffort/pod<uid>/<container-id>
+```
+Container ID is always the **last path segment**. Implementation: find line containing `/kubepods/`, take everything after the last `:`, split by `/`, take last element. Works for all 3 QoS classes without special-casing.
+
+---
+
+### K8s pending-ns vs Docker unknown-ns
+
+Key behavioral difference between the two resolvers:
+
+| | Docker | K8s |
+|---|---|---|
+| Cache miss return | `"unknown-ns"` → CRITICAL immediately | `"pending-ns"` → buffer + retry |
+| Why | Docker containers are long-lived; unknown ns = escape signal | K8s pods start fast (HPA); unknown ns = likely new pod not yet in cache |
+| Grace period | None | 3 retries × 3s = up to ~9s; hard cap at 10s from first seen |
+
+After grace period: K8s also escalates to CRITICAL `unknown_namespace_process` — just with a delay to absorb the pod startup window.
+
+Buffer is unbounded per namespace ID but capped by retry count/age per entry. Under extreme churn (many unique new mnt_ns_ids), memory could grow — acceptable for MVP, monitor `pending_ns` counter.
+
+---
+
+### K8s self-filter — agent's own namespace
+
+At `K8sResolver.Start()`, read `/proc/self/ns/mnt` to get the DaemonSet pod's own mount namespace ID. Map it to `Service: "host"` in the cache. The detector skips all events where `id.Service == "host"`, so the agent never alerts on its own activity (e.g., running crictl, reading /proc).
+
+---
+
+### crictl — MVP approach, known limitations
+
+MVP uses `crictl ps --output json` as a subprocess. Drawbacks vs containerd client API:
+- Spawns a subprocess on every 5s refresh (overhead)
+- `crictl` must be on PATH inside the DaemonSet container image
+- Not real-time — new pods appear within 5s, not instantly
+
+K8s labels set by kubelet on every container (used for resolution):
+- `io.kubernetes.container.name` → `Service` and `Container` fields
+- `io.kubernetes.pod.name` → `Pod` field
+- `io.kubernetes.pod.namespace` → `Namespace` field
+
+Future: replace with containerd client API (`github.com/containerd/containerd`) for real-time events and no subprocess. `WorkloadResolver` interface is unchanged — only the implementation swaps.
 
 ---
 

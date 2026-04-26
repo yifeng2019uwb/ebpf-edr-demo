@@ -23,19 +23,24 @@ func NewRuleDetector() *RuleDetector { return &RuleDetector{} }
 // Detect applies all rules to the enriched event and returns any triggered alerts.
 func (d *RuleDetector) Detect(ev pipeline.EnrichedEvent) []alert.Alert {
 	var a *alert.Alert
+
 	switch ev.Type {
 	case pipeline.ProcessEventType:
 		a = checkProcessRules(*ev.Process, ev.Workload)
+
 	case pipeline.FileEventType:
 		a = checkFileRules(*ev.File, ev.Workload)
+
 	case pipeline.NetEventType:
 		ip := processor.NetIP(ev.Net.DstIp)
 		port := processor.NetPort(ev.Net.DstPort)
 		a = checkNetworkRules(*ev.Net, ev.Workload, ip, port)
 	}
+
 	if a == nil {
 		return nil
 	}
+
 	return []alert.Alert{*a}
 }
 
@@ -80,14 +85,14 @@ func isPrivateIP(ip net.IP) bool {
 
 // ── Process rules ─────────────────────────────────────────────────────────────
 
-func checkProcessRules(event processor.ProcessEvent, id workload.WorkloadIdentity) *alert.Alert {
+func checkProcessRules(event processor.ProcessEvent, res workload.ResolveResult) *alert.Alert {
 	comm := processor.CString(event.Comm[:])
 
 	if isWhitelisted(comm) {
 		return nil
 	}
 
-	if id.Service == "unknown-ns" {
+	if res.State == workload.StateUnknown {
 		return &alert.Alert{
 			Level:    "CRITICAL",
 			Rule:     "unknown_namespace_process",
@@ -96,11 +101,11 @@ func checkProcessRules(event processor.ProcessEvent, id workload.WorkloadIdentit
 			Ppid:     event.Ppid,
 			Uid:      event.Uid,
 			Comm:     comm,
-			Workload: id,
+			Workload: res,
 		}
 	}
 
-	if id.Service == "host" {
+	if res.State == workload.StateHost {
 		return nil
 	}
 
@@ -113,7 +118,7 @@ func checkProcessRules(event processor.ProcessEvent, id workload.WorkloadIdentit
 			Ppid:     event.Ppid,
 			Uid:      event.Uid,
 			Comm:     comm,
-			Workload: id,
+			Workload: res,
 		}
 	}
 
@@ -126,7 +131,7 @@ func checkProcessRules(event processor.ProcessEvent, id workload.WorkloadIdentit
 			Ppid:     event.Ppid,
 			Uid:      event.Uid,
 			Comm:     comm,
-			Workload: id,
+			Workload: res,
 		}
 	}
 
@@ -135,11 +140,11 @@ func checkProcessRules(event processor.ProcessEvent, id workload.WorkloadIdentit
 
 // ── File access rules ─────────────────────────────────────────────────────────
 
-func checkFileRules(event processor.FileEvent, id workload.WorkloadIdentity) *alert.Alert {
+func checkFileRules(event processor.FileEvent, res workload.ResolveResult) *alert.Alert {
 	filename := processor.CString(event.Filename[:])
 	comm := processor.CString(event.Comm[:])
 
-	if id.Service == "host" {
+	if res.State == workload.StateHost {
 		if strings.HasPrefix(filename, "/var/lib/docker/overlay2/") {
 			return &alert.Alert{
 				Level:    "CRITICAL",
@@ -149,10 +154,14 @@ func checkFileRules(event processor.FileEvent, id workload.WorkloadIdentity) *al
 				Ppid:     event.Ppid,
 				Uid:      int32(event.Uid),
 				Comm:     comm,
-				Workload: id,
+				Workload: res,
 				Filename: filename,
 			}
 		}
+		return nil
+	}
+
+	if res.State == workload.StatePending {
 		return nil
 	}
 
@@ -172,7 +181,7 @@ func checkFileRules(event processor.FileEvent, id workload.WorkloadIdentity) *al
 				Ppid:     event.Ppid,
 				Uid:      int32(event.Uid),
 				Comm:     comm,
-				Workload: id,
+				Workload: res,
 				Filename: filename,
 			}
 		}
@@ -188,7 +197,7 @@ func checkFileRules(event processor.FileEvent, id workload.WorkloadIdentity) *al
 				Ppid:     event.Ppid,
 				Uid:      int32(event.Uid),
 				Comm:     comm,
-				Workload: id,
+				Workload: res,
 				Filename: filename,
 			}
 		}
@@ -199,6 +208,7 @@ func checkFileRules(event processor.FileEvent, id workload.WorkloadIdentity) *al
 			if suffix == ".pem" && isPemExcluded(filename) {
 				continue
 			}
+
 			return &alert.Alert{
 				Level:    "HIGH",
 				Rule:     "sensitive_file_access",
@@ -207,7 +217,7 @@ func checkFileRules(event processor.FileEvent, id workload.WorkloadIdentity) *al
 				Ppid:     event.Ppid,
 				Uid:      int32(event.Uid),
 				Comm:     comm,
-				Workload: id,
+				Workload: res,
 				Filename: filename,
 			}
 		}
@@ -223,7 +233,7 @@ func checkFileRules(event processor.FileEvent, id workload.WorkloadIdentity) *al
 				Ppid:     event.Ppid,
 				Uid:      int32(event.Uid),
 				Comm:     comm,
-				Workload: id,
+				Workload: res,
 				Filename: filename,
 			}
 		}
@@ -234,8 +244,8 @@ func checkFileRules(event processor.FileEvent, id workload.WorkloadIdentity) *al
 
 // ── Network rules ─────────────────────────────────────────────────────────────
 
-func checkNetworkRules(event processor.NetEvent, id workload.WorkloadIdentity, ip net.IP, port uint16) *alert.Alert {
-	if id.Service == "host" {
+func checkNetworkRules(event processor.NetEvent, res workload.ResolveResult, ip net.IP, port uint16) *alert.Alert {
+	if res.State == workload.StateHost || res.State == workload.StatePending {
 		return nil
 	}
 
@@ -245,6 +255,7 @@ func checkNetworkRules(event processor.NetEvent, id workload.WorkloadIdentity, i
 
 	comm := processor.CString(event.Comm[:])
 	ipStr := ip.String()
+	id := res.Identity
 
 	for _, allowed := range externalAllowedServices {
 		if id.Service == allowed {
@@ -256,7 +267,7 @@ func checkNetworkRules(event processor.NetEvent, id workload.WorkloadIdentity, i
 				Ppid:     event.Ppid,
 				Uid:      int32(event.Uid),
 				Comm:     comm,
-				Workload: id,
+				Workload: res,
 				DstIP:    ipStr,
 				DstPort:  port,
 			}
@@ -271,7 +282,7 @@ func checkNetworkRules(event processor.NetEvent, id workload.WorkloadIdentity, i
 		Ppid:     event.Ppid,
 		Uid:      int32(event.Uid),
 		Comm:     comm,
-		Workload: id,
+		Workload: res,
 		DstIP:    ipStr,
 		DstPort:  port,
 	}

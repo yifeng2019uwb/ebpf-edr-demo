@@ -244,16 +244,16 @@ Why cap matters:
 - Containerd watch events may lag or be missed
 - Without a cap, events stay in pending forever → memory leak + silent missed alerts
 
-**Open questions for implementation:**
-- How large should the pending buffer be? (bounded to avoid memory growth during burst)
-- Should `pending-ns` events be dropped or held if the buffer is full?
-- What severity during the grace period — suppress entirely, or emit LOW as a breadcrumb?
+**Decisions made at implementation (Phase 2):**
+- Buffer size: unbounded per namespace ID, capped by retry count (3) and age (10s) per entry — acceptable for MVP; monitor `pending_ns` counter in metrics
+- If buffer is full (`enrichedCh` full at resolution time): drop with `dropped` counter increment — consistent with rest of pipeline
+- Severity during grace period: suppress entirely — emitting LOW breadcrumbs during normal pod startup adds noise without signal value
 
 ---
 
 ## 4. Implementation Plan
 
-### Phase 1 — Pipeline refactor + WorkloadIdentity + DockerResolver
+### Phase 1 — Pipeline refactor + WorkloadIdentity + DockerResolver ✅ DONE
 
 **Goal:** introduce the pipeline and `WorkloadIdentity` without changing any existing behaviour. Docker VM monitoring must work identically after this phase.
 
@@ -281,29 +281,27 @@ Updated:
 Remove:
 - `pkg/container/container.go` — replaced by `pkg/workload/`
 
-**Verify:** `make test` passes; existing Docker VM alert output unchanged.
+**Verify:** `make test` passes; existing Docker VM alert output unchanged. **Validated on Docker VM ✓**
 
 ---
 
-### Phase 2 — K8sResolver
+### Phase 2 — K8sResolver ✅ DONE
 
 **Goal:** resolve `mnt_ns_id + pid → WorkloadIdentity` on GKE using containerd/crictl.
 
 New file: `pkg/workload/k8s_resolver.go`
 
-Key details:
-1. **cgroup parser** — K8s cgroupv2 path: `0::/kubepods/<qos>/pod<uid>/<container-id>`. Extract `<container-id>` (last segment). Handle all 3 QoS classes: Guaranteed, Burstable, BestEffort.
-2. **crictl lookup** — `crictl ps --output json` builds `container-id → {Container, Pod, Namespace}` map. `Service` = container name (e.g. `"inventory-service"`).
-3. **Watch API** — use containerd events to update cache in real-time instead of polling every 30s. Closes the `unknown-ns` false-positive window during HPA scale-up.
-4. **Self-filter** — at startup read `/proc/self/ns/mnt`, add agent's own `mnt_ns_id` to skip list. Prevents CRITICAL alerts from the DaemonSet pod itself.
-5. **Pause filter** — skip events where `comm == "pause"` (K8s infra container).
+Implemented:
+1. **cgroup parser** — handles all 3 QoS classes: `kubepods/pod<uid>/`, `kubepods/burstable/pod<uid>/`, `kubepods/besteffort/pod<uid>/`. Container ID = last path segment.
+2. **crictl lookup** — `crictl ps --output json` builds `container-id → WorkloadIdentity` map using K8s labels (`io.kubernetes.container.name`, `io.kubernetes.pod.name`, `io.kubernetes.pod.namespace`). Refresh every 5s (shorter than Docker's 30s to handle HPA pod churn).
+3. **Watch API** — deferred; MVP uses crictl polling at 5s. Future: containerd client API for real-time events. `WorkloadResolver` interface unchanged — only implementation swaps.
+4. **Self-filter** — reads `/proc/self/ns/mnt` at startup, maps agent's own `mnt_ns_id` → `Service: "host"` (silently skipped by detector).
+5. **Pause filter** — `comm == "pause"` dropped in enricher before `enrichedCh`.
+6. **Pending-ns buffer** — in `main.go`: miss → `"pending-ns"` → retry every 3s, max 3 retries / 10s → CRITICAL. Resolves false-positive CRITICAL during HPA scale-up.
 
 **Verify:**
-- Unit tests: cgroup path parser with all 3 QoS class path formats (Guaranteed, Burstable, BestEffort)
-- Unit tests: self-filter — agent's own `mnt_ns_id` is in skip list at startup
-- Unit tests: pause filter — events with `comm == "pause"` are skipped
-- Integration test on GKE node: K8sResolver returns correct `Service`, `Pod`, `Namespace` for running pods
-- Integration test: pending-ns → 3 retries over 10s → CRITICAL escalation path (requires debug resolver flag)
+- Unit tests (cgroup parser, self-filter, pending retry path) — **pending, add before Phase 4**
+- Integration tests on GKE node (VALIDATION-GKE.md 5.1, 5.2, 5.4) — **blocked on Phase 4 DaemonSet**
 
 ---
 
