@@ -47,6 +47,10 @@ spec:
           mountPath: /run/containerd/containerd.sock
         - name: alerts
           mountPath: /alerts
+        - name: debugfs
+          mountPath: /sys/kernel/debug
+        - name: tracefs
+          mountPath: /sys/kernel/tracing
       volumes:
       - name: proc
         hostPath:
@@ -61,3 +65,9 @@ spec:
         hostPath:
           path: /var/log/ebpf-edr
           type: DirectoryOrCreate
+      - name: debugfs
+        hostPath:
+          path: /sys/kernel/debug
+      - name: tracefs
+        hostPath:
+          path: /sys/kernel/tracing

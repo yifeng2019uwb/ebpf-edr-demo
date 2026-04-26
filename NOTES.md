@@ -55,16 +55,9 @@
 
 ## Pending
 
-### Phase 3 — CI/CD for Docker image
+### Phase 3 — Docker image
 
-Docker image build works locally (`make docker-build` / `make docker-push`). Next step: automate via GitHub Actions so every push to `main` builds and pushes to AR automatically.
-
-**Plan:**
-- Add `docker-push` job to `.github/workflows/ci.yml` — runs after `ci` job passes on `main`; authenticates to GCP via `GCP_CREDENTIALS` secret; runs `make docker-push`
-- Add `ebpf-edr-ci-sa` service account in `gcp_gke/pulumi_registry.go` with `roles/artifactregistry.writer` — dedicated CI SA, not the node SA
-- One-time manual: create SA key → add as `GCP_CREDENTIALS` in GitHub repo secrets
-
-**What's done (Phase 3 local):**
+**What's done:**
 - `Dockerfile` — single-stage; cross-compiled binary from macOS via `make build`; installs `crictl v1.30.0`
 - `Makefile` — `docker-build` (local test) and `docker-push` (build + push to AR) targets; both depend on `build`
 - Image: `us-west1-docker.pkg.dev/ebpfagent/ebpf-edr/ebpf-edr:latest`
