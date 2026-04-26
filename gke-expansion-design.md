@@ -1,189 +1,550 @@
 # eBPF EDR — GKE Expansion Design
 
-> Status: **GKE order-processor deployment complete (2026-04-24) — eBPF GKE expansion ready to start.**
-> Discussion date: 2026-04-22
+> Status: **GKE deployment complete (2026-04-24) — eBPF GKE expansion in design, ready to implement.**
+> Discussion dates: 2026-04-22 → 2026-04-25
 
 ---
 
-## Goal
+## 1. Goal
 
-Extend the eBPF EDR agent to monitor a second workload environment: the
-cloud-native-order-processor deployed on GKE, alongside the existing Docker VM.
-This creates a hybrid monitoring setup that demonstrates both container runtime
-strategies with the same eBPF kernel probes.
+Extend the eBPF EDR agent beyond the existing Docker VM to monitor GKE workloads, using a pipeline architecture that supports additional environments in the future without core changes.
+
+**Two design goals driving the architecture:**
+1. **Multi-environment** — swap resolver (Docker / GKE / EKS / future) without touching detection logic
+2. **New eBPF probes easy to add** — each BPF probe is independent; adding one requires no changes to the pipeline, detection, or alert layers
 
 ---
 
-## Architecture Decision: Hybrid (VM1 Docker + VM2 GKE)
+## 2. Current Situation
+
+### Deployed environments
 
 ```
-VM1 (existing GCP VM, Debian 12, kernel 6.1.0-44)
+VM1 (GCP VM, Debian 12, kernel 6.1.0-44)
   ├── cloud-native-order-processor (Docker Compose, 8 containers)
   └── eBPF agent — host process (sudo ./edr-monitor)
         resolver: DockerResolver (docker ps + cgroup)
-        output:   alert.log + Cloud Logging
+        probes:   execsnoop, opensnoop, lsm-connect
 
-VM2 (GKE Standard, Ubuntu node pool)
-  ├── cloud-native-order-processor (K8s Deployments, multiple replicas)
-  └── eBPF agent — privileged DaemonSet pod
-        resolver: K8sResolver (crictl + cgroup)
-        output:   stdout → Cloud Logging (automatic in GKE)
+VM2 (GKE Standard, Ubuntu 24.04, kernel 6.8.0-1042-gke, us-west1-a)
+  ├── cloud-native-order-processor (K8s, 7 workloads, HPA enabled)
+  └── eBPF agent — NOT YET DEPLOYED (this plan)
+        gateway: http://136.109.215.94:8080
+        all integration tests passing ✓
 ```
 
-Both alert streams visible in Cloud Logging with workload tags.
+**Multi-region plan (next after eBPF GKE deployment):** Refactor Pulumi to reusable pattern.
+- Extract `region` and `zone` as `cfg.Require("region")` / `cfg.Require("zone")` (currently hardcoded in `config.go`)
+- Create reusable `deployCluster(ctx, region, zone, sa)` function encapsulating cluster + node pool creation
+- Each new region = new Pulumi stack only (`pulumi stack init us-east1`) — no code changes
+- DaemonSet manifest injects `REGION=<region>` env var per cluster → `WorkloadIdentity.Region` in eBPF agent
 
----
+### eBPF agent current state
 
-## Why Order-Processor (not healthcare-ai)
+- 3 probes: execsnoop (process), opensnoop (file), lsm-connect (network)
+- 6 detection rules covering RCE, credential theft, network exfiltration, container escape
+- Resolver: Docker-only, tightly coupled to `main.go` — no interface abstraction
+- BPF programs: use `BPF_CORE_READ` correctly, but build toolchain not yet emitting BTF-annotated objects
 
-- K8s manifests already exist in the project (`kubernetes/prod/`)
-- Integration tests are stable and cover all 8 services
-- Detection rules already tuned for order-processor services
-- Integration tests can run from local laptop against GKE gateway (NodePort/LoadBalancer),
-  simulating external traffic — validates `unauthorized_external_connect` rules realistically
-- healthcare-ai is still in active development; adding GKE complexity on top is premature
-
----
-
-## GKE Setup
-
-- **Distribution**: GKE Standard (not Autopilot — Autopilot blocks privileged pods, which eBPF requires)
-- **Node pool OS**: Ubuntu (not Container-Optimized OS — Ubuntu is more eBPF-friendly and has BTF)
-- **Cluster size**: single node for demo (order-processor fits on one node)
-- **Kernel check**: `kubectl describe node <node-name> | grep "Kernel Version"` after first deploy
-
----
-
-## Key eBPF Architecture Change: ContainerResolver Interface
-
-The kernel probes (execsnoop, opensnoop, lsm-connect) are **unchanged**.
-Only the userspace container resolution layer changes.
-
-### Current (Docker only)
-
-```
-mnt_ns_id → /proc/<pid>/cgroup → docker container ID → docker ps → container name
-```
-
-### Required (pluggable)
-
-```
-ContainerResolver interface {
-    Resolve(mntNsID uint32, pid uint32) (ContainerInfo, error)
-    Refresh()
-}
-
-DockerResolver  → docker ps + cgroup parsing       (VM1)
-K8sResolver     → crictl ps + cgroup parsing       (VM2)
-```
-
-`ContainerInfo` adds pod-level fields for K8s:
-```go
-type ContainerInfo struct {
-    Name      string  // container name (Docker) or container name within pod (K8s)
-    PodName   string  // empty on Docker
-    Namespace string  // empty on Docker
-    Runtime   string  // "docker" | "k8s"
-}
-```
-
-Agent selects resolver at startup via config flag (e.g., `--runtime=docker|k8s`).
-
-### K8sResolver approach
-
-- `crictl ps --output json` to build container ID → pod name map at startup
-- `/proc/<pid>/cgroup` format on K8s: `kubepods/pod<uid>/<container-id>`
-- Refresh on cache miss (same pattern as current DockerResolver rescan)
-- Handles dynamic pod lifecycle: new replicas spin up, cache miss triggers rescan
-
----
-
-## eBPF Agent on GKE: DaemonSet
-
-Running as a privileged DaemonSet pod is how production tools (Falco, Tetragon) operate.
-
-Required pod security context:
-```yaml
-securityContext:
-  privileged: true
-hostPID: true
-hostNetwork: true
-volumes:
-  - name: proc
-    hostPath:
-      path: /proc
-  - name: sys
-    hostPath:
-      path: /sys
-```
-
-The agent binary sees all host processes via `hostPID: true`, same as running directly on the VM.
-
----
-
-## Alert Aggregation: Cloud Logging
-
-- VM2 (GKE): pod stdout is captured by Cloud Logging automatically — no config needed
-- VM1 (Docker): install `google-cloud-ops-agent` on the VM, ship `alert.log` to Cloud Logging
-- Both streams queryable in Cloud Logging with a workload label filter
-- No new aggregation service needed
-
----
-
-## Scope Breakdown
-
-### eBPF project changes
-
-| Item | Description | Status |
-|------|-------------|--------|
-| Refactor `pkg/container` | Extract `ContainerResolver` interface | Not started |
-| `DockerResolver` | Existing logic moved into interface | Not started |
-| `pkg/k8s` / `K8sResolver` | crictl-based resolver for K8s pods | Not started |
-| DaemonSet manifest | Privileged DaemonSet with host mounts | Not started |
-| Dockerfile | Containerize eBPF agent binary | Not started |
-| Dynamic rescan | Validate cache refresh against HPA scale events | Not started |
-| Cloud Logging (VM1) | ops-agent config to ship alert.log | Not started |
-
-### Order-processor (GKE deployment)
-
-**Complete** — all services running, all integration tests passing (auth ✓, inventory ✓, order ✓, user ✓).
-Gateway: `http://136.109.215.94:8080`. See `cloud-native-order-processor/gcp_gke/` for manifests and deploy scripts.
-
----
-
-## CO-RE Gap (from design doc Section 8)
-
-The current BPF programs are compiled against the Debian 12 / kernel 6.1 vmlinux headers.
-GKE Ubuntu nodes may run a different kernel version.
-
-**Two paths forward:**
-1. **Recompile on the node**: Dockerfile builds BPF objects during container build using
-   the GKE node's kernel headers. Works but requires matching kernel headers in the image.
-2. **CO-RE properly**: Use BTF relocation. Requires `/sys/kernel/btf/vmlinux` on the GKE node
-   (present on Ubuntu 22.04 by default) and building with CO-RE-aware toolchain flags.
-
-The code already uses `BPF_CORE_READ` — it is written correctly for CO-RE.
-The gap is the build/toolchain setup, not the BPF program logic.
-
----
-
-## Research Findings (2026-04-23)
-
-GKE node: `gke-order-processor--auth-service-poo-c67e95af-pkgr`
+### Key findings (2026-04-23)
 
 | # | Question | Answer |
 |---|----------|--------|
-| R1 | GKE Ubuntu kernel version | **6.8.0-1042-gke** (Ubuntu 24.04.3 LTS) |
-| R2 | BTF present on GKE Ubuntu? | **Yes** — Ubuntu 24.04 ships BTF by default at `/sys/kernel/btf/vmlinux` |
+| R1 | GKE kernel version | **6.8.0-1042-gke** (Ubuntu 24.04.3 LTS) |
+| R2 | BTF on GKE Ubuntu? | **Yes** — `/sys/kernel/btf/vmlinux` present by default |
 
-**Key finding**: GKE kernel is **6.8**, existing VM is **6.1** — different major.minor versions.
-Compiled BPF objects from the existing VM will NOT load on GKE without CO-RE.
+GKE kernel 6.8 vs VM kernel 6.1 — compiled BPF objects will NOT load across versions without CO-RE.
+
+### Decisions
+
+- **CO-RE** is the build path — BTF available on both nodes, code already uses `BPF_CORE_READ`. Toolchain needs to emit BTF-annotated objects.
+- **BPF programs unchanged** — all 3 probes capture `mnt_ns_id + pid`, sufficient for resolution on both Docker and K8s. No kernel-side changes needed.
+- **AlertHandler is pluggable** — no decision made on Cloud Logging vs file vs stdout. Output target is an interface; each environment picks its own handler.
+
+### Possible future environments
+
+| Environment | New resolver? | New rules? | New eBPF? |
+|-------------|--------------|------------|-----------|
+| GKE multi-region (us-east1) | No — K8sResolver reused, tag `Region` | No | No |
+| EKS (AWS) | EKSResolver — minor crictl variant | No | No |
+| Bare metal / plain VM | HostResolver — pid → process name only | Possibly | No |
+| healthcare-ai on GKE | No — same K8sResolver, different namespace | Possibly | No |
+| New threat surface | No | Yes | Yes — new probe |
 
 ---
 
-## Decisions Made
+## 3. Pipeline Architecture
 
-- **CO-RE is the path forward** — BTF is available on GKE Ubuntu 24.04, code already uses `BPF_CORE_READ`. Build toolchain needs to emit BTF-annotated objects.
-- Recompile-in-Dockerfile approach deferred — CO-RE is cleaner and portable.
-- **HPA is deployed** (not manual kubectl scale) — CPU-based HPA for all 5 services; cluster autoscaler min 1 / max 3 nodes. Integration tests drive real CPU load to trigger scale events for eBPF to observe.
-- VM1 ops-agent deferred to a later phase.
+### WorkloadIdentity
+
+The central data type. `Service` is the primary field used by detection rules.
+
+```go
+type WorkloadIdentity struct {
+    Runtime   string  // "docker" | "k8s"
+    Container string  // raw container name from runtime
+    Pod       string  // pod name (k8s) or same as Container (docker)
+    Namespace string  // k8s namespace; empty for Docker
+    Service   string  // MOST IMPORTANT — used in all detection rules
+                      // Docker: e.g. "inventory_service"
+                      // K8s:    e.g. "inventory-service"
+                      // Sentinels: "host", "unknown-ns", "pending-ns"
+    Node      string  // host node name — needed for cross-node correlation (Section 5)
+    Region    string  // GCP region — needed for cross-region correlation (Section 5)
+}
+```
+
+Resolution path: `mnt_ns_id + pid → WorkloadIdentity`
+(`pid` needed as fallback for `/proc/<pid>/cgroup` on cache miss)
+
+`Node` and `Region` are populated at agent startup, not by the resolver:
+- `Node` = `os.Hostname()`
+- `Region` = `REGION` env var injected by DaemonSet manifest; fallback: GCP metadata endpoint `http://metadata.google.internal/computeMetadata/v1/instance/zone`
+
+#### Known issue: `Service` field is fragile across runtimes
+
+Docker gives `inventory_service`, K8s gives `inventory-service`, a future env may give `inventory`. Without normalization, detection rules must handle all variants — duplication grows with each new environment.
+
+**Proposed approach (to decide at implementation):** resolver normalizes `_` → `-` as a minimum, giving `inventory-service` consistently across Docker and K8s. Whether to further strip to `inventory` (losing some context) is deferred. Even the minimal normalization significantly reduces rule duplication.
+
+**Open question:** who owns normalization — the resolver, or a canonical name registry? TBD.
+
+### EnrichedEvent — typed union, no interface{}
+
+`interface{}` requires type assertions everywhere, hurts testing, and hides compiler errors. Typed optional fields — nil means absent.
+
+```go
+type EventType string
+
+const (
+    ProcessEventType EventType = "process"
+    FileEventType    EventType = "file"
+    NetEventType     EventType = "network"
+)
+
+type EnrichedEvent struct {
+    Type      EventType
+    Process   *ProcessEvent   // non-nil when Type == ProcessEventType
+    File      *FileEvent      // non-nil when Type == FileEventType
+    Net       *NetEvent       // non-nil when Type == NetEventType
+    Workload  WorkloadIdentity
+    Timestamp time.Time  // userspace time at event receipt — see known issue below
+}
+```
+
+#### Known issue: kernel time ≠ userspace time
+
+`Timestamp time.Time` is set when the event is read in userspace — not when it occurred in the kernel. Under load, events queue in the ring buffer before being read, introducing drift between actual event time and recorded time. For correlation across nodes, this drift matters.
+
+**Future improvement:** carry the kernel timestamp (`ktime_get_ns()` from the BPF program) as a raw `uint64` nanoseconds field alongside `Timestamp`. Convert to wall clock using a boot-time offset calculated at agent startup. This gives accurate event ordering even under burst load.
+
+**Not blocking current work** — note the field limitation when implementing cross-node correlation (Section 5).
+
+### Core interfaces
+
+```go
+// Each BPF probe is an independent event source
+type EventSource interface {
+    Name()   string
+    Start()  error
+    Events() <-chan RawEvent
+    Close()
+}
+
+// Any runtime implements this — Docker, K8s, EKS, future
+type WorkloadResolver interface {
+    Resolve(mntNsID uint32, pid uint32) WorkloadIdentity  // always non-blocking
+    Start() error
+}
+
+// Detection rules — operate on enriched events only, runtime-agnostic
+type Detector interface {
+    Detect(event EnrichedEvent) []Alert
+}
+
+// Any output target — file, stdout, Cloud Logging, webhook
+type AlertHandler interface {
+    Send(alert Alert)
+    // Future: Flush() error  — for batched handlers
+    // Future: Close() error  — graceful shutdown with drain
+}
+```
+
+### Buffered pipeline
+
+eBPF generates bursts. Without buffering, slow enrichment or detection blocks the kernel ring buffer reader and events are dropped.
+
+```
+execsnoop ──┐
+opensnoop ──┼──▶ rawCh(large) ──▶ Enricher ──▶ enrichedCh(med) ──▶ Detector ──▶ alertCh(small) ──▶ Handler
+lsm-connect ┘
+```
+
+- `rawCh` — largest, absorbs kernel burst directly behind ring buffer
+- `enrichedCh` — medium, absorbs enrichment jitter
+- `alertCh` — small, alerts are rare
+
+### Resolver design constraints
+
+- `Resolve()` **must never block** — reads from in-memory cache only
+- Cache miss → return best-effort result immediately, trigger async background refresh
+- K8s resolver should use **containerd watch API** (not poll every 30s) — HPA pods appear faster than a 30s poll window
+
+#### Known issue: crictl dependency
+
+MVP uses `crictl ps --output json` to build the container map. This works but has drawbacks:
+- Slower than direct API — spawns a subprocess each refresh
+- External dependency — crictl must be on PATH inside the DaemonSet container
+- Less real-time — even with watch API, crictl is a CLI wrapper around the containerd gRPC API
+
+**Design path:** MVP uses crictl. Future `K8sResolver` should be rewritten against the **containerd client API directly** (Go package `github.com/containerd/containerd`) — real-time events, no subprocess overhead, no external binary dependency. The `WorkloadResolver` interface is unchanged; only the implementation swaps.
+
+#### Known issue: AlertHandler is underused
+
+`Send(alert)` is sufficient for MVP but not production-grade. Missing concerns:
+
+- **Batching** — sending one alert at a time to Cloud Logging or a webhook is inefficient under burst; a batching handler groups alerts over a time window before flushing
+- **Retry** — transient network failures silently drop alerts without retry logic
+- **Backpressure** — if `alertCh` fills (handler is slow), the detector blocks; pipeline slows; ring buffer drops events
+
+**MVP backpressure strategy (implement now, simple):**
+```go
+select {
+case alertCh <- alert:
+default:
+    droppedAlerts.Add(1)  // atomic counter — visible in logs/metrics
+}
+```
+Drop the alert if `alertCh` is full, increment a counter. Log the counter periodically. This prevents pipeline stalls without complex retry logic. Counter makes the drop visible rather than silent.
+
+**Not implemented now (full):** batching, retry, `Flush() error`, `Close() error` — revisit when adding a persistent handler (Cloud Logging, Pub/Sub).
+
+#### Known issue: `unknown-ns` → CRITICAL is dangerous in K8s
+
+In K8s, pods start fast and the resolver cache always lags slightly. Short-lived pods (init containers, Jobs) may never be resolved at all. Immediately emitting CRITICAL on any `unknown-ns` event produces false positives under normal HPA scaling — this is the difference between a demo system and production-grade thinking.
+
+**Proposed design (to implement in Phase 2):**
+
+```
+Event arrives with unseen mnt_ns_id:
+  → Resolve() returns Service: "pending-ns"
+  → enricher places event in pending buffer with timestamp + retry_count=0
+  → resolver triggers immediate async refresh
+
+Every retry interval (~3s), re-resolve all pending events:
+  → if resolved: process normally, no alert
+  → if still unknown AND retry_count < N (or elapsed < T seconds): retry_count++, keep pending
+  → if still unknown AND retry_count >= N (or elapsed >= T): emit CRITICAL unknown_namespace_process
+
+Cap: max 3 retries over max 10 seconds → then escalate.
+```
+
+Why cap matters:
+- Resolver can fail temporarily (crictl subprocess error, containerd restart)
+- Containerd watch events may lag or be missed
+- Without a cap, events stay in pending forever → memory leak + silent missed alerts
+
+**Open questions for implementation:**
+- How large should the pending buffer be? (bounded to avoid memory growth during burst)
+- Should `pending-ns` events be dropped or held if the buffer is full?
+- What severity during the grace period — suppress entirely, or emit LOW as a breadcrumb?
+
+---
+
+## 4. Implementation Plan
+
+### Phase 1 — Pipeline refactor + WorkloadIdentity + DockerResolver
+
+**Goal:** introduce the pipeline and `WorkloadIdentity` without changing any existing behaviour. Docker VM monitoring must work identically after this phase.
+
+New packages:
+- `pkg/workload/identity.go` — `WorkloadIdentity` struct
+- `pkg/workload/resolver.go` — `WorkloadResolver` interface + `NewResolver(runtime)` factory
+- `pkg/workload/docker_resolver.go` — existing Docker logic (`docker ps` + cgroupv2 parser + cache) refactored into `WorkloadResolver`
+- `pkg/pipeline/event.go` — core types and interfaces:
+
+```go
+// RawEvent is the unparsed bytes read from a BPF ring/perf buffer,
+// tagged with which probe produced it.
+type RawEvent struct {
+    Source string  // "execsnoop" | "opensnoop" | "lsm-connect"
+    Data   []byte  // raw sample from ring buffer — parsed by Enricher
+}
+```
+
+Along with `EnrichedEvent`, `EventSource`, `Detector`, `AlertHandler`, `EventForwarder` interfaces.
+
+Updated:
+- `cmd/edr-monitor/main.go` — rewired as buffered pipeline; `--runtime=docker|k8s|auto` flag (default: `auto`)
+- `pkg/detector/rules.go` — rule functions accept `WorkloadIdentity`, use `id.Service` (replaces container name string)
+
+Remove:
+- `pkg/container/container.go` — replaced by `pkg/workload/`
+
+**Verify:** `make test` passes; existing Docker VM alert output unchanged.
+
+---
+
+### Phase 2 — K8sResolver
+
+**Goal:** resolve `mnt_ns_id + pid → WorkloadIdentity` on GKE using containerd/crictl.
+
+New file: `pkg/workload/k8s_resolver.go`
+
+Key details:
+1. **cgroup parser** — K8s cgroupv2 path: `0::/kubepods/<qos>/pod<uid>/<container-id>`. Extract `<container-id>` (last segment). Handle all 3 QoS classes: Guaranteed, Burstable, BestEffort.
+2. **crictl lookup** — `crictl ps --output json` builds `container-id → {Container, Pod, Namespace}` map. `Service` = container name (e.g. `"inventory-service"`).
+3. **Watch API** — use containerd events to update cache in real-time instead of polling every 30s. Closes the `unknown-ns` false-positive window during HPA scale-up.
+4. **Self-filter** — at startup read `/proc/self/ns/mnt`, add agent's own `mnt_ns_id` to skip list. Prevents CRITICAL alerts from the DaemonSet pod itself.
+5. **Pause filter** — skip events where `comm == "pause"` (K8s infra container).
+
+**Verify:**
+- Unit tests: cgroup path parser with all 3 QoS class path formats (Guaranteed, Burstable, BestEffort)
+- Unit tests: self-filter — agent's own `mnt_ns_id` is in skip list at startup
+- Unit tests: pause filter — events with `comm == "pause"` are skipped
+- Integration test on GKE node: K8sResolver returns correct `Service`, `Pod`, `Namespace` for running pods
+- Integration test: pending-ns → 3 retries over 10s → CRITICAL escalation path (requires debug resolver flag)
+
+---
+
+### Phase 3 — Dockerfile + CO-RE build
+
+**Goal:** containerize the agent; BPF objects compile with BTF so they load on GKE kernel 6.8.
+
+- `Dockerfile` — multi-stage:
+  - Builder: `clang`, `llvm`, `libbpf-dev`; `make generate` compiles `.bpf.c → .o` with BTF flags; `go build`
+  - Runtime: minimal image, binary + `.bpf.o` files only
+- `Makefile` — CO-RE flags: `-g -O2 -target bpf -D__TARGET_ARCH_x86_64` (GKE nodes are x86_64; parameterize as `-D__TARGET_ARCH_$(ARCH)` for portability)
+
+**Verify:** `docker build` succeeds; `bpftool prog list` shows programs loaded on GKE node.
+
+---
+
+### Phase 4 — DaemonSet manifest + deploy
+
+**Goal:** run agent on every GKE node as a privileged DaemonSet.
+
+New file: `gcp_gke/kubernetes/daemonset.yaml`
+
+```yaml
+spec:
+  hostPID: true
+  hostNetwork: true
+  containers:
+  - securityContext:
+      privileged: true
+    volumeMounts:
+    - { name: proc, mountPath: /host/proc, readOnly: true }
+    - { name: sys,  mountPath: /host/sys,  readOnly: true }
+  volumes:
+  - { name: proc, hostPath: { path: /proc } }
+  - { name: sys,  hostPath: { path: /sys  } }
+```
+
+Push image to Artifact Registry (`us-west1-docker.pkg.dev/ebpfagent/order-processor/edr-monitor`).
+
+**Verify:** `kubectl get pods -n order-processor` shows `edr-monitor-<hash>` Running; `kubectl logs` shows alert output.
+
+---
+
+### Phase 5 — Validation
+
+**Goal:** confirm detection rules fire correctly against GKE workloads, no false positives from normal traffic, and pipeline behaves correctly under load and scaling.
+
+> Full validation plan: `VALIDATION-GKE.md` — covers 10 sections (functional, noise, load, resolver, timing, pipeline, cross-env, CO-RE) with metrics, commands, and success criteria.
+
+Summary of key scenarios:
+
+#### V1 — Baseline: no false positives from normal traffic
+
+```bash
+# Run full integration test suite against GKE gateway
+GATEWAY_HOST=136.109.215.94 python -m pytest integration_tests/
+
+# Expected: zero CRITICAL or HIGH alerts in agent logs
+kubectl logs -l app=edr-monitor -n order-processor | grep -E "CRITICAL|HIGH"
+# → no output
+```
+
+#### V2 — File access detection
+
+```bash
+kubectl exec -it <any-pod> -n order-processor -- cat /etc/shadow
+
+# Expected alert in agent logs:
+# LEVEL=HIGH RULE=sensitive_file_access
+# WorkloadIdentity.Pod=<pod-name>  WorkloadIdentity.Service=<service>
+```
+
+#### V3 — Shell spawn detection
+
+```bash
+kubectl exec -it <any-pod> -n order-processor -- bash
+
+# Expected alert:
+# LEVEL=CRITICAL RULE=shell_spawn_container
+# WorkloadIdentity.Service=<service>
+```
+
+#### V4 — Network exfiltration detection
+
+```bash
+# exec into any non-inventory pod and attempt external connection
+kubectl exec -it <non-inventory-pod> -n order-processor -- \
+  python3 -c "import urllib.request; urllib.request.urlopen('http://1.1.1.1')"
+
+# Expected alert:
+# LEVEL=HIGH RULE=unauthorized_external_connect
+# Expected NO alert from inventory-service (CoinGecko is allowlisted)
+```
+
+#### V5 — HPA scale-up: no `unknown-ns` false positives
+
+```bash
+# Trigger scale-up by running concurrent integration tests
+for i in {1..4}; do
+  GATEWAY_HOST=136.109.215.94 python -m pytest integration_tests/user_services/ &
+done
+wait
+
+# Watch HPA and agent logs simultaneously
+kubectl get hpa -n order-processor -w &
+kubectl logs -f -l app=edr-monitor -n order-processor | grep -E "CRITICAL|unknown-ns"
+
+# Expected:
+# - HPA scales user-service to 2-3 replicas
+# - New pods resolve correctly within grace period
+# - Zero unknown-ns CRITICAL in agent logs
+```
+
+#### V6 — Pipeline backpressure: drop counter visible under burst
+
+```bash
+# Flood the gateway to generate a burst of eBPF events
+ab -n 1000 -c 50 http://136.109.215.94:8080/health
+
+# Check agent logs for drop counter output
+kubectl logs -l app=edr-monitor -n order-processor | grep "dropped_alerts"
+# → counter may be non-zero (expected under burst), but pipeline must not stall
+# → agent must remain responsive after burst
+```
+
+#### V7 — WorkloadIdentity fields present in alerts
+
+Confirm `Service`, `Pod`, `Namespace`, `Runtime` are all populated correctly in alert output for both Docker VM and GKE:
+
+| Field | Docker VM expected | GKE expected |
+|-------|-------------------|--------------|
+| `Runtime` | `docker` | `k8s` |
+| `Service` | e.g. `inventory-service` | e.g. `inventory-service` |
+| `Pod` | same as Container | e.g. `inventory-service-68ccd68889-vbpvq` |
+| `Namespace` | `""` | `order-processor` |
+
+---
+
+### Out of scope for this plan
+
+- Alert aggregation strategy (Cloud Logging, file, stdout) — `AlertHandler` is pluggable, decide per environment
+- Detection rules for K8s-specific threats (privileged container escape, hostPath abuse) — future phase
+- Multi-node cluster support — current cluster is single-node; K8sResolver scoped to local node
+- VM1 Cloud Logging shipping — deferred
+
+---
+
+## 5. Future: System-Level Correlation
+
+### The gap in node-local detection
+
+The current pipeline is purely node-local — each agent processes events independently and has no visibility into what other nodes or pods are doing. This is sufficient for single-event threats (shell spawn, credential read) but cannot detect distributed or multi-step patterns.
+
+```
+Current (node-local):
+  Node 1: agent → pipeline → local alerts
+  Node 2: agent → pipeline → local alerts
+          ↑ no connection between them
+
+Needed:
+  Node 1: agent → pipeline → local alerts
+                           → event stream ──┐
+  Node 2: agent → pipeline → local alerts   ├──▶ Correlation Engine → system alerts
+                           → event stream ──┘
+```
+
+### What becomes detectable
+
+| Pattern | Per-node signal | Cross-node signal |
+|---------|----------------|-------------------|
+| Distributed exfiltration | LOW — 1 external connect each | HIGH — 5 pods → same IP within 60s |
+| Lateral movement | MEDIUM — shell spawn | CRITICAL — shell → net → shell chain across services |
+| Recon sweep | LOW — 1 file read | HIGH — same sensitive file across 8 pods within 10s |
+| Repeated low-signal | nothing (below threshold) | HIGH — pattern visible only in aggregate |
+
+### Minimal architecture (not built in this plan)
+
+Node agents emit enriched events to a **central stream** alongside local alerting. The correlation engine is a separate stateful process.
+
+```go
+// New interface — node agent forwards events to central stream (non-blocking)
+type EventForwarder interface {
+    Forward(event EnrichedEvent)
+}
+```
+
+Node pipeline becomes:
+
+```
+rawCh → Enricher → enrichedCh ──▶ Detector → alertCh → LocalHandler
+                             └──▶ EventForwarder → [central stream]
+```
+
+The branch is off `enrichedCh` — ALL enriched events are forwarded, not just those that triggered local alerts. The correlation engine needs the full event stream to detect patterns that don't cross the local alert threshold.
+
+The correlation engine subscribes to the stream and applies time-windowed rules. It emits system-level alerts that no single node could generate.
+
+### What `WorkloadIdentity` needs for correlation
+
+`Node` and `Region` fields are already included in the canonical `WorkloadIdentity` struct (Section 3). No struct changes needed — they just need to be populated at agent startup:
+
+- `Node` = `os.Hostname()` at startup
+- `Region` = `REGION` env var injected in DaemonSet per cluster; fallback: GCP metadata endpoint `http://metadata.google.internal/computeMetadata/v1/instance/zone`. New region = new Pulumi stack with different `REGION` value — see multi-region plan in Section 2.
+
+### Stream transport on GCP
+
+Cloud Pub/Sub is natural — both GKE pods and the Docker VM publish to the same topic, correlation engine subscribes. No additional infrastructure needed if already on GCP.
+
+---
+
+## Q&A — Design Decisions
+
+**Q: Why `interface{}` is removed from `EnrichedEvent`?**
+`interface{}` requires type assertions everywhere in detection rules, removes compiler safety, and makes tests harder to write. The typed union pattern (`*ProcessEvent`, `*FileEvent`, `*NetEvent` as optional fields) is idiomatic Go — nil means absent, compiler enforces correctness.
+
+**Q: Why must `Resolve()` be non-blocking?**
+The enricher runs inline on the hot path between the kernel ring buffer and detection. Any blocking call in `Resolve()` backs up the pipeline and can cause `rawCh` to fill, which in turn causes the eBPF ring buffer to drop events. Cache reads are always O(1); I/O (crictl, /proc scan) happens only in background goroutines.
+
+**Q: Why `Service` instead of `Container` as the primary field for rules?**
+Container names include runtime-specific prefixes and instance suffixes (e.g. `order-processor-inventory_service-1` on Docker, `inventory-service-68ccd68889-vbpvq` on K8s) that change between deploys. `Service` is the stable logical name the resolver extracts — rules written against it work across runtimes and restarts without changes.
+
+**Q: What is the `Service` normalization strategy?**
+Decision is open — see Section 3 "Known issue: Service field is fragile." Minimum proposal: normalize `_` → `-` in the resolver, giving `inventory-service` consistently across Docker and K8s. Whether to further strip suffixes (e.g. `inventory-service` → `inventory`) is deferred. The open question is whether the resolver owns normalization or a separate canonical name registry does. Decision must be made at Phase 1 implementation before writing any detection rules against `Service`.
+
+**Q: Why K8s watch API instead of polling for resolver cache?**
+HPA scale-up creates pods in seconds. Polling `crictl ps` every 30s means a new pod's `mnt_ns_id` is unknown for up to 30s, firing CRITICAL `unknown-ns` false positives during normal autoscaling. Containerd's watch API delivers pod lifecycle events in real-time, closing this window. The 30s poll is sufficient for Docker (containers start/stop slowly) but not for K8s.
+
+**Q: Why Cloud Logging is not decided?**
+GKE automatically captures pod stdout — no config needed. For Docker VM, shipping `alert.log` requires installing the ops-agent. Since `AlertHandler` is now a pluggable interface, there is no need to decide on an aggregation strategy upfront. Each environment chooses its own handler. Cloud Logging remains an option but is not required.
+
+**Q: Why `Pod` field duplicates `Container` on Docker?**
+Docker has no pod concept. Rather than leaving `Pod` empty and creating an asymmetric struct, `Pod = Container` on Docker keeps the shape consistent — callers always have a non-empty `Pod` field for logging, regardless of runtime.
+
+---
+
+## References
+
+- GKE node details: `gke-order-processor--auth-service-poo-c67e95af-pkgr`, kernel 6.8.0-1042-gke, Ubuntu 24.04.3 LTS
+- GKE order-processor gateway: `http://136.109.215.94:8080`
+- GKE manifests + deploy scripts: `cloud-native-order-processor/gcp_gke/`
+- GKE deployment notes: `cloud-native-order-processor/gcp_gke/NOTES.md`
+- eBPF agent repo: `~/workspace/ebpf-edr-demo`
+- Existing validation suite: `ebpf-edr-demo/VALIDATION.md`
+- Technical implementation notes (cgroup parsing, BPF patterns, rule design): `ebpf-edr-demo/NOTES.md`
