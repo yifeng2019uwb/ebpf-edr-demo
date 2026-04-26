@@ -1,6 +1,8 @@
-BINARY := ebpf-edr-demo
+BINARY         := ebpf-edr-demo
+DOCKER_REGISTRY := us-west1-docker.pkg.dev/ebpfagent/ebpf-edr
+DOCKER_IMAGE    := $(DOCKER_REGISTRY)/ebpf-edr:latest
 
-.PHONY: generate build rebuild test vet clean
+.PHONY: generate build rebuild test vet clean docker-build docker-push
 
 ## generate — compile .bpf.c → .o and regenerate Go wrappers in pkg/bpf/
 ## Requires: clang, llvm, libbpf-dev (run on GCP VM, not Mac)
@@ -25,3 +27,13 @@ vet:
 ## clean — remove built binary
 clean:
 	rm -f $(BINARY)
+
+## docker-build — cross-compile binary then build image locally (does not push)
+docker-build: build
+	docker buildx build --platform linux/amd64 --no-cache \
+		-t $(DOCKER_IMAGE) .
+
+## docker-push — cross-compile binary then build image and push to Artifact Registry
+docker-push: build
+	docker buildx build --platform linux/amd64 --no-cache --push \
+		-t $(DOCKER_IMAGE) .

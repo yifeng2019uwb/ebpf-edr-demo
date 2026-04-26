@@ -42,6 +42,87 @@
   - `pkg/workload/resolver.go` — `NewResolver("k8s")` now returns `K8sResolver`
   - `cmd/edr-monitor/main.go` — pause filter (`comm == "pause"` dropped in enricher); pending-ns retry loop (3s interval, max 3 retries / 10s → escalates to CRITICAL); `unknown_ns` + `pending_ns` in metrics
   - Unit tests (cgroup parser, self-filter, pending retry) — noted, add before Phase 4
+- [x] WorkloadIdentity refactor — `ResolveResult` / `ResolveState` typed enum
+  - `pkg/workload/identity.go` — `ResolveState` enum (`StateResolved|StateHost|StatePending|StateUnknown`), `WorkloadIdentity` (rules: Runtime+Service), `WorkloadMeta` (debug: Container/Pod/Namespace/Node/Region), `ResolveResult`; `WorkloadResolver` interface moved here (no build tag)
+  - Detection rules use `res.State ==` instead of magic strings; K8s `normalizeServiceName` bug fixed (containerName used directly)
+  - `cmd/edr-monitor/main.go` — 3 producer goroutines (BPF readers), `log.Fatalf` on fatal errors
+- [x] Phase 3 (local) — Dockerfile + Makefile docker targets
+  - Binary cross-compiled on macOS via `make build`; single-stage Dockerfile packages binary + installs crictl
+  - `make docker-build` / `make docker-push` working locally
+  - `gcp_gke`: `ebpf-edr` AR repo in Pulumi, `imageEbpfEdr` constant in config
+
+---
+
+## Pending
+
+### Phase 3 — CI/CD for Docker image
+
+Docker image build works locally (`make docker-build` / `make docker-push`). Next step: automate via GitHub Actions so every push to `main` builds and pushes to AR automatically.
+
+**Plan:**
+- Add `docker-push` job to `.github/workflows/ci.yml` — runs after `ci` job passes on `main`; authenticates to GCP via `GCP_CREDENTIALS` secret; runs `make docker-push`
+- Add `ebpf-edr-ci-sa` service account in `gcp_gke/pulumi_registry.go` with `roles/artifactregistry.writer` — dedicated CI SA, not the node SA
+- One-time manual: create SA key → add as `GCP_CREDENTIALS` in GitHub repo secrets
+
+**What's done (Phase 3 local):**
+- `Dockerfile` — single-stage; cross-compiled binary from macOS via `make build`; installs `crictl v1.30.0`
+- `Makefile` — `docker-build` (local test) and `docker-push` (build + push to AR) targets; both depend on `build`
+- Image: `us-west1-docker.pkg.dev/ebpfagent/ebpf-edr/ebpf-edr:latest`
+- `gcp_gke/config.go` — `arEbpfRepo` and `imageEbpfEdr` constants added
+- `gcp_gke/pulumi_registry.go` — `ebpf-edr` AR repo added alongside `order-processor`
+
+### Phase 4 — GKE DaemonSet
+
+**Plan (unchanged from original):**
+
+**Goal**: package the EDR agent as a container image and push to Artifact Registry so GKE DaemonSet can pull it.
+
+**Files to create/modify:**
+- `ebpf-edr-demo/Dockerfile` — multi-stage build (golang:1.22 builder + debian:bookworm-slim runtime); installs `crictl` (required by `k8s_resolver.go`); eBPF objects are pre-compiled in `pkg/bpf/` so no clang needed
+- `ebpf-edr-demo/Makefile` — add `docker-build` and `docker-push` targets; image: `us-west1-docker.pkg.dev/ebpfagent/ebpf-edr/ebpf-edr:latest`; use `--platform linux/amd64`
+
+**Build and push (from ebpf-edr-demo/):**
+```bash
+make docker-push     # build linux/amd64 image and push to Artifact Registry
+```
+
+**Note**: `make generate` (clang/llvm) is only needed when editing `.bpf.c` files. Generated `*_bpf*.go` files are committed — Docker build uses them as-is.
+
+---
+
+### Phase 4 — GKE DaemonSet
+
+**Goal**: deploy EDR agent to every node in each GKE cluster, region-tagged.
+
+**Design**:
+- Image lives in a separate AR repo `ebpf-edr` (not `order-processor`) — built and pushed from this project
+- DaemonSet manifest lives in `gcp_gke/kubernetes/ebpf-edr-ds.yaml` with `$REGION` as a placeholder
+- `deploy.sh daemonset` reads region from active Pulumi stack, substitutes `$REGION` via `envsubst`, applies manifest
+- If image not found in AR, prints warning and skips gracefully (does not fail)
+
+**Files to create/modify in gcp_gke:**
+- `pulumi_registry.go` — add `ebpf-edr` AR repo (node SA already has project-level `artifactregistry.reader`)
+- `config.go` — add `imageEbpfEdr` constant
+- `kubernetes/ebpf-edr-ds.yaml` — privileged DaemonSet; `hostPID: true`; mounts: `/proc` (read-only), `/sys/kernel/btf` (CO-RE BTF), `/run/containerd/containerd.sock` (for crictl)
+- `deploy.sh` — add `daemonset` command
+
+**Deploy per cluster:**
+```bash
+# Build and push image once (from ebpf-edr-demo/):
+make docker-push
+
+# Deploy DaemonSet to each cluster (from gcp_gke/):
+pulumi stack select gke-us-west1
+./deploy.sh daemonset    # deploys with REGION=us-west1
+
+pulumi stack select gke-us-east1
+./deploy.sh daemonset    # deploys with REGION=us-east1
+```
+
+**`deploy.sh daemonset` behavior:**
+1. Check if image exists in AR (`gcloud artifacts docker images describe ...`)
+2. If not found: print warning + skip (non-fatal)
+3. If found: read region from `pulumi config get region`, apply manifest with `REGION=$region envsubst`
 
 ---
 
