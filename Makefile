@@ -7,9 +7,9 @@ BINARY := ebpf-edr-demo
 generate:
 	go generate ./pkg/bpf/
 
-## build — compile the EDR agent binary
+## build — compile the EDR agent binary (cross-compiles to linux/amd64 from any host)
 build:
-	go build -o $(BINARY) ./cmd/edr-monitor/
+	GOOS=linux GOARCH=amd64 go build -o $(BINARY) ./cmd/edr-monitor/
 
 ## rebuild — regenerate BPF wrappers then build (use after editing .bpf.c files)
 rebuild: generate build
@@ -20,7 +20,7 @@ test:
 
 ## vet — run go vet on non-BPF packages (safe on any Linux host)
 vet:
-	go vet ./internal/... ./pkg/detector/... ./pkg/container/...
+	go vet ./internal/... ./pkg/detector/... ./pkg/workload/... ./pkg/pipeline/...
 
 ## clean — remove built binary
 clean:

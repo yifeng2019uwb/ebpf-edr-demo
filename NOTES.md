@@ -27,6 +27,15 @@
 - [x] Validation confirmed: all 7 detection rules fire correctly against real containers
 - [x] Refactor Go structure — `cmd/`, `pkg/`, `internal/`, `kernel/` package layout
 - [x] CI pipeline — GitHub Actions vet + test + build; `Makefile` with generate/build/test targets ✅
+- [x] Phase 1 — pipeline refactor + WorkloadIdentity
+  - `pkg/workload/`: `WorkloadIdentity` struct, `WorkloadResolver` interface, `DockerResolver`
+  - `pkg/pipeline/`: `RawEvent`, `EnrichedEvent`, `EventType`, core interfaces
+  - `internal/alert/`: `Alert.Workload WorkloadIdentity` (replaces `Container string`); added `Filename`, `DstIP`, `DstPort` fields
+  - `pkg/detector/`: `RuleDetector` struct implementing `Detector` interface; rules use `id.Service` (not raw container string)
+  - `pkg/detector/policy.go`: `externalAllowedServices = ["inventory-service"]` (normalized, works for Docker + K8s)
+  - `cmd/edr-monitor/main.go`: buffered pipeline `rawCh(4096) → enrichedCh(1024) → alertCh(64)`; `--runtime` flag; metrics every 10s
+  - `Makefile`: `GOOS=linux GOARCH=amd64` for cross-compile from macOS; updated `vet` targets
+  - Deleted `pkg/container/container.go` — replaced by `pkg/workload/docker_resolver.go`
 
 ---
 
@@ -44,16 +53,27 @@ Kernel's `ns.inum` is `unsigned int` (32-bit). Use `__u32 mnt_ns_id` in C struct
 
 ---
 
-### Container name resolution
+### Container name resolution → WorkloadIdentity
 Docker sets `HOSTNAME` env var to container ID (short hash), NOT container name.
 Reliable approach: `docker ps --no-trunc` → build full container ID → name map.
 Then `/proc/<pid>/cgroup` → extract container ID → look up name.
 
 Debian 12 / kernel 6.1 uses **cgroupv2** — path format is:
 `0::/system.slice/docker-<64char-id>.scope` (not `/docker/<id>`)
-Fixed `containerIDFromCgroup` to handle both cgroupv1 and cgroupv2 formats.
+`containerIDFromCgroup` handles both cgroupv1 and cgroupv2 formats.
 
-**Validated** — alert shows `container=order-processor-auth_service`, host processes silently skipped.
+**Service name normalization** (Phase 1): `DockerResolver.normalizeServiceName()` strips the Docker Compose
+project prefix and converts underscores to hyphens:
+`order-processor-inventory_service` → `inventory-service`
+Algorithm: take the segment after the last `-`, then replace `_` with `-`.
+Works for all services in this project (service names use underscores, project prefix uses hyphens).
+
+**`Resolve()` is non-blocking** (Phase 1 change): previously did a blocking `/proc` rescan on cache miss.
+Now: cache miss → trigger async refresh + return `Service:"unknown-ns"` immediately.
+Docker containers are long-lived so cache misses are rare after startup. This constraint is required
+for the K8s resolver (Phase 2) where the pipeline cannot block on crictl.
+
+**Validated** — alert shows `service=auth-service pod=order-processor-auth_service runtime=docker`.
 
 ---
 
@@ -241,9 +261,11 @@ Any other container connecting externally → HIGH `unauthorized_external_connec
 
 ### Named constants — no magic numbers
 
-Two values extracted to named constants so intent is clear and changes are localized:
-- `nsRefreshInterval = 30 * time.Second` — how often to rebuild the namespace cache
-- `externalAllowedContainers` — list of containers permitted to make external connections
+Values extracted to named constants so intent is clear and changes are localized:
+- `dockerRefreshInterval = 30 * time.Second` — how often to rebuild the namespace cache (`pkg/workload/docker_resolver.go`)
+- `externalAllowedServices` — services permitted to make external connections (`pkg/detector/policy.go`)
+  - Phase 1: renamed from `externalAllowedContainers`, now uses normalized service names (`"inventory-service"` not `"order-processor-inventory_service"`)
+  - Same policy now covers both Docker and K8s since `WorkloadIdentity.Service` is normalized consistently
 
 ---
 

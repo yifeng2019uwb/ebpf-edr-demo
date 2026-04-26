@@ -33,8 +33,7 @@ Three eBPF monitors run concurrently, each sending events to Go userspace via ri
 |---|---|---|
 | `execsnoop` | `sys_enter_execve` | Shell spawns, network tools inside containers |
 | `opensnoop` | `sys_enter/exit_openat` | Sensitive file access — shadow, SSH keys, secrets |
-| `exitsnoop` | `sched_process_exit` | Short-lived failures — possible crashed exploits |
-| `lsm-connect` _(planned)_ | `lsm/socket_connect` | Unauthorized outbound network connections |
+| `lsm-connect` | `lsm/socket_connect` | Unauthorized outbound network connections |
 
 ### Detection Rules
 
@@ -48,14 +47,22 @@ Three eBPF monitors run concurrently, each sending events to Go userspace via ri
 | `sensitive_file_access` | `/etc/passwd`, `/etc/group` | MEDIUM |
 | `short_lived_failure` | Non-zero exit + duration < 100ms | LOW |
 
-### Container Correlation
+### Workload Identity
 
-Every alert is tagged with the container name (`order-processor-auth_service`, etc.) using mount namespace IDs — no agent inside containers required.
+Every alert is tagged with a `WorkloadIdentity` using mount namespace IDs — no agent inside containers required.
 
-Namespace resolution uses a three-tier strategy:
-- **`host`** — PID 1 namespace
-- **`order-processor-xxx`** — known Docker container
-- **`unknown-ns`** — unrecognized namespace after fresh `/proc` rescan → escape alert
+| Field | Docker | GKE (Phase 2) |
+|-------|--------|---------------|
+| `Service` | `inventory-service` | `inventory-service` |
+| `Pod` | container name | `inventory-service-68ccd-abc` |
+| `Namespace` | `""` | `order-processor` |
+| `Runtime` | `docker` | `k8s` |
+
+`Service` is the stable logical name used by all detection rules — consistent across runtimes.
+
+Sentinel values for `Service`:
+- **`host`** — PID 1 namespace (host process)
+- **`unknown-ns`** — unrecognized namespace → possible container escape → CRITICAL alert
 
 ---
 
@@ -64,42 +71,45 @@ Namespace resolution uses a three-tier strategy:
 ```
   KERNEL (BPF programs)
   ─────────────────────────────────────────────
-  execsnoop         opensnoop          exitsnoop
-  sys_enter_execve  enter+exit_openat  sched_process_exit
+  execsnoop         opensnoop         lsm-connect
+  sys_enter_execve  enter+exit_openat lsm/socket_connect
        │                  │                 │
        └──────────────────┴─────────────────┘
+                          │  RawEvent{Source, Data}
+                   rawCh (4096)
                           │
-                   BPF Ring Buffer
-                          │
-  USERSPACE (Go — main.go)
+  USERSPACE (Go — buffered pipeline)
   ─────────────────────────────────────────────
-  3 goroutines read events concurrently
-       │
-  resolve container (mnt_ns → docker ps → name)
-       │
-  match detection rules (rules.go)
-       │
-  emit alert → stdout + alerts/alert.log
+  Enricher: parse bytes + resolve WorkloadIdentity (mnt_ns_id → service name)
+                          │  EnrichedEvent{Type, Process/File/Net, Workload}
+                   enrichedCh (1024)
+                          │
+  Detector: apply detection rules (pkg/detector)
+                          │  Alert{Level, Rule, Workload, ...}
+                   alertCh (64)
+                          │
+  AlertHandler: stdout + alerts/alert.log
 ```
 
 ---
 
 ## How to Run
 
-**Requires**: Linux, kernel 5.8+, Go 1.21+, clang/llvm, Docker
+**Requires**: Linux, kernel 5.8+, Go 1.24+, clang/llvm, Docker
 
 ```bash
 # on the GCP VM
 cd ~/workspace/ebpf-edr-demo
 
-# compile eBPF programs and generate Go wrappers
-go generate ./...
+# compile eBPF programs and generate Go wrappers (only after editing .bpf.c files)
+make generate
 
-# build
-go build
+# build binary (cross-compiles to linux/amd64 from any host)
+make build
 
 # run (requires root for eBPF)
-sudo ./ebpf-edr-demo
+sudo ./ebpf-edr-demo --runtime=docker   # Docker VM
+sudo ./ebpf-edr-demo --runtime=k8s      # GKE DaemonSet (Phase 2)
 ```
 
 Alerts are written to stdout and `alerts/alert.log`.
@@ -109,17 +119,28 @@ Alerts are written to stdout and `alerts/alert.log`.
 ## Project Structure
 
 ```
+cmd/edr-monitor/
+  main.go           — buffered pipeline wiring + --runtime flag
 kernel/
   execsnoop.bpf.c   — process execution monitor
-  execsnoop.h       — shared struct (C + Go)
-  exitsnoop.bpf.c   — process exit monitor
-  exitsnoop.h       — shared struct
   opensnoop.bpf.c   — file access monitor (two-probe enter+exit)
-  opensnoop.h       — shared struct
-main.go             — loads BPF, reads events, dispatches to rules
-rules.go            — all detection logic
-container.go        — namespace → container name resolver + pid cache
-alert.go            — alert struct and log writer
+  lsm-connect.bpf.c — network connection monitor
+pkg/
+  bpf/              — generated BPF loaders (bpf2go output)
+  workload/
+    identity.go     — WorkloadIdentity struct
+    resolver.go     — WorkloadResolver interface + NewResolver()
+    docker_resolver.go — Docker implementation (mnt_ns → service name)
+  pipeline/
+    event.go        — RawEvent, EnrichedEvent, core interfaces
+  detector/
+    rules.go        — detection rule implementations (RuleDetector)
+    policy.go       — allow/block lists (edit here to tune rules)
+internal/
+  alert/
+    alert.go        — Alert struct + Handler (stdout + file)
+  processor/
+    processor.go    — kernel event structs (must match .h files exactly)
 ```
 
 ---

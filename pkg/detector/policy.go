@@ -95,9 +95,11 @@ var mediumFilePrefixes = []string{
 // allowedMarketAPI is the only external domain any service may connect to.
 const allowedMarketAPI = "api.coingecko.com"
 
-// externalAllowedContainers — containers permitted to make external network connections.
-var externalAllowedContainers = []string{
-	"order-processor-inventory_service", // calls CoinGecko for live market data
+// externalAllowedServices — services permitted to make external network connections.
+// Uses normalized service names (matching WorkloadIdentity.Service) so the same
+// policy works for both Docker ("inventory-service") and K8s ("inventory-service").
+var externalAllowedServices = []string{
+	"inventory-service", // calls CoinGecko for live market data
 }
 
 // privateNets — RFC 1918 + link-local ranges that are always allowed.

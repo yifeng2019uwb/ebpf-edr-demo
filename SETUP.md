@@ -39,12 +39,15 @@ ls *.go *.o
 ```
 
 ## Build and Run
-// add main.go
 
 ```bash
 go mod tidy
-go build
-sudo ./ebpf-edr-demo
-// sudo ./ebpf-edr-demo > output.txt 2>&1
+
+# build (cross-compiles to linux/amd64 from any host — macOS included)
+make build
+
+# run on the GCP VM (requires root for eBPF)
+sudo ./ebpf-edr-demo --runtime=docker          # Docker VM
+sudo ./ebpf-edr-demo --runtime=docker > output.txt 2>&1
 ```
 

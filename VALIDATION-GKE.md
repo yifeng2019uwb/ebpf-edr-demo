@@ -25,17 +25,17 @@ Add lightweight in-memory counters, logged every 10s:
 [METRICS] recv=... enr=... drop=... alerts=... cache_hits=... cache_miss=... unknown=... pending=...
 ```
 
-| Counter | Description |
-|---------|-------------|
-| `events_received_total` | raw events read from BPF ring buffer |
-| `events_enriched_total` | events that completed enrichment |
-| `events_dropped_total` | events dropped (backpressure at any stage) |
-| `alerts_total{level,rule}` | alerts emitted, by level and rule |
-| `resolver_cache_hits` | Resolve() returned from cache |
-| `resolver_cache_misses` | Resolve() triggered async refresh |
+| Counter                   | Description                                                   |
+|---------------------------|---------------------------------------------------------------|
+| `events_received_total`   | raw events read from BPF ring buffer                          |
+| `events_enriched_total`   | events that completed enrichment                              |
+| `events_dropped_total`    | events dropped (backpressure at any stage)                    |
+| `alerts_total{level,rule}`| alerts emitted, by level and rule                             |
+| `resolver_cache_hits`     | Resolve() returned from cache                                 |
+| `resolver_cache_misses`   | Resolve() triggered async refresh                             |
 | `resolver_resolution_latency_ms` | time from first-seen → resolved (for pending-ns events) |
-| `unknown_ns_total` | events that reached CRITICAL after grace period |
-| `pending_ns_total` | events currently in pending buffer |
+| `unknown_ns_total`        | events that reached CRITICAL after grace period               |
+| `pending_ns_total`        | events currently in pending buffer                            |
 
 These make every test measurable. Do not run tests without them.
 
@@ -113,14 +113,14 @@ kubectl logs <inventory-pod> -n order-processor | grep coingecko
 
 For each alert in 2.1–2.4, validate no empty fields:
 
-| Field | Expected non-empty |
-|-------|-------------------|
-| `WorkloadIdentity.Runtime` | `"docker"` or `"k8s"` |
-| `WorkloadIdentity.Service` | e.g. `"user-service"` |
-| `WorkloadIdentity.Pod` | pod name (GKE) or container name (Docker) |
-| `WorkloadIdentity.Namespace` | `"order-processor"` (GKE) or `""` (Docker) |
-| `Comm` | process name |
-| `Filename` / `DstIP` | file path or destination IP (probe-specific) |
+| Field                       | Expected non-empty                          |
+|-----------------------------|---------------------------------------------|
+| `WorkloadIdentity.Runtime`  | `"docker"` or `"k8s"`                       |
+| `WorkloadIdentity.Service`  | e.g. `"user-service"`                       |
+| `WorkloadIdentity.Pod`      | pod name (GKE) or container name (Docker)   |
+| `WorkloadIdentity.Namespace`| `"order-processor"` (GKE) or `""` (Docker)  |
+| `Comm`                      | process name                                |
+| `Filename` / `DstIP`        | file path or destination IP (probe-specific)|
 
 ---
 
