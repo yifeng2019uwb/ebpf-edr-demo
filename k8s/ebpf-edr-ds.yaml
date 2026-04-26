@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: ebpf-edr
+  namespace: kube-system
+  labels:
+    app: ebpf-edr
+spec:
+  selector:
+    matchLabels:
+      app: ebpf-edr
+  template:
+    metadata:
+      labels:
+        app: ebpf-edr
+    spec:
+      hostPID: true
+      hostNetwork: true
+      tolerations:
+      - operator: Exists  # run on all nodes regardless of taints
+      containers:
+      - name: ebpf-edr
+        image: us-west1-docker.pkg.dev/ebpfagent/ebpf-edr/ebpf-edr:latest
+        imagePullPolicy: Always
+        env:
+        - name: REGION
+          value: "${REGION}"
+        - name: CONTAINER_RUNTIME_ENDPOINT
+          value: unix:///run/containerd/containerd.sock
+        securityContext:
+          privileged: true
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+        volumeMounts:
+        - name: proc
+          mountPath: /proc
+          readOnly: true
+        - name: btf
+          mountPath: /sys/kernel/btf
+          readOnly: true
+        - name: containerd-sock
+          mountPath: /run/containerd/containerd.sock
+        - name: alerts
+          mountPath: /alerts
+      volumes:
+      - name: proc
+        hostPath:
+          path: /proc
+      - name: btf
+        hostPath:
+          path: /sys/kernel/btf
+      - name: containerd-sock
+        hostPath:
+          path: /run/containerd/containerd.sock
+      - name: alerts
+        hostPath:
+          path: /var/log/ebpf-edr
+          type: DirectoryOrCreate
