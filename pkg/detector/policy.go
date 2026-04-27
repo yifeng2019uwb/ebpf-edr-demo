@@ -5,7 +5,13 @@
 package detector
 
 import (
+	"bufio"
+	"io"
+	"log"
 	"net"
+	"net/http"
+	"os"
+	"strings"
 	"time"
 )
 
@@ -102,6 +108,25 @@ var externalAllowedServices = []string{
 	"inventory-service", // calls CoinGecko for live market data
 }
 
+// ── Known startup noise — intentionally not suppressed ────────────────────────
+//
+// LocalStack (service=localstack) generates alerts on every pod startup:
+//   - CRITICAL shell_spawn_container — localstack runs internal shell scripts during init;
+//     this is normal for localstack but indistinguishable from RCE by our rules.
+//   - HIGH sensitive_file_access — reads /var/lib/localstack/cache/server.test.pem(.key)
+//     for its own HTTPS endpoint; these are localstack's own test certificates.
+//   - HIGH unauthorized_external_connect — connects to real AWS endpoints on startup
+//     (18.196.231.58, 63.182.162.112) for license check or telemetry. This is a real
+//     finding: localstack phones home to AWS even in local/emulator mode.
+//
+// Decision: localstack is internal infrastructure (DynamoDB emulator), not a real
+// microservice. We do NOT suppress these alerts. Reasons:
+//   1. If localstack were compromised, shell spawn and external connect are exactly
+//      the signals we would want to catch — suppressing them hides real threats.
+//   2. The AWS phone-home is a legitimate finding worth knowing about.
+//   3. These alerts only fire at startup, not during normal operation.
+// Accept as known startup noise. In a production policy, localstack would not exist.
+
 // systemNamespaces — GKE infrastructure namespaces suppressed entirely.
 // These generate constant high-frequency noise (kube-proxy iptables, prometheus
 // /proc reads, kubelet polling) that has no actionable signal for this project.
@@ -128,4 +153,62 @@ func init() {
 		_, n, _ := net.ParseCIDR(cidr)
 		privateNets = append(privateNets, n)
 	}
+
+	// SERVICE_CIDR — manual override; takes precedence over GCP metadata.
+	// Set this env var only when auto-detection is not available (non-GKE, local Docker).
+	if cidr := strings.TrimSpace(os.Getenv("SERVICE_CIDR")); cidr != "" {
+		if _, n, err := net.ParseCIDR(cidr); err == nil {
+			privateNets = append(privateNets, n)
+			return
+		}
+	}
+
+	// Auto-detect service CIDR from GCP metadata server (GKE nodes only).
+	// GKE service CIDRs are outside RFC 1918 (e.g. 34.118.x.x); inter-service calls
+	// via ClusterIP would otherwise be flagged as unauthorized external connections.
+	// On non-GKE nodes the metadata server is unreachable and we skip silently.
+	if cidr := gkeServiceCIDR(); cidr != "" {
+		if _, n, err := net.ParseCIDR(cidr); err == nil {
+			privateNets = append(privateNets, n)
+		}
+	}
+}
+
+// gkeServiceCIDR reads SERVICE_CLUSTER_IP_RANGE from the GCP instance metadata server.
+// Returns empty string on any error (non-GKE environment, metadata unreachable, etc.).
+func gkeServiceCIDR() string {
+	client := &http.Client{Timeout: 2 * time.Second}
+	req, err := http.NewRequest("GET",
+		"http://metadata.google.internal/computeMetadata/v1/instance/attributes/kube-env", nil)
+	if err != nil {
+		return ""
+	}
+	req.Header.Set("Metadata-Flavor", "Google")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		// Not on GKE or metadata server unreachable — normal for Docker/local runs.
+		return ""
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return ""
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return ""
+	}
+
+	scanner := bufio.NewScanner(strings.NewReader(string(body)))
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "SERVICE_CLUSTER_IP_RANGE:") {
+			cidr := strings.TrimSpace(strings.TrimPrefix(line, "SERVICE_CLUSTER_IP_RANGE:"))
+			log.Printf("gkeServiceCIDR: auto-detected service CIDR %s from GCP metadata", cidr)
+			return cidr
+		}
+	}
+	return ""
 }
