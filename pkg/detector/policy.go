@@ -102,6 +102,19 @@ var externalAllowedServices = []string{
 	"inventory-service", // calls CoinGecko for live market data
 }
 
+// systemNamespaces — GKE infrastructure namespaces suppressed entirely.
+// These generate constant high-frequency noise (kube-proxy iptables, prometheus
+// /proc reads, kubelet polling) that has no actionable signal for this project.
+var systemNamespaces = map[string]bool{
+	"kube-system":      true,
+	"gmp-system":       true,
+	"gke-managed-cim":  true,
+}
+
+func isSystemNamespace(ns string) bool {
+	return ns != "" && systemNamespaces[ns]
+}
+
 // privateNets — RFC 1918 + link-local ranges that are always allowed.
 var privateNets []*net.IPNet
 

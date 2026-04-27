@@ -33,7 +33,7 @@ echo "Discovering resources..."
 
 EDR_POD=$($KUBECTL get pod -n kube-system -l app=ebpf-edr \
     -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
-TARGET_POD=$($KUBECTL get pod -n "$NAMESPACE" -l app=user-service \
+TARGET_POD=$($KUBECTL get pod -n "$NAMESPACE" -l component=user-service \
     -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
 GATEWAY_IP=$($KUBECTL get svc gateway -n "$NAMESPACE" \
     -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)

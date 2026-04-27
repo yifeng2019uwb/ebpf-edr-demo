@@ -22,6 +22,10 @@ func NewRuleDetector() *RuleDetector { return &RuleDetector{} }
 
 // Detect applies all rules to the enriched event and returns any triggered alerts.
 func (d *RuleDetector) Detect(ev pipeline.EnrichedEvent) []alert.Alert {
+	if isSystemNamespace(ev.Workload.Meta.Namespace) {
+		return nil
+	}
+
 	var a *alert.Alert
 
 	switch ev.Type {
