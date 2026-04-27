@@ -133,9 +133,19 @@ GATEWAY_HOST=136.109.215.94 python -m pytest integration_tests/ -v
 ```
 
 **Expect:**
-- `alerts_total{level=CRITICAL}` = 0
-- `alerts_total{level=HIGH}` = 0
+- No CRITICAL or HIGH alerts from `order-processor` namespace pods
 - LOW alerts only from inventory CoinGecko calls
+
+**Known GKE system noise (not from order-processor — expected, not failures):**
+
+| Alert | Source | Why |
+|---|---|---|
+| `unknown_namespace_process` CRITICAL `iptables` | kube-proxy | Runs iptables in host network namespace every ~30s |
+| `unknown_namespace_process` CRITICAL `redis-cli` | kubelet liveness probe | Runs `redis-cli ping` from host PID namespace |
+| `unauthorized_external_connect` HIGH `operator` → 10250 | `gmp-system/gmp-operator` | GKE Managed Prometheus polls kubelet metrics API |
+| `sensitive_file_access` HIGH `sidecar`/`prometheus`/`event-exporter` reading `/proc/1/*` | GKE monitoring stack | Normal node metrics collection |
+
+These fire because the rules are generic and don't allowlist GKE infrastructure processes. In production, suppress via (comm, namespace, destination) allowlist tuples.
 
 ---
 

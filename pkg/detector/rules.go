@@ -259,18 +259,7 @@ func checkNetworkRules(event processor.NetEvent, res workload.ResolveResult, ip 
 
 	for _, allowed := range externalAllowedServices {
 		if id.Service == allowed {
-			return &alert.Alert{
-				Level:    "LOW",
-				Rule:     "external_connect_allowed",
-				Message:  fmt.Sprintf("%s external connect to %s:%d (expected: %s)", id.Service, ipStr, port, allowedMarketAPI),
-				Pid:      event.Pid,
-				Ppid:     event.Ppid,
-				Uid:      int32(event.Uid),
-				Comm:     comm,
-				Workload: res,
-				DstIP:    ipStr,
-				DstPort:  port,
-			}
+			return nil
 		}
 	}
 

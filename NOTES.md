@@ -46,76 +46,17 @@
   - `pkg/workload/identity.go` — `ResolveState` enum (`StateResolved|StateHost|StatePending|StateUnknown`), `WorkloadIdentity` (rules: Runtime+Service), `WorkloadMeta` (debug: Container/Pod/Namespace/Node/Region), `ResolveResult`; `WorkloadResolver` interface moved here (no build tag)
   - Detection rules use `res.State ==` instead of magic strings; K8s `normalizeServiceName` bug fixed (containerName used directly)
   - `cmd/edr-monitor/main.go` — 3 producer goroutines (BPF readers), `log.Fatalf` on fatal errors
-- [x] Phase 3 (local) — Dockerfile + Makefile docker targets
+- [x] Phase 3 — Dockerfile + Makefile docker targets + push to AR
   - Binary cross-compiled on macOS via `make build`; single-stage Dockerfile packages binary + installs crictl
-  - `make docker-build` / `make docker-push` working locally
+  - `make docker-build` / `make docker-push` working; image: `us-west1-docker.pkg.dev/ebpfagent/ebpf-edr/ebpf-edr:latest`
   - `gcp_gke`: `ebpf-edr` AR repo in Pulumi, `imageEbpfEdr` constant in config
-
----
-
-## Pending
-
-### Phase 3 — Docker image
-
-**What's done:**
-- `Dockerfile` — single-stage; cross-compiled binary from macOS via `make build`; installs `crictl v1.30.0`
-- `Makefile` — `docker-build` (local test) and `docker-push` (build + push to AR) targets; both depend on `build`
-- Image: `us-west1-docker.pkg.dev/ebpfagent/ebpf-edr/ebpf-edr:latest`
-- `gcp_gke/config.go` — `arEbpfRepo` and `imageEbpfEdr` constants added
-- `gcp_gke/pulumi_registry.go` — `ebpf-edr` AR repo added alongside `order-processor`
-
-### Phase 4 — GKE DaemonSet
-
-**Plan (unchanged from original):**
-
-**Goal**: package the EDR agent as a container image and push to Artifact Registry so GKE DaemonSet can pull it.
-
-**Files to create/modify:**
-- `ebpf-edr-demo/Dockerfile` — multi-stage build (golang:1.22 builder + debian:bookworm-slim runtime); installs `crictl` (required by `k8s_resolver.go`); eBPF objects are pre-compiled in `pkg/bpf/` so no clang needed
-- `ebpf-edr-demo/Makefile` — add `docker-build` and `docker-push` targets; image: `us-west1-docker.pkg.dev/ebpfagent/ebpf-edr/ebpf-edr:latest`; use `--platform linux/amd64`
-
-**Build and push (from ebpf-edr-demo/):**
-```bash
-make docker-push     # build linux/amd64 image and push to Artifact Registry
-```
-
-**Note**: `make generate` (clang/llvm) is only needed when editing `.bpf.c` files. Generated `*_bpf*.go` files are committed — Docker build uses them as-is.
-
----
-
-### Phase 4 — GKE DaemonSet
-
-**Goal**: deploy EDR agent to every node in each GKE cluster, region-tagged.
-
-**Design**:
-- Image lives in a separate AR repo `ebpf-edr` (not `order-processor`) — built and pushed from this project
-- DaemonSet manifest lives in `gcp_gke/kubernetes/ebpf-edr-ds.yaml` with `$REGION` as a placeholder
-- `deploy.sh daemonset` reads region from active Pulumi stack, substitutes `$REGION` via `envsubst`, applies manifest
-- If image not found in AR, prints warning and skips gracefully (does not fail)
-
-**Files to create/modify in gcp_gke:**
-- `pulumi_registry.go` — add `ebpf-edr` AR repo (node SA already has project-level `artifactregistry.reader`)
-- `config.go` — add `imageEbpfEdr` constant
-- `kubernetes/ebpf-edr-ds.yaml` — privileged DaemonSet; `hostPID: true`; mounts: `/proc` (read-only), `/sys/kernel/btf` (CO-RE BTF), `/run/containerd/containerd.sock` (for crictl)
-- `deploy.sh` — add `daemonset` command
-
-**Deploy per cluster:**
-```bash
-# Build and push image once (from ebpf-edr-demo/):
-make docker-push
-
-# Deploy DaemonSet to each cluster (from gcp_gke/):
-pulumi stack select gke-us-west1
-./deploy.sh daemonset    # deploys with REGION=us-west1
-
-pulumi stack select gke-us-east1
-./deploy.sh daemonset    # deploys with REGION=us-east1
-```
-
-**`deploy.sh daemonset` behavior:**
-1. Check if image exists in AR (`gcloud artifacts docker images describe ...`)
-2. If not found: print warning + skip (non-fatal)
-3. If found: read region from `pulumi config get region`, apply manifest with `REGION=$region envsubst`
+- [x] Phase 4 — GKE DaemonSet deployed and running on both clusters
+  - `k8s/ebpf-edr-ds.yaml` — privileged DaemonSet in `kube-system`; `hostPID: true`, `hostNetwork: true`; `${REGION}` substituted via `envsubst`
+  - Required mounts: `/proc`, `/sys/kernel/btf`, `/run/containerd/containerd.sock`, `/sys/kernel/debug`, `/sys/kernel/tracing` (debugfs+tracefs needed for tracepoints)
+  - `deploy.sh all` — calls `_push_ebpf_image` (runs `make docker-push` if `ebpf-edr-demo/` found locally) then `for_each_cluster deploy_full`
+  - `deploy.sh daemonset` — downloads YAML from GitHub raw URL, substitutes region, applies to all clusters
+  - **Bug fixed**: `containerIDFromK8sCgroup` — GKE Ubuntu nodes use cgroup v2 systemd format (`cri-containerd-<id>.scope`); old code matched `/kubepods/` (cgroup v1 only); fixed to match `kubepods` and strip prefix/suffix
+  - **Validated**: workload resolver populates `service=`, `pod=`, `namespace=` correctly (e.g. `service=operator pod=gmp-operator-599978c87f-x57lt namespace=gmp-system`)
 
 ---
 
@@ -133,15 +74,29 @@ Kernel's `ns.inum` is `unsigned int` (32-bit). Use `__u32 mnt_ns_id` in C struct
 
 ---
 
-### K8s cgroup path parsing — all 3 QoS classes
+### K8s cgroup path parsing — cgroup v1 vs cgroup v2 systemd
 
-K8s sets pod cgroup paths based on QoS class of the pod:
+K8s sets pod cgroup paths based on QoS class and cgroup version:
+
+**cgroup v1** (older nodes):
 ```
-Guaranteed:  0::/kubepods/pod<uid>/<container-id>
-Burstable:   0::/kubepods/burstable/pod<uid>/<container-id>
-BestEffort:  0::/kubepods/besteffort/pod<uid>/<container-id>
+Guaranteed:  12:blkio:/kubepods/pod<uid>/<container-id>
+Burstable:   12:blkio:/kubepods/burstable/pod<uid>/<container-id>
+BestEffort:  12:blkio:/kubepods/besteffort/pod<uid>/<container-id>
 ```
-Container ID is always the **last path segment**. Implementation: find line containing `/kubepods/`, take everything after the last `:`, split by `/`, take last element. Works for all 3 QoS classes without special-casing.
+
+**cgroup v2 systemd** (GKE Ubuntu nodes — confirmed GKE 6.8 kernel):
+```
+0::/kubepods.slice/kubepods-burstable.slice/kubepods-burstable-pod<uid>.slice/cri-containerd-<id>.scope
+```
+
+Container ID extraction:
+1. Match any line containing `kubepods` (covers both formats)
+2. Take everything after the last `:`
+3. Split by `/`, take last segment
+4. If segment matches `cri-containerd-<id>.scope` — strip prefix and suffix to get bare `<id>`
+
+**Bug**: original code matched `/kubepods/` (v1 only) — missed all GKE Ubuntu nodes which use v2. Fix: match `kubepods` and handle the `.scope` suffix.
 
 ---
 
@@ -164,6 +119,43 @@ Buffer is unbounded per namespace ID but capped by retry count/age per entry. Un
 ### K8s self-filter — agent's own namespace
 
 At `K8sResolver.Start()`, read `/proc/self/ns/mnt` to get the DaemonSet pod's own mount namespace ID. Map it to `Service: "host"` in the cache. The detector skips all events where `id.Service == "host"`, so the agent never alerts on its own activity (e.g., running crictl, reading /proc).
+
+---
+
+### DaemonSet required mounts — debugfs and tracefs
+
+eBPF tracepoints attach via tracefs (mounted at `/sys/kernel/tracing`) or debugfs (`/sys/kernel/debug/tracing`). These are host filesystems not visible inside the container by default.
+
+Without them, the agent fails at startup with:
+```
+attaching process tracepoint: neither debugfs nor tracefs are mounted
+```
+
+Required volume mounts in `ebpf-edr-ds.yaml`:
+```yaml
+- name: debugfs
+  mountPath: /sys/kernel/debug
+- name: tracefs
+  mountPath: /sys/kernel/tracing
+```
+Both are mounted without `readOnly: true` (kernel requires write access to attach/detach tracepoints).
+`privileged: true` is also required (already set) — without it the container cannot access these even if mounted.
+
+---
+
+### Known GKE false positives
+
+These alerts fire on every GKE cluster and are **not threats**:
+
+| `comm` | Rule | Reason |
+|---|---|---|
+| `iptables` / `ip6tables` | `unknown_namespace_process` CRITICAL | kube-proxy runs iptables in host net namespace every ~30s to sync routing rules |
+| `redis-cli` | `unknown_namespace_process` CRITICAL | kubelet liveness probe for redis pod — runs `redis-cli ping` from host |
+| `operator` → port 10250 | `unauthorized_external_connect` HIGH | GKE Managed Prometheus (`gmp-system/gmp-operator`) polls kubelet metrics API |
+| `sidecar`, `prometheus` reading `/proc/1/stat` | `sensitive_file_access` HIGH | GKE monitoring sidecars read host proc files for CPU/memory metrics |
+| `event-exporter` reading `/proc/1/stat` | `sensitive_file_access` HIGH | GKE event exporter reads host proc for node metadata |
+
+In production these would be suppressed via an allowlist (process + namespace + destination tuples). For this demo they are expected noise.
 
 ---
 

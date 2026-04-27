@@ -92,12 +92,12 @@ var mediumFilePrefixes = []string{
 
 // ── Network policy ────────────────────────────────────────────────────────────
 
-// allowedMarketAPI is the only external domain any service may connect to.
-const allowedMarketAPI = "api.coingecko.com"
-
 // externalAllowedServices — services permitted to make external network connections.
 // Uses normalized service names (matching WorkloadIdentity.Service) so the same
 // policy works for both Docker ("inventory-service") and K8s ("inventory-service").
+// Allowed services produce no alert — "allowed" means expected, no signal value.
+// Previously emitted LOW rule=external_connect_allowed; removed because it fired
+// on every DNS lookup and CoinGecko call, adding noise without actionable signal.
 var externalAllowedServices = []string{
 	"inventory-service", // calls CoinGecko for live market data
 }
