@@ -20,7 +20,8 @@ char LICENSE[] SEC("license") = "GPL";
 // dst_ip is stored in network byte order (big-endian).
 // On x86 little-endian, the first octet (127 for loopback) sits in the lowest byte.
 // (127.x.x.x bytes in memory: [7F, xx, xx, xx] → read as LE uint32: 0xXXXXXX7F)
-#define LOOPBACK_BYTE 0x7F  // 127 — any 127.x.x.x address
+// RFC 1122 reserves the entire 127.0.0.0/8 block for loopback — never routable externally.
+#define LOOPBACK_BYTE 0x7F  // 127 — covers all 127.x.x.x (RFC 1122 loopback /8)
 
 struct {
 	__uint(type, BPF_MAP_TYPE_RINGBUF);
@@ -41,6 +42,7 @@ int BPF_PROG(handle_connect, struct socket *sock, struct sockaddr *address, int 
 	if (address->sa_family != AF_INET)
 		return 0;
 
+	// Cast the address to an IPv4 socket address
 	struct sockaddr_in *addr = (struct sockaddr_in *)address;
 	__u32 dst_ip = addr->sin_addr.s_addr;
 

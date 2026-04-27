@@ -22,10 +22,17 @@
 
 char LICENSE[] SEC("license") = "GPL";
 
-// Ring buffer — emits successfully opened file events to Go userspace
+// 256 KB ring buffer — holds ~640 file_event structs (408 bytes each) before kernel drops.
+// Must be a power of 2 (kernel requirement for BPF_MAP_TYPE_RINGBUF).
+#define RINGBUF_SIZE      (256 * 1024)
+
+// Max concurrent in-flight openat() calls (threads between sys_enter and sys_exit).
+// 1024 is well above the realistic peak for ~100 containers on a GKE node.
+#define MAX_OPEN_INFLIGHT 1024
+
 struct {
 	__uint(type, BPF_MAP_TYPE_RINGBUF);
-	__uint(max_entries, 256 * 1024);
+	__uint(max_entries, RINGBUF_SIZE);
 } rb SEC(".maps");
 
 // ── Two-probe pattern ────────────────────────────────────────────────────────
@@ -45,23 +52,11 @@ struct {
 // Keyed by tid (not tgid) so concurrent threads don't overwrite each other.
 // ────────────────────────────────────────────────────────────────────────────
 
-// BPF-internal only — NOT shared with Go userspace.
-// Stores event data between sys_enter and sys_exit.
-struct pending_open {
-	__u64 mnt_ns_id;
-	int   pid;
-	int   ppid;
-	__u32 uid;
-	__u32 _pad;                        // explicit pad — keeps struct size 8-byte aligned
-	char  comm[TASK_COMM_LEN];
-	char  filename[MAX_FILENAME_LEN];
-};
-
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
-	__uint(max_entries, 10240);        // max concurrent in-flight opens
+	__uint(max_entries, MAX_OPEN_INFLIGHT);
 	__type(key,   __u32);             // tid
-	__type(value, struct pending_open);
+	__type(value, struct file_event);
 } pending_opens SEC(".maps");
 
 // sys_enter_openat — capture filename and process context.
@@ -77,23 +72,23 @@ int handle_enter(struct trace_event_raw_sys_enter *ctx)
 	if (tgid != tid)
 		return 0;
 
-	struct pending_open po = {};
+	struct file_event ev = {};
 	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
 
-	po.mnt_ns_id = BPF_CORE_READ(task, nsproxy, mnt_ns, ns.inum);
-	po.pid       = tgid;
-	po.ppid      = BPF_CORE_READ(task, real_parent, tgid);
-	po.uid       = (u32)bpf_get_current_uid_gid();
-	po._pad      = 0;
+	ev.mnt_ns_id = BPF_CORE_READ(task, nsproxy, mnt_ns, ns.inum);
+	ev.pid       = tgid;
+	ev.ppid      = BPF_CORE_READ(task, real_parent, tgid);
+	ev.uid       = (u32)bpf_get_current_uid_gid();
+	ev.pad       = 0;
 
-	bpf_get_current_comm(&po.comm, sizeof(po.comm));
+	bpf_get_current_comm(&ev.comm, sizeof(ev.comm));
 
 	// args[1] is the filename pointer passed to openat syscall
 	// must read from user space here — pointer is valid at entry time
 	char *filename_ptr = (char *)BPF_CORE_READ(ctx, args[1]);
-	bpf_probe_read_user_str(po.filename, sizeof(po.filename), filename_ptr);
+	bpf_probe_read_user_str(ev.filename, sizeof(ev.filename), filename_ptr);
 
-	bpf_map_update_elem(&pending_opens, &tid, &po, BPF_ANY);
+	bpf_map_update_elem(&pending_opens, &tid, &ev, BPF_ANY);
 	return 0;
 }
 
@@ -110,35 +105,29 @@ int handle_enter(struct trace_event_raw_sys_enter *ctx)
 // The attempt against an existing sensitive file IS the signal,
 // whether the OS allowed it or not.
 SEC("tracepoint/syscalls/sys_exit_openat")
-int handle_exit(struct trace_event_raw_sys_exit *ctx)
+int handle_valid_open(struct trace_event_raw_sys_exit *ctx)
 {
 	u64 id  = bpf_get_current_pid_tgid();
 	u32 tid = (u32)id;
 
-	struct pending_open *po = bpf_map_lookup_elem(&pending_opens, &tid);
-	if (!po)
+	struct file_event *ev = bpf_map_lookup_elem(&pending_opens, &tid);
+	if (!ev)
 		return 0;
 
 	// always delete — whether we emit or not, entry is done
 	bpf_map_delete_elem(&pending_opens, &tid);
 
-	// drop only if file does not exist — harmless config file probing
-	// keep if open succeeded OR if OS denied access to an existing file
-	if (ctx->ret < 0 && ctx->ret != -EACCES && ctx->ret != -EPERM)
+	// valid = file exists: opened successfully, or OS denied access to an existing file
+	// invalid = file does not exist (ENOENT, ENOTDIR, …) — harmless probing, drop
+	bool valid = ctx->ret >= 0 || ctx->ret == -EACCES || ctx->ret == -EPERM;
+	if (!valid)
 		return 0;
 
 	struct file_event *e = bpf_ringbuf_reserve(&rb, sizeof(*e), 0);
 	if (!e)
 		return 0;
 
-	e->mnt_ns_id = po->mnt_ns_id;
-	e->pid       = po->pid;
-	e->ppid      = po->ppid;
-	e->uid       = po->uid;
-	e->pad       = 0;
-
-	__builtin_memcpy(e->comm,     po->comm,     sizeof(e->comm));
-	__builtin_memcpy(e->filename, po->filename, sizeof(e->filename));
+	__builtin_memcpy(e, ev, sizeof(*e));
 
 	bpf_ringbuf_submit(e, 0);
 	return 0;

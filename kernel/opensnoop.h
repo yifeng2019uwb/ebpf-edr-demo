@@ -4,7 +4,7 @@
 //   - added full file_event struct with mnt_ns_id, pid, ppid, uid, comm, filename
 //   - field order chosen to avoid implicit C alignment padding
 // opensnoop.h — struct file_event shared between opensnoop.bpf.c and Go userspace
-// struct pending_open (BPF-internal scratch space) is defined in opensnoop.bpf.c only
+// Used both as the ring buffer event and as the pending_opens map value (scratch space between enter+exit probes)
 #ifndef __OPENSNOOP_H
 #define __OPENSNOOP_H
 
