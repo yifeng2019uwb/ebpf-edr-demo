@@ -1,7 +1,8 @@
 # eBPF EDR — GKE Expansion Design
 
-> Status: **Phase 5 validation complete (2026-04-27) — all 5 GKE functional tests pass. Next: Phase 6 Cloud Pub/Sub alert aggregation.**
+> Status: **Phase 5 validation complete (2026-04-27) — all 5 GKE functional tests pass. Next: Phase 6 attack simulation with Atomic Red Team + MITRE coverage expansion.**
 > Discussion dates: 2026-04-22 → 2026-04-27
+> MITRE coverage: see `MITRE-COVERAGE.md` — 8/35 relevant techniques (~23%), Atomic Red Team tests for each rule.
 
 ---
 
