@@ -12,9 +12,9 @@ SKIP=0
 
 GREEN='\033[0;32m'; RED='\033[0;31m'; YELLOW='\033[1;33m'; NC='\033[0m'
 
-pass() { echo -e "${GREEN}[PASS]${NC} $*"; ((PASS++)); }
-fail() { echo -e "${RED}[FAIL]${NC} $*"; ((FAIL++)); }
-skip() { echo -e "${YELLOW}[SKIP]${NC} $*"; ((SKIP++)); }
+pass() { echo -e "${GREEN}[PASS]${NC} $*"; ((PASS++)) || true; }
+fail() { echo -e "${RED}[FAIL]${NC} $*"; ((FAIL++)) || true; }
+skip() { echo -e "${YELLOW}[SKIP]${NC} $*"; ((SKIP++)) || true; }
 info() { echo -e "      $*"; }
 
 # ── parse args ────────────────────────────────────────────────────────────────
@@ -48,12 +48,14 @@ echo ""
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
-# Poll EDR logs for a pattern, return 0 if found within timeout.
+# Poll EDR logs for a pattern anchored to $3 (RFC3339 timestamp), return 0 if found within timeout.
+# Pass the timestamp captured BEFORE the trigger so slow-firing alerts are never missed.
 expect_alert() {
     local pattern=$1
-    local timeout=${2:-20}
+    local timeout=${2:-60}
+    local since=${3:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}
     for ((elapsed=0; elapsed<timeout; elapsed+=2)); do
-        if $KUBECTL logs "$EDR_POD" -n kube-system --since="${timeout}s" 2>/dev/null \
+        if $KUBECTL logs "$EDR_POD" -n kube-system --since-time="$since" 2>/dev/null \
                 | grep -qE "$pattern"; then
             return 0
         fi
@@ -76,8 +78,9 @@ no_alert() {
 
 # ── V2: Shell spawn ───────────────────────────────────────────────────────────
 echo "=== V2: Shell spawn detection ==="
+V2_SINCE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 $KUBECTL exec "$TARGET_POD" -n "$NAMESPACE" -- bash -c "exit 0" >/dev/null 2>&1 || true
-if expect_alert "CRITICAL.*shell_spawn_container.*service=user-service.*namespace=order-processor"; then
+if expect_alert "CRITICAL.*shell_spawn_container.*service=user-service.*namespace=order-processor" 60 "$V2_SINCE"; then
     pass "V2: CRITICAL shell_spawn_container — service=user-service namespace=order-processor"
 else
     fail "V2: no CRITICAL shell_spawn_container within timeout"
@@ -85,8 +88,9 @@ fi
 
 # ── V3: Sensitive file access ─────────────────────────────────────────────────
 echo "=== V3: Sensitive file access ==="
+V3_SINCE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 $KUBECTL exec "$TARGET_POD" -n "$NAMESPACE" -- cat /etc/shadow >/dev/null 2>&1 || true
-if expect_alert "HIGH.*sensitive_file_access.*service=user-service.*shadow"; then
+if expect_alert "HIGH.*sensitive_file_access.*service=user-service.*shadow" 60 "$V3_SINCE"; then
     pass "V3: HIGH sensitive_file_access — /etc/shadow detected"
 else
     fail "V3: no HIGH sensitive_file_access alert within timeout"
@@ -94,10 +98,11 @@ fi
 
 # ── V4: Unauthorized external connect ────────────────────────────────────────
 echo "=== V4: Unauthorized external connect ==="
+V4_SINCE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 $KUBECTL exec "$TARGET_POD" -n "$NAMESPACE" -- \
     python3 -c "import socket; s=socket.socket(); s.settimeout(3); s.connect(('8.8.8.8',80)); s.close()" \
     >/dev/null 2>&1 || true
-if expect_alert "HIGH.*unauthorized_external_connect.*service=user-service.*8\.8\.8\.8"; then
+if expect_alert "HIGH.*unauthorized_external_connect.*service=user-service.*8\.8\.8\.8" 60 "$V4_SINCE"; then
     pass "V4: HIGH unauthorized_external_connect — 8.8.8.8 detected"
 else
     fail "V4: no HIGH unauthorized_external_connect alert within timeout"
