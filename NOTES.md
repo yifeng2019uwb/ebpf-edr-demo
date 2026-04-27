@@ -95,6 +95,16 @@ kubectl logs -n kube-system -l app=ebpf-edr --tail=10    # confirm no crash
   - `deploy.sh daemonset` — downloads YAML from GitHub raw URL, substitutes region, applies to all clusters
   - **Bug fixed**: `containerIDFromK8sCgroup` — GKE Ubuntu nodes use cgroup v2 systemd format (`cri-containerd-<id>.scope`); old code matched `/kubepods/` (cgroup v1 only); fixed to match `kubepods` and strip prefix/suffix
   - **Validated**: workload resolver populates `service=`, `pod=`, `namespace=` correctly (e.g. `service=operator pod=gmp-operator-599978c87f-x57lt namespace=gmp-system`)
+- [x] Phase 5 — GKE functional validation: all 5 tests pass (`./validate-gke.sh`)
+  - **V2**: CRITICAL `shell_spawn_container` — `kubectl exec bash` into user-service detected ✓
+  - **V3**: HIGH `sensitive_file_access` — `cat /etc/shadow` from container detected ✓
+  - **V4**: HIGH `unauthorized_external_connect` — python3 connect to `8.8.8.8:80` detected ✓
+  - **V5**: inventory-service external connects produce no HIGH alert (allowlist working) ✓
+  - **V6**: normal gateway HTTP traffic produces no CRITICAL false positives ✓
+  - **Fix: GKE service CIDR auto-detection** — GKE ClusterIPs (`34.118.x.x`) are outside RFC 1918; previously flagged as `unauthorized_external_connect`. Now auto-detected from GCP metadata server at startup; see note below.
+  - **Fix: system namespace suppression** — `kube-system`, `gmp-system`, `gke-managed-cim` suppressed entirely (constant high-frequency noise from kube-proxy iptables, prometheus /proc reads, kubelet polling)
+  - **Fix: validate-gke.sh timing** — `--since=Ns` rolling window missed alerts that fire >N seconds after exec; replaced with `--since-time=<RFC3339>` anchored before the trigger so the window always grows forward
+  - **Known startup noise**: LocalStack alerts on every pod start (shell spawn + .pem/.key access + AWS phone-home) — intentionally not suppressed; see policy.go comment
 
 ---
 
@@ -178,6 +188,26 @@ Required volume mounts in `ebpf-edr-ds.yaml`:
 ```
 Both are mounted without `readOnly: true` (kernel requires write access to attach/detach tracepoints).
 `privileged: true` is also required (already set) — without it the container cannot access these even if mounted.
+
+---
+
+### GKE service CIDR auto-detection
+
+GKE assigns ClusterIPs from a service CIDR that is **outside RFC 1918** (e.g. `34.118.224.0/20`). The `lsm/socket_connect` hook fires before kube-proxy DNAT, so inter-service calls via ClusterIP look like external connections to the eBPF agent.
+
+**Fix**: at startup, `gkeServiceCIDR()` in `policy.go` reads the GCP instance metadata server:
+```
+GET http://metadata.google.internal/computeMetadata/v1/instance/attributes/kube-env
+Metadata-Flavor: Google
+```
+Parses `SERVICE_CLUSTER_IP_RANGE: <cidr>` from the response and adds it to `privateNets`. On non-GKE nodes the metadata server is unreachable and the call silently fails — RFC 1918 ranges cover Docker and local runs.
+
+**Override**: set `SERVICE_CIDR` env var to force a specific CIDR (takes precedence over auto-detection). No YAML change required on GKE.
+
+Confirmed in logs at startup:
+```
+gkeServiceCIDR: auto-detected service CIDR 34.118.224.0/20 from GCP metadata
+```
 
 ---
 

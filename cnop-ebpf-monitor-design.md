@@ -170,16 +170,17 @@ No blocking. Safe for a live demo environment.
 | `sensitive_file_access` | opensnoop | `/etc/shadow`, `/run/secrets/`, `/proc/1/`, `.key`, `id_rsa`, `.env` | HIGH |
 | `unauthorized_external_connect` | lsm-connect | Container connects to external IP — not in allowlist | HIGH |
 | `sensitive_file_access` | opensnoop | `/etc/passwd`, `/etc/group` | MEDIUM |
-| `external_connect_allowed` | lsm-connect | `inventory_service` connects to external IP (CoinGecko audit log) | LOW |
 
 ### Known False Positives / Whitelists
 
 | Whitelist | Suppresses |
 |-----------|-----------|
 | `whitelistComm` (process) | `sshd`, `runc`, `dockerd`, `containerd` — never alert on process rules |
-| `fileCommWhitelist` | `runc`, `runc:[1:CHILD]`, `runc:[2:INIT]`, `curl` — read `/etc/passwd` during init |
-| `externalAllowedContainers` | `inventory_service` — only container permitted external API access |
-| Host namespace filter | All `container=host` processes skipped in process and file rules |
+| `fileCommWhitelist` | `runc`, `runc:[1:CHILD]`, `runc:[2:INIT]`, `curl`, `bash`, `id` — read `/etc/passwd` during init |
+| `externalAllowedServices` | `inventory-service` — silently allowed (no alert); removed LOW audit log as noise |
+| `systemNamespaces` | `kube-system`, `gmp-system`, `gke-managed-cim` — GKE infra namespaces skipped entirely |
+| Host namespace filter | All `state=host` processes skipped in process and file rules |
+| GKE service CIDR | Auto-detected from GCP metadata (`34.118.x.x`); added to `privateNets` at startup |
 | ENOENT drop in opensnoop | Files that don't exist never emit — suppresses config file probing noise |
 
 ## 5. Implementation Plan
@@ -199,6 +200,12 @@ No blocking. Safe for a live demo environment.
 - [x] Restore .pem rule with path exception for `/site-packages/` and `/certifi/` ✅
 - [x] Refactor Go structure — clean package layout (`cmd/`, `pkg/`, `internal/`, `kernel/`) ✅
 - [x] CI pipeline — GitHub Actions: vet + test (non-BPF) + build; Makefile with generate/build/test targets ✅
+- [x] Phase 3 — Dockerfile + Artifact Registry push (`make docker-push`) ✅
+- [x] Phase 4 — GKE DaemonSet deployed on all clusters; cgroup v2 systemd parser; debugfs/tracefs mounts ✅
+- [x] Phase 5 — GKE functional validation: all 5 tests pass ✅
+  - V2 CRITICAL shell_spawn_container ✓  V3 HIGH sensitive_file_access ✓  V4 HIGH unauthorized_external_connect ✓
+  - V5 inventory-service allowlist (no HIGH) ✓  V6 no CRITICAL from normal gateway traffic ✓
+  - Fixed: GKE service CIDR auto-detected from GCP metadata; system namespace suppression; validate-gke.sh timing
 
 ## 6. Validation
 
@@ -230,16 +237,32 @@ See `VALIDATION.md` for full test procedure and `validate.sh` for automated exec
 
 ---
 
+## 6. Validation — GKE Results (Phase 5, 2026-04-27)
+
+Run `./validate-gke.sh` from the `ebpf-edr-demo/` directory against the live GKE cluster.
+
+| Test | Scenario | Result |
+|------|----------|--------|
+| V2 | CRITICAL `shell_spawn_container` — `kubectl exec bash` into user-service | ✅ PASS |
+| V3 | HIGH `sensitive_file_access` — `cat /etc/shadow` from container | ✅ PASS |
+| V4 | HIGH `unauthorized_external_connect` — python3 connect to 8.8.8.8:80 | ✅ PASS |
+| V5 | No HIGH from inventory-service external connects (allowlist) | ✅ PASS |
+| V6 | No CRITICAL from normal gateway HTTP traffic (ClusterIP fix confirmed) | ✅ PASS |
+
+**5 passed, 0 failed.**
+
+---
+
 ## 7. Future Direction
 
-### Phase 2 — Multi-VM monitoring
+### Phase 6 — Central alert aggregation (Cloud Pub/Sub)
 
-Current scope: one GCP VM running order-processor (8 Docker containers).
+Current scope: alerts printed to stdout per node; no central collection.
 
-Planned expansion:
-- Deploy healthcare-ai-microservices on a **second GCP VM** (migrated from Cloud Run)
-- Extend EDR agent to monitor both VMs simultaneously
-- Each VM runs its own agent instance; alerts can be aggregated centrally
+Planned:
+- Publish alerts to a Cloud Pub/Sub topic from each DaemonSet pod
+- Central subscriber aggregates and stores (Cloud Logging or BigQuery)
+- Enables cross-node correlation (see Section 5 of gke-expansion-design.md)
 
 ### Per-workload policy
 
