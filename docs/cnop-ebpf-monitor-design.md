@@ -101,7 +101,9 @@ ssh -L 8080:localhost:8080 <user>@<GCP_VM_IP>
 │  match detection rules                          │
 │         │                                       │
 │         ▼                                       │
-│  print JSON alert to stdout                     │
+│  AlertHandler                                   │
+│    ├── alerts/alert.log + stdout (local)        │
+│    └── Cloud Logging SDK (primary, structured)  │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -153,8 +155,13 @@ So any of these happening at runtime is suspicious:
 - TBD during implementation
 
 ### Response Mode
-Audit only — structured alert to stdout and `alerts/alert.log`.
-No blocking. Safe for a live demo environment.
+Audit only — no blocking. Safe for a live demo environment.
+
+Alert output (dual write):
+- Local: `alerts/alert.log` + stdout (fallback, always available)
+- Primary: Google Cloud Logging via direct SDK write (structured JSON, cross-env consistent)
+
+See [centralized-logging.md](centralized-logging.md) for retention policy, reliability design, and IaC.
 
 ## 4. Threat Model
 
@@ -203,6 +210,7 @@ No blocking. Safe for a live demo environment.
 - [x] Phase 3 — Dockerfile + Artifact Registry push (`make docker-push`) ✅
 - [x] Phase 4 — GKE DaemonSet deployed on all clusters; cgroup v2 systemd parser; debugfs/tracefs mounts ✅
 - [x] Phase 5 — GKE functional validation: all 5 tests pass ✅
+- [ ] Phase 6 — Centralized Cloud Logging: dual write, structured JSON, regulation-backed retention (see centralized-logging.md)
   - V2 CRITICAL shell_spawn_container ✓  V3 HIGH sensitive_file_access ✓  V4 HIGH unauthorized_external_connect ✓
   - V5 inventory-service allowlist (no HIGH) ✓  V6 no CRITICAL from normal gateway traffic ✓
   - Fixed: GKE service CIDR auto-detected from GCP metadata; system namespace suppression; validate-gke.sh timing
@@ -255,14 +263,20 @@ Run `./validate-gke.sh` from the `ebpf-edr-demo/` directory against the live GKE
 
 ## 7. Future Direction
 
-### Phase 6 — Central alert aggregation (Cloud Pub/Sub)
+### Phase 6 — Centralized Cloud Logging
 
-Current scope: alerts printed to stdout per node; no central collection.
+Current scope: alerts written to local file + stdout per node; no central collection.
 
-Planned:
-- Publish alerts to a Cloud Pub/Sub topic from each DaemonSet pod
-- Central subscriber aggregates and stores (Cloud Logging or BigQuery)
-- Enables cross-node correlation (see Section 5 of gke-expansion-design.md)
+Design finalized — direct Cloud Logging SDK write from each agent (GKE DaemonSet and Docker VM):
+- Structured JSON payload per alert (schema versioned)
+- Dual write: local file fallback + Cloud Logging primary
+- Regional log buckets + GCS cold storage (regulation-backed 3yr retention)
+- Rate limiting and burst aggregation to control cost at eBPF event volume
+
+Replaces earlier Cloud Pub/Sub plan — direct SDK write gives schema control and
+works identically on GKE and Docker VM without an additional messaging layer.
+
+See [centralized-logging.md](centralized-logging.md) for full design.
 
 ### Per-workload policy
 
@@ -314,5 +328,7 @@ Documented as learning targets for future work.
 **This project**: Assumes the Go goroutines keep up with ring buffer throughput — valid for 8 lightly loaded containers, but not for production scale. If the ring buffer fills, the kernel silently drops events with no visibility into the loss.
 
 **Path forward**: Read the `lost_samples` counter from `ringbuf.Reader` after each `Read()` call. Emit a synthetic `ring_buffer_overflow` alert when drops are detected. Longer term: implement BPF-side sampling (emit 1-in-N LOW events under high load) to shed load before the buffer fills.
+
+The same concern applies to Cloud Logging throughput: eBPF events can burst faster than Cloud Logging API quota allows. The centralized logging design addresses this with per-rule rate limiting and burst aggregation before the Cloud Logging write — see [centralized-logging.md](centralized-logging.md).
 
 

@@ -156,6 +156,22 @@ internal/
 
 ---
 
+## Documentation
+
+| Doc | Description |
+|-----|-------------|
+| [SETUP.md](docs/SETUP.md) | Environment setup and build instructions |
+| [VALIDATION.md](docs/VALIDATION.md) | Docker VM detection rule validation guide |
+| [VALIDATION-GKE.md](docs/VALIDATION-GKE.md) | GKE validation plan and test cases |
+| [MITRE-COVERAGE.md](docs/MITRE-COVERAGE.md) | MITRE ATT&CK technique coverage mapping |
+| [REPORT.md](docs/REPORT.md) | Project report |
+| [cnop-ebpf-monitor-design.md](docs/cnop-ebpf-monitor-design.md) | Original CNOP eBPF monitor design doc |
+| [gke-expansion-design.md](docs/gke-expansion-design.md) | GKE expansion design |
+| [centralized-logging.md](docs/centralized-logging.md) | Centralized Cloud Logging design (retention, reliability, IaC) |
+| [NOTES.md](docs/NOTES.md) | Work log and development notes |
+
+---
+
 ## Legacy
 
 Original learning project using bpftrace + Python. See [legacy/](legacy/).
