@@ -16,9 +16,10 @@ build:
 ## rebuild — regenerate BPF wrappers then build (use after editing .bpf.c files)
 rebuild: generate build
 
-## test — run unit tests for non-BPF packages
+## test — run unit tests for non-BPF packages and show coverage
 test:
-	go test -v -count=1 ./internal/... ./pkg/detector/...
+	go test -v -count=1 -coverprofile=coverage.out ./internal/... ./pkg/detector/...
+	go tool cover -func=coverage.out
 
 ## vet — run go vet on non-BPF packages (safe on any Linux host)
 vet:
