@@ -137,6 +137,12 @@ func checkFileRules(event processor.FileEvent, res workload.ResolveResult) *aler
 	filename := processor.CString(event.Filename[:])
 	comm := processor.CString(event.Comm[:])
 
+	for _, w := range fileCommWhitelist {
+		if comm == w {
+			return nil
+		}
+	}
+
 	if res.State == workload.StateHost {
 		for _, prefix := range containerFSPrefixes {
 			if strings.HasPrefix(filename, prefix) {
@@ -144,12 +150,6 @@ func checkFileRules(event processor.FileEvent, res workload.ResolveResult) *aler
 			}
 		}
 		return nil
-	}
-
-	for _, w := range fileCommWhitelist {
-		if comm == w {
-			return nil
-		}
 	}
 
 	for _, prefix := range criticalFilePrefixes {

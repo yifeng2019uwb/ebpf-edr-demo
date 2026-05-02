@@ -213,7 +213,7 @@ func crictlContainerMap(node, region string) map[string]ResolveResult {
 			continue
 		}
 
-		service := normalizeServiceName(containerName)
+		service := strings.ReplaceAll(containerName, "_", "-")
 
 		m[c.ID] = ResolveResult{
 			Identity: WorkloadIdentity{

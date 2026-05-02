@@ -52,8 +52,9 @@ var fileCommWhitelist = []string{
 	"runc",
 	"curl",           // calls getpwuid() to find home directory before looking up ~/.curlrc
 	"id",             // reads /etc/passwd and /etc/group by design — that is its only purpose
-	"systemd-logind", // session manager reads /etc/passwd, /proc/1/ during login events — runs in private mount ns
-	"bash",           // getpwuid() at startup reads /etc/passwd for prompt/PS1 — shell_spawn CRITICAL already fires
+	"systemd-logind",   // session manager reads /etc/passwd, /proc/1/ during login events — runs in private mount ns
+	"bash",             // getpwuid() at startup reads /etc/passwd for prompt/PS1 — shell_spawn CRITICAL already fires
+	"containerd-shim",  // K8s container shim — manages container stdio and lifecycle files under /run/containerd/
 }
 
 // containerFSPrefixes — host filesystem paths that hold container layer data.
