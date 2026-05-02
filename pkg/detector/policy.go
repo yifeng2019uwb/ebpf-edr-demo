@@ -15,21 +15,15 @@ import (
 	"time"
 )
 
-// ── Thresholds ────────────────────────────────────────────────────────────────
-
-// nsRefreshInterval is how often the namespace cache is rebuilt to pick up
-// containers that started or stopped since the last scan.
-const nsRefreshInterval = 30 * time.Second
-
 // ── Process policy ────────────────────────────────────────────────────────────
 
 // whitelistComm — known good processes, never alert on process rules.
+// Matched via filepath.Base(comm) — basename only, path prefix stripped before comparison.
 var whitelistComm = []string{
 	"sshd",       // SSH access from laptop
 	"runc",       // Docker container runtime
 	"dockerd",    // Docker daemon
 	"containerd", // container runtime
-	"ip",         // OpenClaw heartbeat
 	"getconf",    // GCP guest agent
 }
 
@@ -50,6 +44,8 @@ var networkBinaries = []string{
 
 // fileCommWhitelist — processes that legitimately read system files as part of
 // normal startup or operation. Suppresses MEDIUM/HIGH noise from known-good tools.
+// Matched by exact comm string — NOT basename — because entries like "runc:[2:INIT]"
+// contain colons that filepath.Base would mangle.
 var fileCommWhitelist = []string{
 	"runc:[2:INIT]",  // reads /etc/passwd to resolve user IDs during container init
 	"runc:[1:CHILD]",
@@ -58,6 +54,13 @@ var fileCommWhitelist = []string{
 	"id",             // reads /etc/passwd and /etc/group by design — that is its only purpose
 	"systemd-logind", // session manager reads /etc/passwd, /proc/1/ during login events — runs in private mount ns
 	"bash",           // getpwuid() at startup reads /etc/passwd for prompt/PS1 — shell_spawn CRITICAL already fires
+}
+
+// containerFSPrefixes — host filesystem paths that hold container layer data.
+// A host process (StateHost) reading these paths indicates possible container escape (T1611).
+var containerFSPrefixes = []string{
+	"/var/lib/docker/overlay2/", // Docker overlay filesystem layers
+	"/run/containerd/",          // containerd runtime task directories (K8s + containerd)
 }
 
 // Sensitive file paths — severity reflects actual risk.
@@ -137,7 +140,7 @@ var systemNamespaces = map[string]bool{
 }
 
 func isSystemNamespace(ns string) bool {
-	return ns != "" && systemNamespaces[ns]
+	return systemNamespaces[ns]
 }
 
 // privateNets — RFC 1918 + link-local ranges that are always allowed.

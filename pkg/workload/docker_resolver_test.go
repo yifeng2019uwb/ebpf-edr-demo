@@ -84,7 +84,7 @@ func TestDockerResolverResolveCacheHit(t *testing.T) {
 	}
 }
 
-func TestDockerResolverResolveCacheMissReturnsUnknown(t *testing.T) {
+func TestDockerResolverResolveCacheMissReturnsPending(t *testing.T) {
 	resolver := &DockerResolver{
 		cache:  map[uint32]ResolveResult{},
 		node:   "docker-node",
@@ -93,8 +93,8 @@ func TestDockerResolverResolveCacheMissReturnsUnknown(t *testing.T) {
 
 	got := resolver.Resolve(99999, 123)
 
-	if got.State != StateUnknown {
-		t.Fatalf("State = %q, want %q", got.State, StateUnknown)
+	if got.State != StatePending {
+		t.Fatalf("State = %q, want %q", got.State, StatePending)
 	}
 	if got.Identity.Runtime != "docker" {
 		t.Fatalf("Runtime = %q, want docker", got.Identity.Runtime)

@@ -1,29 +1,40 @@
 # MITRE ATT&CK Coverage — eBPF EDR Demo
 
-Scope: container/K8s workload techniques only. Full ATT&CK has 200+ techniques;
-~35 are relevant to containerized GKE workloads. Coverage % is against that scoped set.
+Scope: runtime-detectable container/K8s techniques only.
 
-**Current coverage: 8 / 35 relevant techniques (~23%)**
+Full ATT&CK has 200+ techniques. Of those, ~35 apply to containerized GKE workloads.
+Of those 35, only ~15 are detectable via eBPF at runtime — the rest require image scanning,
+CI/CD pipeline hooks, WAF, or other non-runtime tooling.
+
+**Current coverage: 8 of ~15 runtime-detectable techniques**
+
+High-impact tactics covered: Execution, Credential Access, Exfiltration, Partial Privilege Escalation.
+Remaining gaps are lower-signal or require stateful/behavioral detection (future work).
 
 ---
 
 ## Detection Rules → MITRE Mapping
 
-| Rule | Severity | MITRE ID | Technique | Validated |
-|------|----------|----------|-----------|-----------|
+Status: ✅ implemented + validated by validate-gke.sh  🟡 implemented, not yet validated  ❌ not implemented
+
+| Rule | Severity | MITRE ID | Technique | Status |
+|------|----------|----------|-----------|--------|
 | `shell_spawn_container` | CRITICAL | T1059.004 | Command & Scripting: Unix Shell | ✅ V2 |
 | `shell_spawn_container` | CRITICAL | T1609 | Container Administration Command | ✅ V2 |
-| `unknown_namespace_process` | CRITICAL | T1611 | Escape to Host | ⬜ not yet |
-| `host_reads_container_fs` | CRITICAL | T1611 | Escape to Host | ⬜ not yet |
-| `network_tool_container` (nc/ncat) | HIGH | T1095 | Non-Application Layer Protocol | ⬜ not yet |
-| `network_tool_container` (wget) | HIGH | T1105 | Ingress Tool Transfer | ⬜ not yet |
-| `sensitive_file_access` /etc/shadow | HIGH | T1003.008 | OS Credential Dumping: /etc/passwd & /etc/shadow | ✅ V3 |
-| `sensitive_file_access` .key/.env/id_rsa | HIGH | T1552.001 | Unsecured Credentials: Credentials in Files | ⬜ not yet |
-| `sensitive_file_access` .key/id_rsa | HIGH | T1552.004 | Unsecured Credentials: Private Keys | ⬜ not yet |
-| `sensitive_file_access` /proc/1/ | HIGH | T1611 | Escape to Host | ⬜ not yet |
-| `sensitive_file_access` /etc/passwd | MEDIUM | T1082 | System Information Discovery | ⬜ not yet |
+| `unknown_namespace_process` | CRITICAL | T1611 | Escape to Host | 🟡 |
+| `host_reads_container_fs` | CRITICAL | T1611 | Escape to Host — Docker overlay2 + containerd /run/containerd/ | 🟡 |
+| `network_tool_container` (nc/ncat) | HIGH | T1095 | Non-App Layer Protocol — binary in container¹ | 🟡 |
+| `network_tool_container` (wget) | HIGH | T1105 | Ingress Tool Transfer — binary in container¹ | 🟡 |
+| `sensitive_file_access` /etc/shadow | HIGH | T1003.008 | OS Credential Dumping | ✅ V3 |
+| `sensitive_file_access` /root/.ssh/ /home/.ssh/ | CRITICAL | T1552.004 | Unsecured Credentials: Private Keys — SSH key directories | 🟡 |
+| `sensitive_file_access` .key/.env/id_rsa | HIGH | T1552.001 | Unsecured Credentials: Credentials in Files | 🟡 |
+| `sensitive_file_access` .key/id_rsa | HIGH | T1552.004 | Unsecured Credentials: Private Keys | 🟡 |
+| `sensitive_file_access` /proc/1/ | HIGH | T1611 | Escape to Host | 🟡 |
+| `sensitive_file_access` /etc/passwd | MEDIUM | T1082 | System Information Discovery | 🟡 |
 | `unauthorized_external_connect` | HIGH | T1041 | Exfiltration Over C2 Channel | ✅ V4 |
-| `unauthorized_external_connect` | HIGH | T1048 | Exfiltration Over Alternative Protocol | ✅ V4 |
+| `unauthorized_external_connect` | HIGH | T1048 | Exfiltration Over Alt Protocol | ✅ V4 |
+
+¹ Detection fires on binary presence in container (unexpected tool = signal). Not intent-based.
 
 ---
 
@@ -38,7 +49,8 @@ Scope: container/K8s workload techniques only. Full ATT&CK has 200+ techniques;
 | Privilege Escalation | T1611 Escape to Host | `unknown_namespace_process`, `host_reads_container_fs` |
 | Credential Access | T1003.008 /etc/shadow dump | `sensitive_file_access` |
 | Credential Access | T1552.001 Credentials in Files | `sensitive_file_access` .env/.key |
-| Credential Access | T1552.004 Private Keys | `sensitive_file_access` id_rsa/.pem |
+| Credential Access | T1552.004 Private Keys (CRITICAL) | `sensitive_file_access` /root/.ssh/ /home/.ssh/ |
+| Credential Access | T1552.004 Private Keys (HIGH) | `sensitive_file_access` id_rsa/.pem/.key |
 | Command & Control | T1095 Non-App Layer Protocol | `network_tool_container` nc/ncat |
 | Command & Control | T1105 Ingress Tool Transfer | `network_tool_container` wget |
 | Exfiltration | T1041 Exfil Over C2 Channel | `unauthorized_external_connect` |
@@ -189,6 +201,14 @@ Given the threat model (containerized microservices, financial data, GKE):
 **Add later (medium effort):**
 4. T1046 — burst detection on lsm-connect (many unique dst IPs in short window)
 5. T1053.003 — watch `/var/spool/cron` and `/etc/cron.d/` writes
+
+**Behavior/time-based detection — skipped for now:**
+Real EDR systems detect patterns across events, not just single events:
+- burst connections (>20 dst IPs in 2s → port scan)
+- repeated file access failures (credential brute-force)
+- unusual frequency (process spawning 10x/min)
+This requires stateful architecture in Go userspace (sliding windows, per-service counters).
+Correct direction but significant complexity — revisit after core single-event rules are solid.
 
 **Out of scope for this project:**
 - T1190 (app-layer exploit) — needs WAF or RASP, not eBPF

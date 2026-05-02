@@ -87,6 +87,22 @@ func isPrivateIP(ip net.IP) bool {
 	return false
 }
 
+func newFileAlert(event processor.FileEvent, res workload.ResolveResult, comm, filename string, level alert.Level, rule, msg string) *alert.Alert {
+	return &alert.Alert{
+		Level: level, Rule: rule, Message: msg,
+		Pid: event.Pid, Ppid: event.Ppid, Uid: int32(event.Uid),
+		Comm: comm, Workload: res, Filename: filename,
+	}
+}
+
+func newProcessAlert(event processor.ProcessEvent, res workload.ResolveResult, comm string, level alert.Level, rule, msg string) *alert.Alert {
+	return &alert.Alert{
+		Level: level, Rule: rule, Message: msg,
+		Pid: event.Pid, Ppid: event.Ppid, Uid: event.Uid,
+		Comm: comm, Workload: res,
+	}
+}
+
 // ── Process rules ─────────────────────────────────────────────────────────────
 
 func checkProcessRules(event processor.ProcessEvent, res workload.ResolveResult) *alert.Alert {
@@ -97,16 +113,7 @@ func checkProcessRules(event processor.ProcessEvent, res workload.ResolveResult)
 	}
 
 	if res.State == workload.StateUnknown {
-		return &alert.Alert{
-			Level:    "CRITICAL",
-			Rule:     "unknown_namespace_process",
-			Message:  "Process in unrecognized namespace — possible container escape",
-			Pid:      event.Pid,
-			Ppid:     event.Ppid,
-			Uid:      event.Uid,
-			Comm:     comm,
-			Workload: res,
-		}
+		return newProcessAlert(event, res, comm, alert.Critical, "unknown_namespace_process", "Process in unrecognized namespace — possible container escape")
 	}
 
 	if res.State == workload.StateHost {
@@ -114,29 +121,11 @@ func checkProcessRules(event processor.ProcessEvent, res workload.ResolveResult)
 	}
 
 	if matchesSuffix(comm, shellBinaries) {
-		return &alert.Alert{
-			Level:    "CRITICAL",
-			Rule:     "shell_spawn_container",
-			Message:  "Shell spawned from container — possible RCE",
-			Pid:      event.Pid,
-			Ppid:     event.Ppid,
-			Uid:      event.Uid,
-			Comm:     comm,
-			Workload: res,
-		}
+		return newProcessAlert(event, res, comm, alert.Critical, "shell_spawn_container", "Shell spawned from container — possible RCE")
 	}
 
 	if matchesSuffix(comm, networkBinaries) {
-		return &alert.Alert{
-			Level:    "HIGH",
-			Rule:     "network_tool_container",
-			Message:  "Network tool executed from container — possible exfiltration",
-			Pid:      event.Pid,
-			Ppid:     event.Ppid,
-			Uid:      event.Uid,
-			Comm:     comm,
-			Workload: res,
-		}
+		return newProcessAlert(event, res, comm, alert.High, "network_tool_container", "Network tool executed from container — possible exfiltration")
 	}
 
 	return nil
@@ -149,23 +138,11 @@ func checkFileRules(event processor.FileEvent, res workload.ResolveResult) *aler
 	comm := processor.CString(event.Comm[:])
 
 	if res.State == workload.StateHost {
-		if strings.HasPrefix(filename, "/var/lib/docker/overlay2/") {
-			return &alert.Alert{
-				Level:    "CRITICAL",
-				Rule:     "host_reads_container_fs",
-				Message:  "Host process accessed Docker container filesystem: " + filename,
-				Pid:      event.Pid,
-				Ppid:     event.Ppid,
-				Uid:      int32(event.Uid),
-				Comm:     comm,
-				Workload: res,
-				Filename: filename,
+		for _, prefix := range containerFSPrefixes {
+			if strings.HasPrefix(filename, prefix) {
+				return newFileAlert(event, res, comm, filename, alert.Critical, "host_reads_container_fs", "Host process accessed container filesystem: "+filename)
 			}
 		}
-		return nil
-	}
-
-	if res.State == workload.StatePending {
 		return nil
 	}
 
@@ -177,33 +154,13 @@ func checkFileRules(event processor.FileEvent, res workload.ResolveResult) *aler
 
 	for _, prefix := range criticalFilePrefixes {
 		if strings.HasPrefix(filename, prefix) {
-			return &alert.Alert{
-				Level:    "CRITICAL",
-				Rule:     "sensitive_file_access",
-				Message:  "Container accessed SSH credential file: " + filename,
-				Pid:      event.Pid,
-				Ppid:     event.Ppid,
-				Uid:      int32(event.Uid),
-				Comm:     comm,
-				Workload: res,
-				Filename: filename,
-			}
+			return newFileAlert(event, res, comm, filename, alert.Critical, "sensitive_file_access", "Container accessed SSH credential file: "+filename)
 		}
 	}
 
 	for _, prefix := range highFilePrefixes {
 		if strings.HasPrefix(filename, prefix) {
-			return &alert.Alert{
-				Level:    "HIGH",
-				Rule:     "sensitive_file_access",
-				Message:  "Container accessed sensitive file: " + filename,
-				Pid:      event.Pid,
-				Ppid:     event.Ppid,
-				Uid:      int32(event.Uid),
-				Comm:     comm,
-				Workload: res,
-				Filename: filename,
-			}
+			return newFileAlert(event, res, comm, filename, alert.High, "sensitive_file_access", "Container accessed sensitive file: "+filename)
 		}
 	}
 
@@ -212,34 +169,13 @@ func checkFileRules(event processor.FileEvent, res workload.ResolveResult) *aler
 			if suffix == ".pem" && isPemExcluded(filename) {
 				continue
 			}
-
-			return &alert.Alert{
-				Level:    "HIGH",
-				Rule:     "sensitive_file_access",
-				Message:  "Container accessed sensitive file: " + filename,
-				Pid:      event.Pid,
-				Ppid:     event.Ppid,
-				Uid:      int32(event.Uid),
-				Comm:     comm,
-				Workload: res,
-				Filename: filename,
-			}
+			return newFileAlert(event, res, comm, filename, alert.High, "sensitive_file_access", "Container accessed sensitive file: "+filename)
 		}
 	}
 
 	for _, prefix := range mediumFilePrefixes {
 		if strings.HasPrefix(filename, prefix) {
-			return &alert.Alert{
-				Level:    "MEDIUM",
-				Rule:     "sensitive_file_access",
-				Message:  "Container accessed system file: " + filename,
-				Pid:      event.Pid,
-				Ppid:     event.Ppid,
-				Uid:      int32(event.Uid),
-				Comm:     comm,
-				Workload: res,
-				Filename: filename,
-			}
+			return newFileAlert(event, res, comm, filename, alert.Medium, "sensitive_file_access", "Container accessed system file: "+filename)
 		}
 	}
 
@@ -249,7 +185,7 @@ func checkFileRules(event processor.FileEvent, res workload.ResolveResult) *aler
 // ── Network rules ─────────────────────────────────────────────────────────────
 
 func checkNetworkRules(event processor.NetEvent, res workload.ResolveResult, ip net.IP, port uint16) *alert.Alert {
-	if res.State == workload.StateHost || res.State == workload.StatePending {
+	if res.State == workload.StateHost {
 		return nil
 	}
 
@@ -268,7 +204,7 @@ func checkNetworkRules(event processor.NetEvent, res workload.ResolveResult, ip 
 	}
 
 	return &alert.Alert{
-		Level:    "HIGH",
+		Level:    alert.High,
 		Rule:     "unauthorized_external_connect",
 		Message:  fmt.Sprintf("Container made unauthorized external connection to %s:%d", ipStr, port),
 		Pid:      event.Pid,

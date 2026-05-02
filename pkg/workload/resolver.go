@@ -2,10 +2,16 @@
 
 package workload
 
-import "os"
+import (
+	"log"
+	"os"
+)
 
 func NewResolver(runtime string) WorkloadResolver {
-	node, _ := os.Hostname()
+	node, err := os.Hostname()
+	if err != nil {
+		log.Printf("workload: os.Hostname() failed: %v — node field will be empty in alerts", err)
+	}
 	region := os.Getenv("REGION")
 
 	switch runtime {

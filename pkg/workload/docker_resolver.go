@@ -16,6 +16,10 @@ import (
 
 const dockerRefreshInterval = 30 * time.Second
 
+// dockerShortIDLen is the conventional short ID length shown by `docker ps` (first 12 hex chars).
+// Used as a display-name fallback when a container is running but not yet in docker ps output.
+const dockerShortIDLen = 12
+
 type DockerResolver struct {
 	mu        sync.RWMutex
 	cache     map[uint32]ResolveResult
@@ -39,6 +43,14 @@ func (r *DockerResolver) Start() error {
 	return nil
 }
 
+func (r *DockerResolver) bareResult(state ResolveState) ResolveResult {
+	return ResolveResult{
+		Identity: WorkloadIdentity{Runtime: "docker"},
+		Meta:     WorkloadMeta{Node: r.node, Region: r.region},
+		State:    state,
+	}
+}
+
 func (r *DockerResolver) Resolve(mntNsID uint32, _ uint32) ResolveResult {
 	r.mu.RLock()
 	result, ok := r.cache[mntNsID]
@@ -50,16 +62,7 @@ func (r *DockerResolver) Resolve(mntNsID uint32, _ uint32) ResolveResult {
 
 	go r.refresh()
 
-	return ResolveResult{
-		Identity: WorkloadIdentity{
-			Runtime: "docker",
-		},
-		Meta: WorkloadMeta{
-			Node:   r.node,
-			Region: r.region,
-		},
-		State: StateUnknown,
-	}
+	return r.bareResult(StatePending)
 }
 
 func (r *DockerResolver) refresh() {
@@ -80,11 +83,7 @@ func (r *DockerResolver) buildCache() map[uint32]ResolveResult {
 
 	hostNsID := getMntNsID(1)
 	if hostNsID != 0 {
-		m[hostNsID] = ResolveResult{
-			Identity: WorkloadIdentity{Runtime: "docker"},
-			Meta:     WorkloadMeta{Node: r.node, Region: r.region},
-			State:    StateHost,
-		}
+		m[hostNsID] = r.bareResult(StateHost)
 	}
 
 	idToName := dockerIDToName()
@@ -121,14 +120,9 @@ func (r *DockerResolver) buildCache() map[uint32]ResolveResult {
 			continue
 		}
 
-		rawName := ""
+		rawName := containerID[:dockerShortIDLen] // short ID fallback when not in docker ps
 		if name, ok := idToName[containerID]; ok {
 			rawName = name
-		} else if len(containerID) >= 12 {
-			rawName = containerID[:12]
-		}
-		if rawName == "" {
-			continue
 		}
 
 		service := normalizeServiceName(rawName)
@@ -151,23 +145,6 @@ func (r *DockerResolver) buildCache() map[uint32]ResolveResult {
 	return m
 }
 
-func normalizeServiceName(raw string) string {
-	if i := strings.LastIndexByte(raw, '-'); i >= 0 {
-		raw = raw[i+1:]
-	}
-	return strings.ReplaceAll(raw, "_", "-")
-}
-
-func getMntNsID(pid int) uint32 {
-	path := fmt.Sprintf("/proc/%d/ns/mnt", pid)
-
-	var stat syscall.Stat_t
-	if err := syscall.Stat(path, &stat); err != nil {
-		return 0
-	}
-
-	return uint32(stat.Ino)
-}
 
 func dockerIDToName() map[string]string {
 	m := make(map[string]string)
@@ -210,7 +187,10 @@ func containerIDFromDockerCgroup(pid string) string {
 		if strings.Contains(line, "/docker/") {
 			parts := strings.Split(line, "/docker/")
 			id := strings.TrimSpace(parts[len(parts)-1])
-			if len(id) >= 12 {
+			// cgroup v1 format: /docker/<container-id>
+			// e.g. /docker/a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2 (64 chars)
+			// Docker uses SHA256 → exactly 64 hex chars.
+			if len(id) >= containerIDLen {
 				return id
 			}
 		}
@@ -220,7 +200,10 @@ func containerIDFromDockerCgroup(pid string) string {
 			end := strings.LastIndex(line, ".scope")
 			if end > start {
 				id := line[start:end]
-				if len(id) >= 12 {
+				// cgroup v2 systemd format: docker-<container-id>.scope
+				// e.g. docker-a1b2c3d4e5f6...64chars.scope → extract between "docker-" and ".scope"
+				// Docker uses SHA256 → exactly 64 hex chars.
+				if len(id) >= containerIDLen {
 					return id
 				}
 			}

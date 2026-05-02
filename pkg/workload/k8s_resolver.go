@@ -30,6 +30,8 @@ func (r *K8sResolver) Start() error {
 	r.selfNsID = getMntNsID(os.Getpid())
 	r.cache = r.buildCache()
 
+	// Kubernetes is dynamic:
+	// pods start / stop / scale anytime
 	go func() {
 		ticker := time.NewTicker(k8sRefreshInterval)
 		defer ticker.Stop()
@@ -40,6 +42,14 @@ func (r *K8sResolver) Start() error {
 	}()
 
 	return nil
+}
+
+func (r *K8sResolver) bareResult(state ResolveState) ResolveResult {
+	return ResolveResult{
+		Identity: WorkloadIdentity{Runtime: "k8s"},
+		Meta:     WorkloadMeta{Node: r.node, Region: r.region},
+		State:    state,
+	}
 }
 
 func (r *K8sResolver) Resolve(mntNsID uint32, _ uint32) ResolveResult {
@@ -53,16 +63,7 @@ func (r *K8sResolver) Resolve(mntNsID uint32, _ uint32) ResolveResult {
 
 	go r.refresh()
 
-	return ResolveResult{
-		Identity: WorkloadIdentity{
-			Runtime: "k8s",
-		},
-		Meta: WorkloadMeta{
-			Node:   r.node,
-			Region: r.region,
-		},
-		State: StatePending,
-	}
+	return r.bareResult(StatePending)
 }
 
 func (r *K8sResolver) refresh() {
@@ -81,20 +82,16 @@ func (r *K8sResolver) refresh() {
 func (r *K8sResolver) buildCache() map[uint32]ResolveResult {
 	m := make(map[uint32]ResolveResult)
 
-	if r.selfNsID != 0 {
-		m[r.selfNsID] = ResolveResult{
-			Identity: WorkloadIdentity{Runtime: "k8s"},
-			Meta:     WorkloadMeta{Node: r.node, Region: r.region},
-			State:    StateHost,
-		}
+	ids := []uint32{
+		r.selfNsID,
+		getMntNsID(1),
 	}
 
-	if hostNsID := getMntNsID(1); hostNsID != 0 {
-		m[hostNsID] = ResolveResult{
-			Identity: WorkloadIdentity{Runtime: "k8s"},
-			Meta:     WorkloadMeta{Node: r.node, Region: r.region},
-			State:    StateHost,
+	for _, id := range ids {
+		if id == 0 {
+			continue
 		}
+		m[id] = r.bareResult(StateHost)
 	}
 
 	containerMap := crictlContainerMap(r.node, r.region)
@@ -160,16 +157,26 @@ func containerIDFromK8sCgroup(pid string) string {
 
 		cgroupPath := line[idx+1:]
 		segments := strings.Split(strings.Trim(cgroupPath, "/"), "/")
+		// cgroup path structure: /kubepods/<qos>/<pod-uid>/<container-id>
+		// e.g. /kubepods/burstable/pod8e18d5ef-1234-5678-abcd-ef0123456789/a1b2c3d4e5f6...
+		// a partial path like /kubepods or /kubepods/burstable gives only 1-2 segments —
+		// the container ID is always the 4th component, so we need at least 2 to avoid
+		// taking a QoS tier name as the "last segment".
 		if len(segments) < 2 {
 			continue
 		}
 
 		containerID := segments[len(segments)-1]
 		// cgroup v2 systemd format: "cri-containerd-<id>.scope"
+		// e.g. cri-containerd-a1b2c3d4e5f6...64chars.scope → strip prefix+suffix
 		if strings.HasPrefix(containerID, "cri-containerd-") && strings.HasSuffix(containerID, ".scope") {
 			containerID = strings.TrimSuffix(strings.TrimPrefix(containerID, "cri-containerd-"), ".scope")
 		}
-		if len(containerID) >= 12 {
+		// container IDs are SHA256 → exactly 64 hex chars.
+		// K8s QoS tier names that appear in the path: burstable(9), guaranteed(10), besteffort(11).
+		// pod-uid format: pod8e18d5ef-1234-5678-abcd-ef0123456789 (39 chars).
+		// both are shorter than a real container ID — 64 filters all of them out.
+		if len(containerID) >= containerIDLen {
 			return containerID
 		}
 	}
@@ -206,7 +213,7 @@ func crictlContainerMap(node, region string) map[string]ResolveResult {
 			continue
 		}
 
-		service := containerName
+		service := normalizeServiceName(containerName)
 
 		m[c.ID] = ResolveResult{
 			Identity: WorkloadIdentity{

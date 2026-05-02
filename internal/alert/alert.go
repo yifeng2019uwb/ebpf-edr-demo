@@ -9,9 +9,27 @@ import (
 	"ebpf-edr-demo/pkg/workload"
 )
 
+// alertDir is the directory where all alert logs are written.
+const alertDir = "alerts"
+
+// alertPath is the single alert log file used at runtime.
+// TODO: support time-windowed rotation — create alerts/alert_<timestamp>.log
+//       every 10 or 30 minutes so each file covers a bounded time range.
+//       Makes it easier to correlate alerts with incidents and limit file size.
+const alertPath = alertDir + "/alert.log"
+
+// Level represents the severity of an alert.
+type Level string
+
+const (
+	Critical Level = "CRITICAL"
+	High     Level = "HIGH"
+	Medium   Level = "MEDIUM"
+)
+
 // Alert represents a security detection event emitted by a detection rule.
 type Alert struct {
-	Level   string
+	Level   Level
 	Rule    string
 	Message string
 
@@ -34,13 +52,13 @@ type Handler struct {
 	file *os.File
 }
 
-// NewHandler opens the alert log file.
-func NewHandler(path string) (*Handler, error) {
-	if err := os.MkdirAll("alerts", 0755); err != nil {
+// NewHandler opens the alert log file, creating the alerts directory if needed.
+func NewHandler() (*Handler, error) {
+	if err := os.MkdirAll(alertDir, 0755); err != nil {
 		return nil, err
 	}
 
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(alertPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return nil, err
 	}

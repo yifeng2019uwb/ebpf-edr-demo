@@ -3,7 +3,6 @@ package pipeline
 import (
 	"time"
 
-	"ebpf-edr-demo/internal/alert"
 	"ebpf-edr-demo/internal/processor"
 	"ebpf-edr-demo/pkg/workload"
 )
@@ -28,23 +27,4 @@ type EnrichedEvent struct {
 	Net       *processor.NetEvent
 	Workload  workload.ResolveResult
 	Timestamp time.Time
-}
-
-type EventSource interface {
-	Name() string
-	Start() error
-	Events() <-chan RawEvent
-	Close()
-}
-
-type Detector interface {
-	Detect(event EnrichedEvent) []alert.Alert
-}
-
-type AlertHandler interface {
-	Send(a alert.Alert)
-}
-
-type EventForwarder interface {
-	Forward(event EnrichedEvent)
 }
