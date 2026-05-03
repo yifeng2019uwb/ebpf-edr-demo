@@ -58,3 +58,34 @@ func TestNewResolverUsesRegionFromEnvironment(t *testing.T) {
 		}
 	}
 }
+
+func TestNewResolverUsesClusterFromEnvironment(t *testing.T) {
+	t.Setenv("CLUSTER_NAME", "order-processor-cluster-us-west1")
+
+	tests := []struct {
+		runtime string
+	}{
+		{"k8s"},
+		{"docker"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.runtime, func(t *testing.T) {
+			resolver := NewResolver(tt.runtime)
+
+			var cluster string
+			switch r := resolver.(type) {
+			case *K8sResolver:
+				cluster = r.cluster
+			case *DockerResolver:
+				cluster = r.cluster
+			default:
+				t.Fatalf("unexpected resolver type %T", resolver)
+			}
+
+			if cluster != "order-processor-cluster-us-west1" {
+				t.Fatalf("cluster = %q, want order-processor-cluster-us-west1", cluster)
+			}
+		})
+	}
+}

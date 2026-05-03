@@ -18,12 +18,14 @@ func TestK8sResolverResolveCacheHit(t *testing.T) {
 					Namespace: "default",
 					Node:      "gke-node",
 					Region:    "us-west1",
+					Cluster:   "order-processor-cluster-us-west1",
 				},
 				State: StateResolved,
 			},
 		},
-		node:   "gke-node",
-		region: "us-west1",
+		node:    "gke-node",
+		region:  "us-west1",
+		cluster: "order-processor-cluster-us-west1",
 	}
 
 	got := resolver.Resolve(56789, 111)
@@ -42,6 +44,9 @@ func TestK8sResolverResolveCacheHit(t *testing.T) {
 	}
 	if got.Meta.Namespace != "default" {
 		t.Fatalf("Namespace = %q, want default", got.Meta.Namespace)
+	}
+	if got.Meta.Cluster != "order-processor-cluster-us-west1" {
+		t.Fatalf("Cluster = %q, want order-processor-cluster-us-west1", got.Meta.Cluster)
 	}
 }
 
@@ -69,7 +74,7 @@ func TestK8sResolverResolveCacheMissReturnsPending(t *testing.T) {
 }
 
 func TestCrictlContainerMapWithMissingCrictlDoesNotPanic(t *testing.T) {
-	got := crictlContainerMap("node-1", "us-west1")
+	got := crictlContainerMap("node-1", "us-west1", "order-processor-cluster-us-west1")
 
 	if got == nil {
 		t.Fatalf("crictlContainerMap returned nil map")

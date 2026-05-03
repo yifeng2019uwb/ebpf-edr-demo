@@ -60,12 +60,14 @@ func TestDockerResolverResolveCacheHit(t *testing.T) {
 					Pod:       "order-processor-auth_service",
 					Node:      "docker-node",
 					Region:    "us-west1",
+					Cluster:   "docker-vm",
 				},
 				State: StateResolved,
 			},
 		},
-		node:   "docker-node",
-		region: "us-west1",
+		node:    "docker-node",
+		region:  "us-west1",
+		cluster: "docker-vm",
 	}
 
 	got := resolver.Resolve(12345, 999)
@@ -81,6 +83,9 @@ func TestDockerResolverResolveCacheHit(t *testing.T) {
 	}
 	if got.Meta.Container != "order-processor-auth_service" {
 		t.Fatalf("Container = %q", got.Meta.Container)
+	}
+	if got.Meta.Cluster != "docker-vm" {
+		t.Fatalf("Cluster = %q, want docker-vm", got.Meta.Cluster)
 	}
 }
 

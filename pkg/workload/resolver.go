@@ -13,11 +13,12 @@ func NewResolver(runtime string) WorkloadResolver {
 		log.Printf("workload: os.Hostname() failed: %v — node field will be empty in alerts", err)
 	}
 	region := os.Getenv("REGION")
+	cluster := os.Getenv("CLUSTER_NAME")
 
 	switch runtime {
 	case "k8s":
-		return &K8sResolver{node: node, region: region}
+		return &K8sResolver{node: node, region: region, cluster: cluster}
 	default:
-		return &DockerResolver{node: node, region: region}
+		return &DockerResolver{node: node, region: region, cluster: cluster}
 	}
 }

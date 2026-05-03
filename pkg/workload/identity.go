@@ -42,6 +42,7 @@ type WorkloadMeta struct {
 	Namespace string
 	Node      string
 	Region    string
+	Cluster   string
 }
 
 // ResolveResult separates identity from resolution state.

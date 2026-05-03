@@ -35,6 +35,7 @@ func TestResolveResultStoresIdentityAndMeta(t *testing.T) {
 			Namespace: "",
 			Node:      "node-1",
 			Region:    "us-west1",
+			Cluster:   "my-cluster",
 		},
 		State: StateResolved,
 	}
@@ -47,6 +48,9 @@ func TestResolveResultStoresIdentityAndMeta(t *testing.T) {
 	}
 	if result.Meta.Container != "order-processor-auth_service" {
 		t.Fatalf("Container = %q", result.Meta.Container)
+	}
+	if result.Meta.Cluster != "my-cluster" {
+		t.Fatalf("Cluster = %q, want my-cluster", result.Meta.Cluster)
 	}
 	if result.State != StateResolved {
 		t.Fatalf("State = %q, want resolved", result.State)

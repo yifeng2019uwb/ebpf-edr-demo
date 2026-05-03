@@ -135,3 +135,40 @@ func TestHandlerClose_DoesNotPanic(t *testing.T) {
 	h, _ := newTestHandler(t)
 	h.Close()
 }
+
+func TestNewHandler_CreatesDirectoryAndFile(t *testing.T) {
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getting working dir: %v", err)
+	}
+	if err := os.Chdir(t.TempDir()); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	defer os.Chdir(orig)
+
+	h, err := NewHandler()
+	if err != nil {
+		t.Fatalf("NewHandler() error: %v", err)
+	}
+	defer h.Close()
+
+	if _, err := os.Stat(alertDir); err != nil {
+		t.Fatalf("alert directory not created: %v", err)
+	}
+	if _, err := os.Stat(alertPath); err != nil {
+		t.Fatalf("alert file not created: %v", err)
+	}
+}
+
+func TestHandlerSend_WriteErrorDoesNotPanic(t *testing.T) {
+	// Close the file before Send to trigger the WriteString error path
+	h, _ := newTestHandler(t)
+	h.Close()
+
+	h.Send(Alert{
+		Level:    High,
+		Rule:     "sensitive_file_access",
+		Comm:     "cat",
+		Workload: workload.ResolveResult{State: workload.StateResolved},
+	})
+}

@@ -26,6 +26,7 @@ type DockerResolver struct {
 	refreshMu sync.Mutex
 	node      string
 	region    string
+	cluster   string
 }
 
 func (r *DockerResolver) Start() error {
@@ -46,7 +47,7 @@ func (r *DockerResolver) Start() error {
 func (r *DockerResolver) bareResult(state ResolveState) ResolveResult {
 	return ResolveResult{
 		Identity: WorkloadIdentity{Runtime: "docker"},
-		Meta:     WorkloadMeta{Node: r.node, Region: r.region},
+		Meta:     WorkloadMeta{Node: r.node, Region: r.region, Cluster: r.cluster},
 		State:    state,
 	}
 }
@@ -137,6 +138,7 @@ func (r *DockerResolver) buildCache() map[uint32]ResolveResult {
 				Pod:       rawName,
 				Node:      r.node,
 				Region:    r.region,
+				Cluster:   r.cluster,
 			},
 			State: StateResolved,
 		}
