@@ -7,8 +7,9 @@ Google Cloud Logging as structured JSON. This provides a single queryable pane a
 all environments, supports forensic investigation after incidents, and meets security
 log retention regulations.
 
-File + stdout output is kept as a local fallback; Cloud Logging is the primary
-long-term store.
+File + stdout output is always-on local (ops debug, node-level audit); Cloud Logging is
+the primary long-term store. A third path — Pub/Sub — feeds real-time monitoring.
+See [monitoring-service-design.md](monitoring-service-design.md) for the real-time path.
 
 ---
 
@@ -18,7 +19,7 @@ long-term store.
 GKE Node (DaemonSet)          Docker VM
   ebpf-edr agent                ebpf-edr agent
        │                              │
-       ├── /alerts/alert.log          ├── /alerts/alert.log   (local fallback)
+       ├── /alerts/alert.log          ├── /alerts/alert.log   (always-on local)
        │                              │
        └── Cloud Logging SDK ─────────┘
                    │

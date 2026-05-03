@@ -102,8 +102,10 @@ ssh -L 8080:localhost:8080 <user>@<GCP_VM_IP>
 │         │                                       │
 │         ▼                                       │
 │  AlertHandler                                   │
-│    ├── alerts/alert.log + stdout (local)        │
-│    └── Cloud Logging SDK (primary, structured)  │
+│    ├── alerts/alert.log + stdout (always-on)    │
+│    ├── Cloud Logging SDK (retention/compliance) │
+│    └── Pub/Sub edr-alerts (real-time stream)    │
+│         └── Alert Router → WebSocket UI         │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -157,9 +159,10 @@ So any of these happening at runtime is suspicious:
 ### Response Mode
 Audit only — no blocking. Safe for a live demo environment.
 
-Alert output (dual write):
-- Local: `alerts/alert.log` + stdout (fallback, always available)
-- Primary: Google Cloud Logging via direct SDK write (structured JSON, cross-env consistent)
+Alert output (three paths):
+- Local: `alerts/alert.log` + stdout (always-on: ops debug, node-level audit)
+- Compliance: Google Cloud Logging via direct SDK write (structured JSON, 30–90s latency ok)
+- Real-time: Pub/Sub `edr-alerts` → Alert Router → WebSocket UI (<1s latency)
 
 See [centralized-logging.md](centralized-logging.md) for retention policy, reliability design, and IaC.
 
@@ -211,6 +214,7 @@ See [centralized-logging.md](centralized-logging.md) for retention policy, relia
 - [x] Phase 4 — GKE DaemonSet deployed on all clusters; cgroup v2 systemd parser; debugfs/tracefs mounts ✅
 - [x] Phase 5 — GKE functional validation: all 5 tests pass ✅
 - [ ] Phase 6 — Centralized Cloud Logging: dual write, structured JSON, regulation-backed retention (see centralized-logging.md)
+- [ ] Phase 7 — Real-time Monitoring: Pub/Sub publish from agent → Alert Router → WebSocket UI (see monitoring-service-design.md)
   - V2 CRITICAL shell_spawn_container ✓  V3 HIGH sensitive_file_access ✓  V4 HIGH unauthorized_external_connect ✓
   - V5 inventory-service allowlist (no HIGH) ✓  V6 no CRITICAL from normal gateway traffic ✓
   - Fixed: GKE service CIDR auto-detected from GCP metadata; system namespace suppression; validate-gke.sh timing
@@ -265,18 +269,25 @@ Run `./validate-gke.sh` from the `ebpf-edr-demo/` directory against the live GKE
 
 ### Phase 6 — Centralized Cloud Logging
 
-Current scope: alerts written to local file + stdout per node; no central collection.
-
-Design finalized — direct Cloud Logging SDK write from each agent (GKE DaemonSet and Docker VM):
-- Structured JSON payload per alert (schema versioned)
-- Dual write: local file fallback + Cloud Logging primary
+Direct Cloud Logging SDK write from each agent (GKE DaemonSet and Docker VM):
+- Structured JSON payload per alert (schema versioned, `schema_version: 1`)
+- Three-path write: local file (always-on) + Cloud Logging (compliance) + Pub/Sub (real-time)
 - Regional log buckets + GCS cold storage (regulation-backed 3yr retention)
 - Rate limiting and burst aggregation to control cost at eBPF event volume
 
-Replaces earlier Cloud Pub/Sub plan — direct SDK write gives schema control and
-works identically on GKE and Docker VM without an additional messaging layer.
-
 See [centralized-logging.md](centralized-logging.md) for full design.
+
+### Phase 7 — Real-time Monitoring Service
+
+Cloud Logging has 30–90s ingestion latency — unacceptable for a real-time security dashboard.
+Phase 7 adds a Pub/Sub path for sub-second alert delivery to a browser UI:
+
+- Agent publishes CRITICAL/HIGH alerts to Pub/Sub topic `edr-alerts` (async, fire-and-forget)
+- Alert Router service subscribes and routes via pluggable `AlertOutput` interface
+- Phase 7 output: WebSocket → browser UI (live alert feed)
+- Future outputs: PagerDuty (CRITICAL page), Slack webhook (team channel), email digest
+
+See [monitoring-service-design.md](monitoring-service-design.md) for full design.
 
 ### Per-workload policy
 
