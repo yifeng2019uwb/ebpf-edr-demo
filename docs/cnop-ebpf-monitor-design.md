@@ -213,7 +213,7 @@ See [centralized-logging.md](centralized-logging.md) for retention policy, relia
 - [x] Phase 3 — Dockerfile + Artifact Registry push (`make docker-push`) ✅
 - [x] Phase 4 — GKE DaemonSet deployed on all clusters; cgroup v2 systemd parser; debugfs/tracefs mounts ✅
 - [x] Phase 5 — GKE functional validation: all 5 tests pass ✅
-- [ ] Phase 6 — Centralized Cloud Logging: dual write, structured JSON, regulation-backed retention (see centralized-logging.md)
+- [x] Phase 6 — Centralized Cloud Logging: dual write, structured JSON, 365-day retention, cross-project IAM (see centralized-logging.md)
 - [ ] Phase 7 — Real-time Monitoring: Pub/Sub publish from agent → Alert Router → WebSocket UI (see alert-router-design.md)
   - V2 CRITICAL shell_spawn_container ✓  V3 HIGH sensitive_file_access ✓  V4 HIGH unauthorized_external_connect ✓
   - V5 inventory-service allowlist (no HIGH) ✓  V6 no CRITICAL from normal gateway traffic ✓
@@ -265,7 +265,7 @@ Run `./validate-gke.sh` from the `ebpf-edr-demo/` directory against the live GKE
 
 ---
 
-## 7. Future Direction
+## 7. Extensibility Design
 
 ### Phase 6 — Centralized Cloud Logging
 

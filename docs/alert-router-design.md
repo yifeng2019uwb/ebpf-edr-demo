@@ -27,15 +27,15 @@ extensible routing layer that can adopt new outputs without agent changes.
 - Historical view: Cloud Logging query on dashboard load (last N alerts)
 - Simple static HTML/JS frontend served by the Alert Router Go HTTP handler at `/`
 
-### Future — not yet scoped
+### Extensibility Design
 
-| Feature | Why deferred |
+| Feature | Extension approach |
 |---|---|
-| PagerDuty / OpsGenie | Requires external account + on-call schedule setup; `AlertOutput` interface makes it a one-file addition when needed |
-| Slack webhook | Requires Slack workspace setup; trivial to add once interface exists |
-| Email digest | Format and schedule decisions need real ops experience; SMTP/SendGrid is an external dependency |
-| Alert deduplication in router | Needs real event volume data to choose dedup window and thresholds — guessing now would produce wrong numbers |
-| Alert Router HA (multiple replicas) | Pub/Sub competing-consumer pattern handles this naturally; not needed for single-cluster demo |
+| PagerDuty / OpsGenie | `AlertOutput` interface makes it a one-file addition; requires external account + on-call schedule setup |
+| Slack webhook | Trivial to add once interface exists; requires Slack workspace setup |
+| Email digest | SMTP/SendGrid output; format and schedule decisions informed by real ops experience |
+| Alert deduplication in router | Dedup window and thresholds chosen from real event volume data |
+| Alert Router HA (multiple replicas) | Pub/Sub competing-consumer pattern handles this naturally |
 | Cross-node correlation (EventForwarder) | Different design and different data — see `gke-expansion-design.md §5`; operates on all enriched events (pre-detection), not alerts |
 
 The `AlertOutput` interface is the key extensibility point — future outputs require implementing one interface and registering at startup. No changes to the router core or agent.
@@ -68,9 +68,9 @@ Agent (GKE DaemonSet / Docker VM)
   └── Pub/Sub topic: edr-alerts  (real-time stream, <1s latency)
        └── Alert Router
               ├── WebSocket → Monitoring UI    [Phase 7, planned]
-              ├── PagerDuty / OpsGenie         [future — extensibility point, not yet scoped]
-              ├── Slack webhook                [future — extensibility point, not yet scoped]
-              └── Email digest                 [future — extensibility point, not yet scoped]
+              ├── PagerDuty / OpsGenie         [extensibility point]
+              ├── Slack webhook                [extensibility point]
+              └── Email digest                 [extensibility point]
 ```
 
 ### Agent publish behavior
@@ -117,7 +117,7 @@ type WebSocketOutput struct {
 - WebSocket endpoint at `/ws`
 - Cloud Run `min-instances=1` — prevents WebSocket connections dropping on idle
 
-### Future outputs (not yet scoped — implement when needed)
+### Extensibility Design — Additional Outputs
 
 - **PagerDuty / OpsGenie** — CRITICAL alerts trigger immediate on-call page (<1 min SLA)
 - **Slack webhook** — CRITICAL+HIGH alerts posted to security team channel

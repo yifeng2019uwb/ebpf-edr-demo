@@ -1,179 +1,177 @@
 # ebpf-edr-demo
 
-eBPF-based runtime security monitor for containerized services, built for endpoint security and EDR (Endpoint Detection and Response) research.
+eBPF-based runtime security monitor for containerized workloads. Detects threats at the kernel level — no agent inside containers, no application changes required.
+
+Monitors [cloud-native-order-processor](https://github.com/yifeng2019uwb/cloud-native-order-processor) — a production-style microservices platform running on Docker VM and GKE.
 
 ---
 
-## Background
+## How It Works
 
-This project monitors [cloud-native-order-processor](https://github.com/yifeng2019uwb/cloud-native-order-processor) — a production-style microservices platform deployed on a GCP VM (Debian 12, kernel 6.1).
-
-The order processor runs 8 Docker containers:
-
-| Container           | Role                                          |
-|---------------------|-----------------------------------------------|
-| `gateway`           | Go API gateway, port 8080                     |
-| `auth_service`      | Python/uvicorn, JWT authentication            |
-| `user_service`      | Python/uvicorn, balance and portfolio         |
-| `inventory_service` | Python/uvicorn, asset catalog                 |
-| `order_service`     | Python/uvicorn, trade execution               |
-| `insights_service`  | Python/uvicorn, AI portfolio insights         |
-| `redis`             | Rate limiting, IP blocking, distributed locks |
-| `localstack`        | DynamoDB (local AWS emulation)                |
-
-The goal: attach eBPF probes to the running kernel on the GCP VM, observe all 8 services at the syscall and network level, and generate security alerts — without modifying any service code.
-
----
-
-## What It Does
-
-Three eBPF monitors run concurrently, each sending events to Go userspace via ring buffer:
-
-| Monitor | Hook | Detects |
-|---|---|---|
-| `execsnoop` | `sys_enter_execve` | Shell spawns, network tools inside containers |
-| `opensnoop` | `sys_enter/exit_openat` | Sensitive file access — shadow, SSH keys, secrets |
-| `lsm-connect` | `lsm/socket_connect` | Unauthorized outbound network connections |
-
-### Detection Rules
-
-| Rule | Trigger | Severity |
-|---|---|---|
-| `unknown_namespace_process` | Process in unrecognized namespace — container escape | CRITICAL |
-| `shell_spawn_container` | bash/sh/zsh/dash spawned inside container | CRITICAL |
-| `host_reads_container_fs` | Host process reads `/var/lib/docker/overlay2/` | CRITICAL |
-| `sensitive_file_access` | `/etc/shadow`, `.ssh/`, `.key`, secrets | HIGH |
-| `network_tool_container` | nc, ncat, wget inside container | HIGH |
-| `sensitive_file_access` | `/etc/passwd`, `/etc/group` | MEDIUM |
-| `short_lived_failure` | Non-zero exit + duration < 100ms | LOW |
-
-### Workload Identity
-
-Every alert is tagged with a `WorkloadIdentity` using mount namespace IDs — no agent inside containers required.
-
-| Field | Docker | GKE (Phase 2) |
-|-------|--------|---------------|
-| `Service` | `inventory-service` | `inventory-service` |
-| `Pod` | container name | `inventory-service-68ccd-abc` |
-| `Namespace` | `""` | `order-processor` |
-| `Runtime` | `docker` | `k8s` |
-
-`Service` is the stable logical name used by all detection rules — consistent across runtimes.
-
-Sentinel values for `Service`:
-- **`host`** — PID 1 namespace (host process)
-- **`unknown-ns`** — unrecognized namespace → possible container escape → CRITICAL alert
-
----
-
-## Architecture
+Three eBPF programs attach to kernel hooks and stream events via ring buffer to a Go userspace pipeline:
 
 ```
-  KERNEL (BPF programs)
-  ─────────────────────────────────────────────
-  execsnoop         opensnoop         lsm-connect
-  sys_enter_execve  enter+exit_openat lsm/socket_connect
-       │                  │                 │
-       └──────────────────┴─────────────────┘
-                          │  RawEvent{Source, Data}
-                   rawCh (4096)
-                          │
-  USERSPACE (Go — buffered pipeline)
-  ─────────────────────────────────────────────
-  Enricher: parse bytes + resolve WorkloadIdentity (mnt_ns_id → service name)
-                          │  EnrichedEvent{Type, Process/File/Net, Workload}
-                   enrichedCh (1024)
-                          │
-  Detector: apply detection rules (pkg/detector)
-                          │  Alert{Level, Rule, Workload, ...}
-                   alertCh (64)
-                          │
-  AlertHandler: stdout + alerts/alert.log
+KERNEL
+──────────────────────────────────────────────────────────────
+execsnoop            opensnoop             lsm-connect
+sys_enter_execve     enter+exit_openat     lsm/socket_connect
+     │                     │                     │
+     └─────────────────────┴─────────────────────┘
+                           │  ring buffer
+USERSPACE (Go)
+──────────────────────────────────────────────────────────────
+Enricher
+  mnt_ns_id → WorkloadIdentity (service / pod / namespace / cluster)
+                           │
+Detector
+  apply detection rules → Alert
+                           │
+AlertHandler
+  ├── stdout + local file      (always-on)
+  └── Google Cloud Logging     (structured JSON, centralized, 365-day retention)
 ```
+
+Two runtimes supported from a single binary:
+
+| Environment   | Host OS      | Kernel | Identity Source         |
+|---------------|--------------|--------|-------------------------|
+| Docker VM     | Debian 12    | 6.1    | Docker API              |
+| GKE DaemonSet | Ubuntu 24.04 | 6.8    | Kubernetes API + CRI    |
+
+---
+
+## Workload Identity
+
+Every alert carries workload context resolved from mount namespace IDs at event time — no sidecar, no instrumentation inside containers.
+
+| Field       | Docker VM       | GKE DaemonSet                      |
+|-------------|-----------------|-------------------------------------|
+| `service`   | `order-service` | `order-service`                     |
+| `pod`       | container name  | `order-service-768986b99f-hwv82`    |
+| `namespace` | —               | `order-processor`                   |
+| `runtime`   | `docker`        | `k8s`                               |
+| `cluster`   | —               | `order-processor-cluster-us-west1`  |
+| `region`    | —               | `us-west1`                          |
+
+---
+
+## Detection Rules
+
+| Rule                            | Trigger                                    | Severity |
+|---------------------------------|--------------------------------------------|----------|
+| `shell_spawn_container`         | Shell (`bash`, `sh`, `zsh`) in container   | CRITICAL |
+| `unknown_namespace_process`     | Process in unrecognized mount namespace    | CRITICAL |
+| `host_reads_container_fs`       | Host process reads container filesystem    | CRITICAL |
+| `sensitive_file_access`         | SSH keys, private keys                     | CRITICAL |
+| `network_tool_container`        | `nc`, `wget` executed inside container     | HIGH     |
+| `unauthorized_external_connect` | Connection to non-allowlisted external IP  | HIGH     |
+| `sensitive_file_access`         | `/etc/shadow`, secret files                | HIGH     |
+| `sensitive_file_access`         | `/etc/passwd`, `/etc/group`                | MEDIUM   |
+
+---
+
+## Validation
+
+Attack simulations run against live deployments. All rules verified end-to-end: kernel capture → workload enrichment → alert → Cloud Logging.
+
+### Docker VM — 6/7 pass
+
+| Test                         | Rule                            | Result |
+|------------------------------|---------------------------------|--------|
+| `docker exec bash`           | `shell_spawn_container`         | PASS   |
+| read `/etc/shadow`           | `sensitive_file_access` (HIGH)  | PASS   |
+| read `/etc/passwd`           | `sensitive_file_access` (MED)   | PASS   |
+| run `nc` in container        | `network_tool_container`        | PASS   |
+| connect to external IP       | `unauthorized_external_connect` | PASS   |
+| read SSH key in container    | `sensitive_file_access` (CRIT)  | PASS   |
+| `unknown_namespace_process`  | —                               | N/A (host-only; expected no alert in container context) |
+
+### GKE DaemonSet — 5/5 pass
+
+| Test                         | Rule                            | Result |
+|------------------------------|---------------------------------|--------|
+| `kubectl exec bash`          | `shell_spawn_container`         | PASS   |
+| read `/etc/shadow`           | `sensitive_file_access` (HIGH)  | PASS   |
+| read `/etc/passwd`           | `sensitive_file_access` (MED)   | PASS   |
+| run `nc` in pod              | `network_tool_container`        | PASS   |
+| connect to external IP       | `unauthorized_external_connect` | PASS   |
+
+All GKE alerts carry full workload identity: `service`, `pod`, `namespace`, `cluster`, `region`.
+
+---
+
+## Centralized Alerting
+
+All alerts write to Google Cloud Logging as structured JSON in real time:
+
+```json
+{
+  "schema_version": 1,
+  "ts": "2026-05-04T16:31:42Z",
+  "level": "HIGH",
+  "rule": "unauthorized_external_connect",
+  "cluster": "order-processor-cluster-us-west1",
+  "namespace": "order-processor",
+  "service": "user-service",
+  "pod": "user-service-768986b99f-hwv82",
+  "runtime": "k8s",
+  "dst_ip": "8.8.8.8",
+  "dst_port": 80
+}
+```
+
+- Dual write: local file + Cloud Logging SDK (no log loss if network unavailable)
+- Cross-project: Docker VM and GKE agents both write to centralized `ebpfagent` project
+- 365-day retention — infrastructure managed as code via Pulumi (`infra/`)
 
 ---
 
 ## How to Run
 
-**Requires**: Linux, kernel 5.8+, Go 1.24+, clang/llvm, Docker
-
+**GKE DaemonSet** (from `cloud-native-order-processor/gcp_gke/`):
 ```bash
-# on the GCP VM
-cd ~/workspace/ebpf-edr-demo
-
-# compile eBPF programs and generate Go wrappers (only after editing .bpf.c files)
-make generate
-
-# build binary (cross-compiles to linux/amd64 from any host)
-make build
-
-# run (requires root for eBPF)
-sudo ./ebpf-edr-demo --runtime=docker   # Docker VM
-sudo ./ebpf-edr-demo --runtime=k8s      # GKE DaemonSet (Phase 2)
+./deploy.sh daemonset
 ```
 
-Alerts are written to stdout and `alerts/alert.log`.
+**Docker VM:**
+```bash
+export GOOGLE_CLOUD_PROJECT=ebpfagent
+sudo ./ebpf-edr-demo --runtime=docker
+```
+
+**Validation:**
+```bash
+./validate.sh        # Docker VM attack simulation
+./validate-gke.sh    # GKE attack simulation
+```
 
 ---
 
 ## Project Structure
 
 ```
-cmd/edr-monitor/
-  main.go           — buffered pipeline wiring + --runtime flag
-kernel/
-  execsnoop.bpf.c   — process execution monitor
-  opensnoop.bpf.c   — file access monitor (two-probe enter+exit)
-  lsm-connect.bpf.c — network connection monitor
-pkg/
-  bpf/              — generated BPF loaders (bpf2go output)
-  workload/
-    identity.go     — WorkloadIdentity struct
-    resolver.go     — WorkloadResolver interface + NewResolver()
-    docker_resolver.go — Docker implementation (mnt_ns → service name)
-  pipeline/
-    event.go        — RawEvent, EnrichedEvent, core interfaces
-  detector/
-    rules.go        — detection rule implementations (RuleDetector)
-    policy.go       — allow/block lists (edit here to tune rules)
-internal/
-  alert/
-    alert.go        — Alert struct + Handler (stdout + file)
-  processor/
-    processor.go    — kernel event structs (must match .h files exactly)
+cmd/edr-monitor/    — main entry point, pipeline wiring
+kernel/             — eBPF C programs (execsnoop, opensnoop, lsm-connect)
+pkg/bpf/            — generated BPF loaders (bpf2go output, committed)
+pkg/workload/       — WorkloadResolver: DockerResolver + K8sResolver
+pkg/detector/       — detection rules and policy (allowlists, whitelists)
+internal/alert/     — AlertHandler: local file + Cloud Logging SDK
+infra/              — Pulumi stack: Cloud Logging bucket, log sink, IAM
+k8s/                — GKE DaemonSet manifest
 ```
-
----
-
-## Key Design Decisions
-
-- **BPF = wide net** — collect all events, minimal kernel-side filtering
-- **Go = smart rules** — all detection logic in userspace with full context
-- **Two-probe opensnoop** — entry captures filename, exit checks return code; drops `ENOENT` (probe noise) but keeps `EACCES`/`EPERM` (real access attempts)
-- **curl excluded from process rules** — health checks and tests all use curl on localhost; destination-aware detection belongs in lsm-connect
-- **No host whitelist** — hybrid namespace strategy catches escapes without enumerating every legitimate host process
-- **Audit mode only** — alerts only, no blocking; safe for a live demo environment
 
 ---
 
 ## Documentation
 
-| Doc | Description |
-|-----|-------------|
-| [SETUP.md](docs/SETUP.md) | Environment setup and build instructions |
-| [VALIDATION.md](docs/VALIDATION.md) | Docker VM detection rule validation guide |
-| [VALIDATION-GKE.md](docs/VALIDATION-GKE.md) | GKE validation plan and test cases |
-| [MITRE-COVERAGE.md](docs/MITRE-COVERAGE.md) | MITRE ATT&CK technique coverage mapping |
-| [REPORT.md](docs/REPORT.md) | Project report |
-| [cnop-ebpf-monitor-design.md](docs/cnop-ebpf-monitor-design.md) | Original CNOP eBPF monitor design doc |
-| [gke-expansion-design.md](docs/gke-expansion-design.md) | GKE expansion design |
-| [centralized-logging.md](docs/centralized-logging.md) | Centralized Cloud Logging design (retention, reliability, IaC) |
-| [alert-router-design.md](docs/alert-router-design.md) | Real-time alert routing design (Pub/Sub, Alert Router, WebSocket UI, Cloud Run) |
-| [cloud-logging-impl-plan.md](docs/cloud-logging-impl-plan.md) | Cloud Logging implementation plan (step-by-step) |
-| [NOTES.md](docs/NOTES.md) | Work log and development notes |
-
----
-
-## Legacy
-
-Original learning project using bpftrace + Python. See [legacy/](legacy/).
+| Doc                                                             | Description                                                         |
+|-----------------------------------------------------------------|---------------------------------------------------------------------|
+| [SETUP.md](docs/SETUP.md)                                       | Environment setup, build, Cloud Logging VM config                   |
+| [VALIDATION.md](docs/VALIDATION.md)                             | Docker VM test cases and validation procedure                       |
+| [VALIDATION-GKE.md](docs/VALIDATION-GKE.md)                    | GKE validation plan and test cases                                  |
+| [MITRE-COVERAGE.md](docs/MITRE-COVERAGE.md)                    | MITRE ATT&CK technique coverage                                     |
+| [cnop-ebpf-monitor-design.md](docs/cnop-ebpf-monitor-design.md) | System design: monitors, detection pipeline, threat model           |
+| [gke-expansion-design.md](docs/gke-expansion-design.md)         | GKE deployment design: K8sResolver, DaemonSet, workload identity    |
+| [centralized-logging.md](docs/centralized-logging.md)           | Cloud Logging design: retention, reliability, IaC                   |
+| [alert-router-design.md](docs/alert-router-design.md)           | Alert routing design: Pub/Sub, Alert Router, WebSocket UI           |
+| [NOTES.md](docs/NOTES.md)                                       | Development notes and debugging reference                           |

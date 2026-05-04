@@ -359,13 +359,13 @@ Automated with `./validate-gke.sh`. Run from `ebpf-edr-demo/` directory.
 ### Out of scope for this plan
 
 - Alert aggregation strategy (Cloud Logging, file, stdout) — `AlertHandler` is pluggable, decide per environment
-- Detection rules for K8s-specific threats (privileged container escape, hostPath abuse) — future phase
+- Detection rules for K8s-specific threats (privileged container escape, hostPath abuse)
 - Multi-node cluster support — current cluster is single-node; K8sResolver scoped to local node
 - VM1 Cloud Logging shipping — deferred
 
 ---
 
-## 5. Future: System-Level Correlation
+## 5. Extensibility Design: System-Level Correlation
 
 ### The gap in node-local detection
 

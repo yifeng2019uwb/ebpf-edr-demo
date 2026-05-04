@@ -291,7 +291,7 @@ kubectl exec <pod> -n order-processor -- \
 
 ### 5.4 Pending → retry → CRITICAL flow
 
-> **Implementation note:** this test requires a debug mechanism to delay the resolver — e.g., `--resolver-delay=10s` flag or a mock resolver that refuses to resolve a specific `mnt_ns_id`. Mechanism TBD at Phase 2 implementation.
+> **Implementation note:** this test requires a debug mechanism to delay the resolver — e.g., `--resolver-delay=10s` flag or a mock resolver that refuses to resolve a specific `mnt_ns_id`. Mechanism TBD — requires debug flag or mock resolver implementation before this test can run.
 
 Scenario A — resolves within grace period:
 ```

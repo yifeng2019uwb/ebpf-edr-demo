@@ -9,7 +9,7 @@ CI/CD pipeline hooks, WAF, or other non-runtime tooling.
 **Current coverage: 8 of ~15 runtime-detectable techniques**
 
 High-impact tactics covered: Execution, Credential Access, Exfiltration, Partial Privilege Escalation.
-Remaining gaps are lower-signal or require stateful/behavioral detection (future work).
+Remaining gaps are lower-signal or require stateful/behavioral detection.
 
 ---
 
