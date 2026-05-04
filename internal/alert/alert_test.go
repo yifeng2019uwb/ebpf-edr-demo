@@ -1,6 +1,7 @@
 package alert
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -171,4 +172,69 @@ func TestHandlerSend_WriteErrorDoesNotPanic(t *testing.T) {
 		Comm:     "cat",
 		Workload: workload.ResolveResult{State: workload.StateResolved},
 	})
+}
+
+func TestNewHandler_CloudLoggingDisabledWhenProjectUnset(t *testing.T) {
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getting working dir: %v", err)
+	}
+	if err := os.Chdir(t.TempDir()); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	defer os.Chdir(orig)
+
+	t.Setenv("GOOGLE_CLOUD_PROJECT", "")
+
+	h, err := NewHandler()
+	if err != nil {
+		t.Fatalf("NewHandler() error: %v", err)
+	}
+	defer h.Close()
+
+	if h.cloudLogger != nil {
+		t.Fatal("expected cloudLogger nil when GOOGLE_CLOUD_PROJECT not set")
+	}
+}
+
+func TestAlertPayload_JSONFields(t *testing.T) {
+	p := alertPayload{
+		SchemaVersion: 1,
+		Ts:            "2026-05-04T00:00:00Z",
+		Level:         "CRITICAL",
+		Rule:          "shell_spawn_container",
+		Cluster:       "my-cluster",
+		Service:       "auth-service",
+		Namespace:     "default",
+		Comm:          "bash",
+	}
+
+	b, err := json.Marshal(p)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	s := string(b)
+
+	for _, want := range []string{
+		`"schema_version":1`,
+		`"ts":"2026-05-04T00:00:00Z"`,
+		`"level":"CRITICAL"`,
+		`"rule":"shell_spawn_container"`,
+		`"cluster":"my-cluster"`,
+		`"service":"auth-service"`,
+		`"namespace":"default"`,
+		`"comm":"bash"`,
+	} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("missing %q in JSON\ngot: %s", want, s)
+		}
+	}
+
+	// omitempty fields absent when zero
+	if strings.Contains(s, `"filename"`) {
+		t.Fatalf("expected filename omitted when empty, got: %s", s)
+	}
+	if strings.Contains(s, `"dst_ip"`) {
+		t.Fatalf("expected dst_ip omitted when empty, got: %s", s)
+	}
 }

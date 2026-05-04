@@ -1,4 +1,4 @@
-# eBPF EDR — Monitoring Service Design
+# eBPF EDR — Alert Router Design
 
 ## Goal
 
@@ -13,15 +13,19 @@ in under one second, while Cloud Logging handles the compliance/retention side i
 
 ### Prerequisites
 
-- Agent writes structured alerts with versioned JSON payload
-- Agent deployed on GKE DaemonSet and Docker VM
-- GCP project with Pub/Sub API enabled
-- `GOOGLE_CLOUD_PROJECT` env var injected in DaemonSet
+- Pub/Sub topic `edr-alerts` exists
+- Agent publishes structured alerts to the topic
+- Cloud Logging contains alert history (for dashboard initial load)
+- Alert Router has `roles/pubsub.subscriber` on the subscription
 
 ### Current — Phase 7
 
 Real-time alert delivery from every agent node to a browser dashboard, with an
 extensible routing layer that can adopt new outputs without agent changes.
+
+- Live feed: Pub/Sub → Alert Router → WebSocket → browser (<1s latency)
+- Historical view: Cloud Logging query on dashboard load (last N alerts)
+- Simple static HTML/JS frontend served by the Alert Router Go HTTP handler at `/`
 
 ### Future — not yet scoped
 
@@ -108,7 +112,10 @@ type WebSocketOutput struct {
 - Alert Router subscribes to Pub/Sub `edr-alerts` (pull subscription)
 - On each message: deserialize alert JSON, call `hub.Broadcast(alert)`
 - Hub fans out to all connected WebSocket clients
-- Browser UI opens WebSocket connection and displays live alert feed
+- On browser connect: query Cloud Logging for last N alerts, send as initial state
+- Browser UI: single static HTML/JS file, served by Alert Router Go HTTP handler at `/`
+- WebSocket endpoint at `/ws`
+- Cloud Run `min-instances=1` — prevents WebSocket connections dropping on idle
 
 ### Future outputs (not yet scoped — implement when needed)
 
@@ -149,7 +156,7 @@ Resources needed:
 - Pub/Sub subscription: `edr-alerts-router-sub` (pull, for Alert Router)
 - IAM: agent service account → `roles/pubsub.publisher`
 - IAM: Alert Router service account → `roles/pubsub.subscriber`
-- Alert Router deployment: Cloud Run (stateless pull loop) or GKE Deployment
+- Cloud Run service: Alert Router (`min-instances=1`); serves static frontend at `/`, WebSocket at `/ws`
 
 ---
 

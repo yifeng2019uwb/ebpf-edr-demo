@@ -214,7 +214,7 @@ See [centralized-logging.md](centralized-logging.md) for retention policy, relia
 - [x] Phase 4 — GKE DaemonSet deployed on all clusters; cgroup v2 systemd parser; debugfs/tracefs mounts ✅
 - [x] Phase 5 — GKE functional validation: all 5 tests pass ✅
 - [ ] Phase 6 — Centralized Cloud Logging: dual write, structured JSON, regulation-backed retention (see centralized-logging.md)
-- [ ] Phase 7 — Real-time Monitoring: Pub/Sub publish from agent → Alert Router → WebSocket UI (see monitoring-service-design.md)
+- [ ] Phase 7 — Real-time Monitoring: Pub/Sub publish from agent → Alert Router → WebSocket UI (see alert-router-design.md)
   - V2 CRITICAL shell_spawn_container ✓  V3 HIGH sensitive_file_access ✓  V4 HIGH unauthorized_external_connect ✓
   - V5 inventory-service allowlist (no HIGH) ✓  V6 no CRITICAL from normal gateway traffic ✓
   - Fixed: GKE service CIDR auto-detected from GCP metadata; system namespace suppression; validate-gke.sh timing
@@ -287,7 +287,7 @@ Phase 7 adds a Pub/Sub path for sub-second alert delivery to a browser UI:
 - Phase 7 output: WebSocket → browser UI (live alert feed)
 - Future outputs: PagerDuty (CRITICAL page), Slack webhook (team channel), email digest
 
-See [monitoring-service-design.md](monitoring-service-design.md) for full design.
+See [alert-router-design.md](alert-router-design.md) for full design.
 
 ### Per-workload policy
 

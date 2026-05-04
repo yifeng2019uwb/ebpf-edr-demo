@@ -9,7 +9,7 @@ log retention regulations.
 
 File + stdout output is always-on local (ops debug, node-level audit); Cloud Logging is
 the primary long-term store. A third path — Pub/Sub — feeds real-time monitoring.
-See [monitoring-service-design.md](monitoring-service-design.md) for the real-time path.
+See [alert-router-design.md](alert-router-design.md) for the real-time path.
 
 ---
 

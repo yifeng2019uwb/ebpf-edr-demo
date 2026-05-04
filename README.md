@@ -168,7 +168,7 @@ internal/
 | [cnop-ebpf-monitor-design.md](docs/cnop-ebpf-monitor-design.md) | Original CNOP eBPF monitor design doc |
 | [gke-expansion-design.md](docs/gke-expansion-design.md) | GKE expansion design |
 | [centralized-logging.md](docs/centralized-logging.md) | Centralized Cloud Logging design (retention, reliability, IaC) |
-| [monitoring-service-design.md](docs/monitoring-service-design.md) | Real-time monitoring service design (Pub/Sub, Alert Router, WebSocket UI) |
+| [alert-router-design.md](docs/alert-router-design.md) | Real-time alert routing design (Pub/Sub, Alert Router, WebSocket UI, Cloud Run) |
 | [cloud-logging-impl-plan.md](docs/cloud-logging-impl-plan.md) | Cloud Logging implementation plan (step-by-step) |
 | [NOTES.md](docs/NOTES.md) | Work log and development notes |
 
