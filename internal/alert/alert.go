@@ -2,12 +2,14 @@ package alert
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
 	"time"
 
 	cloudlogging "cloud.google.com/go/logging"
+	"cloud.google.com/go/pubsub/v2"
 	"ebpf-edr-demo/pkg/workload"
 )
 
@@ -67,11 +69,14 @@ type alertPayload struct {
 	DstPort       uint16 `json:"dst_port,omitempty"`
 }
 
+const pubsubTopicID = "edr-alerts"
+
 // Handler manages where alerts are written.
 type Handler struct {
 	file        *os.File
 	cloudLogger *cloudlogging.Logger
 	cloudClient *cloudlogging.Client
+	pubsubPublisher *pubsub.Publisher
 }
 
 // NewHandler opens the alert log file and initialises Cloud Logging if
@@ -96,6 +101,14 @@ func NewHandler() (*Handler, error) {
 			h.cloudLogger = client.Logger(logName)
 			h.cloudClient = client
 			log.Printf("Cloud Logging enabled: project=%s", project)
+		}
+
+		psClient, err := pubsub.NewClient(context.Background(), project)
+		if err != nil {
+			log.Printf("Pub/Sub disabled — client init failed: %v", err)
+		} else {
+			h.pubsubPublisher = psClient.Publisher(pubsubTopicID)
+			log.Printf("Pub/Sub enabled: topic=%s", pubsubTopicID)
 		}
 	} else {
 		log.Printf("Cloud Logging disabled — GOOGLE_CLOUD_PROJECT not set")
@@ -143,42 +156,58 @@ func (h *Handler) Send(a Alert) {
 		log.Printf("failed to write alert: %v", err)
 	}
 
+	payload := alertPayload{
+		SchemaVersion: 1,
+		Ts:            now.UTC().Format(time.RFC3339),
+		Level:         string(a.Level),
+		Rule:          a.Rule,
+		Message:       a.Message,
+		Pid:           a.Pid,
+		Ppid:          a.Ppid,
+		Uid:           a.Uid,
+		Comm:          a.Comm,
+		Runtime:       id.Runtime,
+		Service:       id.Service,
+		State:         string(state),
+		Cluster:       meta.Cluster,
+		Pod:           meta.Pod,
+		Namespace:     meta.Namespace,
+		Node:          meta.Node,
+		Region:        meta.Region,
+		Filename:      a.Filename,
+		DstIP:         a.DstIP,
+		DstPort:       a.DstPort,
+	}
+
 	if h.cloudLogger != nil {
 		h.cloudLogger.Log(cloudlogging.Entry{
 			Severity: severityFor(a.Level),
-			Payload: alertPayload{
-				SchemaVersion: 1,
-				Ts:            now.UTC().Format(time.RFC3339),
-				Level:         string(a.Level),
-				Rule:          a.Rule,
-				Message:       a.Message,
-				Pid:           a.Pid,
-				Ppid:          a.Ppid,
-				Uid:           a.Uid,
-				Comm:          a.Comm,
-				Runtime:       id.Runtime,
-				Service:       id.Service,
-				State:         string(state),
-				Cluster:       meta.Cluster,
-				Pod:           meta.Pod,
-				Namespace:     meta.Namespace,
-				Node:          meta.Node,
-				Region:        meta.Region,
-				Filename:      a.Filename,
-				DstIP:         a.DstIP,
-				DstPort:       a.DstPort,
-			},
+			Payload:  payload,
 		})
+	}
+
+	if h.pubsubPublisher != nil {
+		if data, err := json.Marshal(payload); err == nil {
+			result := h.pubsubPublisher.Publish(context.Background(), &pubsub.Message{Data: data})
+			go func() {
+				if _, err := result.Get(context.Background()); err != nil {
+					log.Printf("Pub/Sub publish error: %v", err)
+				}
+			}()
+		}
 	}
 }
 
-// Close flushes Cloud Logging and closes the log file.
+// Close flushes Cloud Logging, stops the Pub/Sub publisher, and closes the log file.
 func (h *Handler) Close() {
 	h.file.Close()
 	if h.cloudClient != nil {
 		if err := h.cloudClient.Close(); err != nil {
 			log.Printf("Cloud Logging flush error: %v", err)
 		}
+	}
+	if h.pubsubPublisher != nil {
+		h.pubsubPublisher.Stop()
 	}
 }
 

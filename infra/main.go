@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/pulumi/pulumi-gcp/sdk/v9/go/gcp/logging"
 	"github.com/pulumi/pulumi-gcp/sdk/v9/go/gcp/projects"
+	"github.com/pulumi/pulumi-gcp/sdk/v9/go/gcp/pubsub"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 	// "github.com/pulumi/pulumi-gcp/sdk/v9/go/gcp/storage" — needed for cold storage (commented out below)
 )
@@ -70,6 +71,52 @@ func main() {
 		// if err != nil {
 		// 	return err
 		// }
+
+		// ── Pub/Sub — real-time alert stream ────────────────────────────────────
+		//
+		// Agent publishes CRITICAL/HIGH alerts here (fire-and-forget, async).
+		// Alert Router subscribes locally and fans out via WebSocket to the browser.
+		// Topic-level IAM keeps publisher grants minimal (not project-wide).
+		topic, err := pubsub.NewTopic(ctx, "edr-alerts-topic", &pubsub.TopicArgs{
+			Name:    pulumi.String("edr-alerts"),
+			Project: pulumi.String(project),
+		})
+		if err != nil {
+			return err
+		}
+
+		_, err = pubsub.NewSubscription(ctx, "edr-alerts-router-sub", &pubsub.SubscriptionArgs{
+			Name:                     pulumi.String("edr-alerts-router-sub"),
+			Topic:                    topic.Name,
+			Project:                  pulumi.String(project),
+			MessageRetentionDuration: pulumi.String("604800s"), // 7 days
+			AckDeadlineSeconds:       pulumi.Int(60),
+		})
+		if err != nil {
+			return err
+		}
+
+		// GKE agent SA — publisher on edr-alerts topic
+		_, err = pubsub.NewTopicIAMMember(ctx, "gke-sa-pubsub-publisher", &pubsub.TopicIAMMemberArgs{
+			Topic:   topic.Name,
+			Project: pulumi.String(project),
+			Role:    pulumi.String("roles/pubsub.publisher"),
+			Member:  pulumi.String("serviceAccount:order-processor-sa@" + project + ".iam.gserviceaccount.com"),
+		})
+		if err != nil {
+			return err
+		}
+
+		// Docker VM compute SA — publisher on edr-alerts topic
+		_, err = pubsub.NewTopicIAMMember(ctx, "openclaw-vm-pubsub-publisher", &pubsub.TopicIAMMemberArgs{
+			Topic:   topic.Name,
+			Project: pulumi.String(project),
+			Role:    pulumi.String("roles/pubsub.publisher"),
+			Member:  pulumi.String("serviceAccount:323172929342-compute@developer.gserviceaccount.com"),
+		})
+		if err != nil {
+			return err
+		}
 
 		// ── Cold storage: GCS bucket + lifecycle + sink ───────────────────────────
 		//
