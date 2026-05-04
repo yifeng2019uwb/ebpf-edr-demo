@@ -106,5 +106,50 @@ make generate   # runs: go generate ./pkg/bpf/
 make build
 
 # run on GCP VM (requires root for eBPF)
+# GOOGLE_CLOUD_PROJECT must be exported before sudo — sudo drops env vars unless
+# /etc/sudoers.d/ebpf-edr has: Defaults env_keep += "GOOGLE_CLOUD_PROJECT"
+export GOOGLE_CLOUD_PROJECT=ebpfagent
 sudo ./ebpf-edr-demo --runtime=docker
 ```
+
+### One-time VM setup (cross-project Cloud Logging auth)
+
+The Docker VM is in a different GCP project than `ebpfagent`. Run once after first SSH:
+
+```bash
+# persist env var across logins
+echo "GOOGLE_CLOUD_PROJECT=ebpfagent" | sudo tee -a /etc/environment
+
+# allow sudo to preserve GOOGLE_CLOUD_PROJECT
+echo 'Defaults env_keep += "GOOGLE_CLOUD_PROJECT"' | sudo tee /etc/sudoers.d/ebpf-edr
+```
+
+After this, new SSH sessions only need:
+```bash
+export GOOGLE_CLOUD_PROJECT=ebpfagent
+sudo ./ebpf-edr-demo --runtime=docker
+```
+
+## Verifying Cloud Logging
+
+After deploying to GKE (`./deploy.sh daemonset`), confirm alerts are flowing:
+
+```bash
+# All GKE alerts — run from Mac
+gcloud logging read \
+  'logName="projects/ebpfagent/logs/ebpf-edr-alerts" AND jsonPayload.runtime="k8s"' \
+  --project=ebpfagent --limit=5 --format=json
+```
+
+Expected fields in each log entry:
+- `jsonPayload.cluster` — GKE cluster name (e.g. `order-processor-cluster-us-west1`)
+- `jsonPayload.level` — alert level (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`)
+- `jsonPayload.runtime` — `k8s`
+- `jsonPayload.uid` — Linux UID of the triggering process; `0` = root
+- `severity` — Cloud Logging severity mapped from alert level: `HIGH→ERROR`, `MEDIUM→WARNING`, `CRITICAL→CRITICAL`, `LOW→INFO`
+
+If the query returns `[]`:
+1. Check the agent is running: `kubectl logs -n kube-system -l app=ebpf-edr -f`
+2. Confirm startup line: `Cloud Logging enabled: project=ebpfagent`
+3. Run `./validate-gke.sh` to trigger alerts, then query again
+4. Always pass `--project=ebpfagent` — your Mac's active gcloud project may differ

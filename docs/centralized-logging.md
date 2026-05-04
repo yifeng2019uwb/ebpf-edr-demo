@@ -265,9 +265,9 @@ If unset, Cloud Logging is disabled and the agent falls back to file+stdout only
 
 ## Implementation Status
 
-- [ ] `internal/alert/alert.go` — add Cloud Logging dual write with drop policy
-- [ ] `k8s/ebpf-edr-ds.yaml` — add `GOOGLE_CLOUD_PROJECT` env var
-- [ ] `pkg/detector` or `internal/alert` — rate limiter and burst aggregation
-- [ ] `infra/` — Pulumi stack for bucket, sink, lifecycle, IAM, Workload Identity
-- [ ] Docker VM — verify service account has `roles/logging.logWriter`
-- [ ] GKE — configure Workload Identity for DaemonSet service account
+- [x] `internal/alert/alert.go` — Cloud Logging dual write with alertPayload struct
+- [x] `k8s/ebpf-edr-ds.yaml` — `GOOGLE_CLOUD_PROJECT`, `CLUSTER_NAME`, `REGION` env vars
+- [x] `infra/` — Pulumi stack: custom bucket (365d), sink, cross-project IAM bindings
+- [x] Docker VM — OpenClaw compute SA granted `logging.logWriter` on `ebpfagent` via Pulumi
+- [x] GKE — `order-processor-sa` granted `logging.logWriter` via Pulumi (`pulumi_registry.go`)
+- [ ] `pkg/detector` or `internal/alert` — rate limiter and burst aggregation (future)

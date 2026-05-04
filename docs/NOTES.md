@@ -96,11 +96,11 @@ kubectl logs -n kube-system -l app=ebpf-edr --tail=10    # confirm no crash
   - **Bug fixed**: `containerIDFromK8sCgroup` — GKE Ubuntu nodes use cgroup v2 systemd format (`cri-containerd-<id>.scope`); old code matched `/kubepods/` (cgroup v1 only); fixed to match `kubepods` and strip prefix/suffix
   - **Validated**: workload resolver populates `service=`, `pod=`, `namespace=` correctly (e.g. `service=operator pod=gmp-operator-599978c87f-x57lt namespace=gmp-system`)
 - [x] Phase 5 — GKE functional validation: all 5 tests pass (`./validate-gke.sh`)
-- [x] Phase 6 (partial) — Cloud Logging dual write: Docker VM validated, GKE Step 4–5 pending
+- [x] Phase 6 — Cloud Logging dual write: both Docker VM and GKE validated end-to-end
   - `internal/alert/alert.go` — `alertPayload` struct (schema_version, ts, cluster, …), Cloud Logging client init, async `Log()`, `Close()` flushes SDK buffer
   - `pkg/workload/identity.go` — `Cluster string` added to `WorkloadMeta`; propagated through both resolvers; `CLUSTER_NAME` env var
-  - Service account `ebpf-edr-agent@ebpfagent.iam.gserviceaccount.com` with `roles/logging.logWriter` on project `ebpfagent`
-  - Docker VM auth: `GOOGLE_APPLICATION_CREDENTIALS=/home/yifeng2019/ebpf-edr-key.json` (SA key — cross-project VM)
+  - `infra/` Pulumi stack — custom Cloud Logging bucket (365d), sink, cross-project IAM for OpenClaw VM compute SA
+  - Docker VM auth: OpenClaw compute SA granted `logging.logWriter` on `ebpfagent` via Pulumi — no key file needed
   - **Validated**: 5 alerts confirmed in Cloud Logging with correct severity, schema_version, ts, service, node fields
   - **V2**: CRITICAL `shell_spawn_container` — `kubectl exec bash` into user-service detected ✓
   - **V3**: HIGH `sensitive_file_access` — `cat /etc/shadow` from container detected ✓
@@ -528,10 +528,10 @@ If revisited: reuse `net_event` struct, add a `direction` flag (0=outbound, 1=in
 #### Running the agent with Cloud Logging enabled
 
 ```bash
-# sudo drops env vars — pass them explicitly, do NOT use export + sudo
-sudo GOOGLE_CLOUD_PROJECT=ebpfagent \
-  GOOGLE_APPLICATION_CREDENTIALS=/home/yifeng2019/ebpf-edr-key.json \
-  ./ebpf-edr-demo --runtime=docker
+# /etc/sudoers.d/ebpf-edr preserves GOOGLE_CLOUD_PROJECT through sudo
+# /etc/environment sets it on login — export needed for current session
+export GOOGLE_CLOUD_PROJECT=ebpfagent
+sudo ./ebpf-edr-demo --runtime=docker
 ```
 
 Startup log confirms Cloud Logging state:
@@ -564,43 +564,70 @@ gcloud logging read 'logName="projects/ebpfagent/logs/ebpf-edr-alerts" AND jsonP
 #### Cross-project auth — Docker VM in different GCP project
 
 The Docker VM (`instance-20260318-023006`) lives in the OpenClaw project, not `ebpfagent`.
-The VM's default service account has no permission to write to `ebpfagent` Cloud Logging.
+The VM's default compute SA is granted `roles/logging.logWriter` on `ebpfagent` via the
+`infra/` Pulumi stack — no key file needed.
 
-**Fix**: create a dedicated SA in `ebpfagent`, download a key, use `GOOGLE_APPLICATION_CREDENTIALS`.
-
+To add a new monitored project, find its compute SA and add an IAM binding in `infra/main.go`:
 ```bash
-# One-time setup (already done — SA exists)
-gcloud iam service-accounts create ebpf-edr-agent \
-  --project=ebpfagent --display-name="eBPF EDR Agent"
-
-gcloud projects add-iam-policy-binding ebpfagent \
-  --member="serviceAccount:ebpf-edr-agent@ebpfagent.iam.gserviceaccount.com" \
-  --role="roles/logging.logWriter"
-
-# Create key on VM directly (avoids SCP)
-gcloud auth login   # authenticate as yifeng2019@gmail.com on the VM
-gcloud iam service-accounts keys create ~/ebpf-edr-key.json \
-  --iam-account=ebpf-edr-agent@ebpfagent.iam.gserviceaccount.com \
-  --project=ebpfagent
+gcloud iam service-accounts list --project=<project-id>
 ```
 
-**Security**: never paste or share the key file contents in any chat or log.
-Add `ebpf-edr-key.json` to `.gitignore`.
+One-time VM setup (already done on `instance-20260318-023006`):
+```bash
+echo "GOOGLE_CLOUD_PROJECT=ebpfagent" | sudo tee -a /etc/environment
+echo 'Defaults env_keep += "GOOGLE_CLOUD_PROJECT"' | sudo tee /etc/sudoers.d/ebpf-edr
+```
 
-#### GKE auth (Step 4, not yet done)
+#### GKE auth (Step 4 — complete)
 
-GKE uses Workload Identity — no key file needed. The DaemonSet service account
-is bound to `ebpf-edr-agent@ebpfagent.iam.gserviceaccount.com` via IAM annotation.
-`GOOGLE_CLOUD_PROJECT` is injected as an env var in `k8s/ebpf-edr-ds.yaml`.
+GKE uses Workload Identity — no key file needed. `order-processor-sa` has
+`roles/logging.logWriter` granted via Pulumi (`pulumi_registry.go`).
+`GOOGLE_CLOUD_PROJECT`, `CLUSTER_NAME`, and `REGION` are all injected as env vars
+in `k8s/ebpf-edr-ds.yaml` and substituted by `deploy.sh daemonset` from Pulumi state.
 
-#### Payload fields — expected empty values on Docker VM
+#### Verifying GKE alerts in Cloud Logging
+
+```bash
+# All GKE alerts (runtime=k8s)
+gcloud logging read \
+  'logName="projects/ebpfagent/logs/ebpf-edr-alerts" AND jsonPayload.runtime="k8s"' \
+  --project=ebpfagent --limit=5 --format=json
+
+# Filter by severity (maps from alert level — see table below)
+gcloud logging read \
+  'logName="projects/ebpfagent/logs/ebpf-edr-alerts" AND severity=ERROR' \
+  --project=ebpfagent --limit=10 --format=json
+```
+
+#### Cloud Logging severity mapping
+
+Cloud Logging has no "HIGH"/"MEDIUM" severity — we map our levels to its enum:
+
+| Alert level | Cloud Logging `severity` field | Why |
+|---|---|---|
+| CRITICAL | CRITICAL | 1:1 match |
+| HIGH     | ERROR    | closest equivalent — triggers alerting policies |
+| MEDIUM   | WARNING  | advisory — worth investigating |
+| LOW      | INFO     | informational only |
+
+The actual alert level is always in `jsonPayload.level` ("HIGH", "CRITICAL", etc.).
+The `severity` field is what Cloud Logging uses for filtering and alerting policies.
+
+#### `uid` field
+
+`uid` is the Linux UID of the process that triggered the alert.
+`uid=0` means root ran the process inside the container — a higher-risk signal.
+Useful filter: `jsonPayload.uid=0` to find alerts where root-owned processes behaved anomalously.
+
+#### Payload fields — expected values by runtime
 
 | Field | Docker VM | GKE |
 |---|---|---|
-| `cluster` | `""` — `CLUSTER_NAME` not set | populated from env var |
+| `cluster` | `""` — no cluster | GKE cluster name from `CLUSTER_NAME` env var |
 | `namespace` | `""` — Docker has no namespaces | populated by K8sResolver |
-| `region` | `""` — `REGION` not set on VM | populated from env var |
+| `region` | `""` — `REGION` not set on Docker VM | GKE region from `REGION` env var |
 | `node` | VM hostname | GKE node name |
+| `uid` | UID of triggering process | UID of triggering process |
 
 ---
 

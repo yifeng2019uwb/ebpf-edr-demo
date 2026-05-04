@@ -1,0 +1,3 @@
+name: ebpf-edr-infra
+runtime: go
+description: Cloud Logging retention infrastructure for eBPF EDR agent

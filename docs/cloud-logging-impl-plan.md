@@ -143,5 +143,5 @@ Steps 3, 4, 5 must be sequential.
 - [x] Step 1 — Add `Cluster` to WorkloadMeta
 - [x] Step 2 — Add `cloud.google.com/go/logging` dependency
 - [x] Step 3 — Cloud Logging dual write in `alert.go`
-- [ ] Step 4 — DaemonSet YAML + GKE deploy
-- [ ] Step 5 — Pulumi infra stack
+- [x] Step 4 — DaemonSet YAML + GKE deploy
+- [x] Step 5 — Pulumi infra stack
