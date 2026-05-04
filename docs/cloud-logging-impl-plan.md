@@ -50,7 +50,7 @@ Test in 3 layers:
 
 **Layer A — unit test (Mac, no GCP needed):**
 ```bash
-go test ./internal/...
+make test
 ```
 Tests to cover:
 - `GOOGLE_CLOUD_PROJECT` unset → Handler initializes file-only, no panic
@@ -140,8 +140,8 @@ Steps 3, 4, 5 must be sequential.
 
 ## Status
 
-- [ ] Step 1 — Add `Cluster` to WorkloadMeta
-- [ ] Step 2 — Add `cloud.google.com/go/logging` dependency
-- [ ] Step 3 — Cloud Logging dual write in `alert.go`
+- [x] Step 1 — Add `Cluster` to WorkloadMeta
+- [x] Step 2 — Add `cloud.google.com/go/logging` dependency
+- [x] Step 3 — Cloud Logging dual write in `alert.go`
 - [ ] Step 4 — DaemonSet YAML + GKE deploy
 - [ ] Step 5 — Pulumi infra stack

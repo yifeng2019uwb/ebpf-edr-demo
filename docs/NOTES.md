@@ -96,6 +96,12 @@ kubectl logs -n kube-system -l app=ebpf-edr --tail=10    # confirm no crash
   - **Bug fixed**: `containerIDFromK8sCgroup` — GKE Ubuntu nodes use cgroup v2 systemd format (`cri-containerd-<id>.scope`); old code matched `/kubepods/` (cgroup v1 only); fixed to match `kubepods` and strip prefix/suffix
   - **Validated**: workload resolver populates `service=`, `pod=`, `namespace=` correctly (e.g. `service=operator pod=gmp-operator-599978c87f-x57lt namespace=gmp-system`)
 - [x] Phase 5 — GKE functional validation: all 5 tests pass (`./validate-gke.sh`)
+- [x] Phase 6 (partial) — Cloud Logging dual write: Docker VM validated, GKE Step 4–5 pending
+  - `internal/alert/alert.go` — `alertPayload` struct (schema_version, ts, cluster, …), Cloud Logging client init, async `Log()`, `Close()` flushes SDK buffer
+  - `pkg/workload/identity.go` — `Cluster string` added to `WorkloadMeta`; propagated through both resolvers; `CLUSTER_NAME` env var
+  - Service account `ebpf-edr-agent@ebpfagent.iam.gserviceaccount.com` with `roles/logging.logWriter` on project `ebpfagent`
+  - Docker VM auth: `GOOGLE_APPLICATION_CREDENTIALS=/home/yifeng2019/ebpf-edr-key.json` (SA key — cross-project VM)
+  - **Validated**: 5 alerts confirmed in Cloud Logging with correct severity, schema_version, ts, service, node fields
   - **V2**: CRITICAL `shell_spawn_container` — `kubectl exec bash` into user-service detected ✓
   - **V3**: HIGH `sensitive_file_access` — `cat /etc/shadow` from container detected ✓
   - **V4**: HIGH `unauthorized_external_connect` — python3 connect to `8.8.8.8:80` detected ✓
@@ -514,6 +520,87 @@ Reasons:
    another policy list to maintain. Better fit for a dedicated network security tool.
 
 If revisited: reuse `net_event` struct, add a `direction` flag (0=outbound, 1=inbound).
+
+---
+
+### Phase 6 — Cloud Logging setup and testing
+
+#### Running the agent with Cloud Logging enabled
+
+```bash
+# sudo drops env vars — pass them explicitly, do NOT use export + sudo
+sudo GOOGLE_CLOUD_PROJECT=ebpfagent \
+  GOOGLE_APPLICATION_CREDENTIALS=/home/yifeng2019/ebpf-edr-key.json \
+  ./ebpf-edr-demo --runtime=docker
+```
+
+Startup log confirms Cloud Logging state:
+```
+Cloud Logging enabled: project=ebpfagent      ← working
+Cloud Logging disabled — GOOGLE_CLOUD_PROJECT not set  ← env var not passed through sudo
+```
+
+#### Querying alerts from your Mac
+
+Always specify `--project` — your Mac's active gcloud project may differ from `ebpfagent`:
+
+```bash
+gcloud logging read 'logName="projects/ebpfagent/logs/ebpf-edr-alerts"' \
+  --project=ebpfagent --limit=10 --format=json
+```
+
+Filter by severity:
+```bash
+gcloud logging read 'logName="projects/ebpfagent/logs/ebpf-edr-alerts" AND severity=CRITICAL' \
+  --project=ebpfagent --limit=10 --format=json
+```
+
+Filter by service:
+```bash
+gcloud logging read 'logName="projects/ebpfagent/logs/ebpf-edr-alerts" AND jsonPayload.service="auth-service"' \
+  --project=ebpfagent --limit=10 --format=json
+```
+
+#### Cross-project auth — Docker VM in different GCP project
+
+The Docker VM (`instance-20260318-023006`) lives in the OpenClaw project, not `ebpfagent`.
+The VM's default service account has no permission to write to `ebpfagent` Cloud Logging.
+
+**Fix**: create a dedicated SA in `ebpfagent`, download a key, use `GOOGLE_APPLICATION_CREDENTIALS`.
+
+```bash
+# One-time setup (already done — SA exists)
+gcloud iam service-accounts create ebpf-edr-agent \
+  --project=ebpfagent --display-name="eBPF EDR Agent"
+
+gcloud projects add-iam-policy-binding ebpfagent \
+  --member="serviceAccount:ebpf-edr-agent@ebpfagent.iam.gserviceaccount.com" \
+  --role="roles/logging.logWriter"
+
+# Create key on VM directly (avoids SCP)
+gcloud auth login   # authenticate as yifeng2019@gmail.com on the VM
+gcloud iam service-accounts keys create ~/ebpf-edr-key.json \
+  --iam-account=ebpf-edr-agent@ebpfagent.iam.gserviceaccount.com \
+  --project=ebpfagent
+```
+
+**Security**: never paste or share the key file contents in any chat or log.
+Add `ebpf-edr-key.json` to `.gitignore`.
+
+#### GKE auth (Step 4, not yet done)
+
+GKE uses Workload Identity — no key file needed. The DaemonSet service account
+is bound to `ebpf-edr-agent@ebpfagent.iam.gserviceaccount.com` via IAM annotation.
+`GOOGLE_CLOUD_PROJECT` is injected as an env var in `k8s/ebpf-edr-ds.yaml`.
+
+#### Payload fields — expected empty values on Docker VM
+
+| Field | Docker VM | GKE |
+|---|---|---|
+| `cluster` | `""` — `CLUSTER_NAME` not set | populated from env var |
+| `namespace` | `""` — Docker has no namespaces | populated by K8sResolver |
+| `region` | `""` — `REGION` not set on VM | populated from env var |
+| `node` | VM hostname | GKE node name |
 
 ---
 
