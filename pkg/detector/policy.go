@@ -67,6 +67,7 @@ var fileCommWhitelist = []string{
 	"systemd-logind",   // session manager reads /etc/passwd, /proc/1/ during login events — runs in private mount ns
 	"bash",             // getpwuid() at startup reads /etc/passwd for prompt/PS1 — shell_spawn CRITICAL already fires
 	"containerd-shim",  // K8s container shim — manages container stdio and lifecycle files under /run/containerd/
+	"dockerd",          // Docker daemon reads overlay2 on every docker exec / container lifecycle event
 }
 
 // containerFSPrefixes — host filesystem paths that hold container layer data.
