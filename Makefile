@@ -2,7 +2,7 @@ BINARY         := ebpf-edr-demo
 DOCKER_REGISTRY := us-west1-docker.pkg.dev/ebpfagent/ebpf-edr
 DOCKER_IMAGE    := $(DOCKER_REGISTRY)/ebpf-edr:latest
 
-.PHONY: generate build rebuild test vet clean docker-build docker-push
+.PHONY: generate build rebuild test vet clean docker-build docker-push run-docker run-alert-router
 
 ## generate — compile .bpf.c → .o and regenerate Go wrappers in pkg/bpf/
 ## Requires: clang, llvm, libbpf-dev (run on GCP VM, not Mac)
@@ -38,3 +38,11 @@ docker-build: build
 docker-push: build
 	docker buildx build --platform linux/amd64 --no-cache --push \
 		-t $(DOCKER_IMAGE) .
+
+## run-docker — run the EDR agent on the Docker VM (sets GOOGLE_CLOUD_PROJECT, must run as root)
+run-docker:
+	sudo env GOOGLE_CLOUD_PROJECT=ebpfagent ./$(BINARY) --runtime=docker
+
+## run-alert-router — run the Alert Router locally (open http://localhost:8080)
+run-alert-router:
+	go run ./cmd/alert-router/

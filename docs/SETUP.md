@@ -134,6 +134,70 @@ export GOOGLE_CLOUD_PROJECT=ebpfagent
 sudo ./ebpf-edr-demo --runtime=docker
 ```
 
+## Running the Full System (end-to-end)
+
+### 1 — Build the binary (laptop or VM)
+
+```bash
+# cross-compiles to linux/amd64 from any host
+make build
+```
+
+If building on your laptop, copy the binary to the Docker VM:
+
+```bash
+scp ebpf-edr-demo yifeng2019@<VM_IP>:~/workspace/ebpf-edr-demo/
+```
+
+### 2 — Run the EDR agent on the Docker VM (requires root)
+
+```bash
+make run-docker
+# equivalent: sudo env GOOGLE_CLOUD_PROJECT=ebpfagent ./ebpf-edr-demo --runtime=docker
+```
+
+Confirm startup output:
+```
+Cloud Logging enabled: project=ebpfagent
+Pub/Sub publisher enabled: topic=edr-alerts
+```
+
+### 3 — Run the Alert Router on your laptop
+
+In a new terminal on your laptop:
+
+```bash
+make run-alert-router
+# equivalent: go run ./cmd/alert-router/
+```
+
+Open the monitoring UI: **http://localhost:8080**
+
+The page loads the last 100 alerts from Cloud Logging, then streams new alerts live via WebSocket.
+
+### 4 — Run validation tests on the Docker VM
+
+In a new terminal on the VM:
+
+```bash
+sudo ./validate.sh
+```
+
+Expected alerts in the UI (in arrival order):
+
+| Test | Level    | Rule                       |
+|------|----------|----------------------------|
+| T1   | CRITICAL | shell_spawn_container      |
+| T2   | HIGH     | network_tool_container     |
+| T3   | HIGH     | sensitive_file_access      |
+| T4   | CRITICAL | sensitive_file_access      |
+| T5   | HIGH     | unauthorized_external_connect |
+| T6   | (no alert — inventory-service is allowlisted) |
+| T7   | CRITICAL | host_reads_container_fs    |
+| T8   | MEDIUM   | sensitive_file_access      |
+
+---
+
 ## Verifying Cloud Logging
 
 After deploying to GKE (`./deploy.sh daemonset`), confirm alerts are flowing:
