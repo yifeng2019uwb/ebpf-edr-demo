@@ -166,8 +166,8 @@ Resources needed:
 
 ## Implementation Status
 
-- [ ] Agent — add Pub/Sub async publish to alert path (alongside Cloud Logging write)
-- [ ] Pub/Sub topic + subscription + IAM (Pulumi, extend existing `infra/` stack)
-- [ ] Alert Router service — subscribe, deserialize, fan out via `AlertOutput` interface
-- [ ] WebSocket hub — manage browser client connections, broadcast alerts
-- [ ] Browser UI — WebSocket client, live alert feed display
+- [x] Agent — add Pub/Sub async publish to alert path (alongside Cloud Logging write)
+- [x] Pub/Sub topic + subscription + IAM (Pulumi, extend existing `infra/` stack)
+- [x] Alert Router service — subscribe, deserialize, fan out via `AlertOutput` interface
+- [x] WebSocket hub — manage browser client connections, broadcast alerts
+- [x] Browser UI — WebSocket client, live alert feed display

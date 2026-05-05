@@ -113,8 +113,9 @@ func checkProcessRules(event processor.ProcessEvent, res workload.ResolveResult)
 	}
 
 	if res.State == workload.StateUnknown {
+		base := filepath.Base(comm)
 		for _, w := range unknownNsCommsWhitelist {
-			if comm == w {
+			if base == w {
 				return nil
 			}
 		}

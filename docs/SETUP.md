@@ -99,20 +99,7 @@ Run manually (Linux only):
 make generate   # runs: go generate ./pkg/bpf/
 ```
 
-## Running Locally (Docker VM)
-
-```bash
-# build binary (cross-compiles linux/amd64 from macOS or Linux)
-make build
-
-# run on GCP VM (requires root for eBPF)
-# GOOGLE_CLOUD_PROJECT must be exported before sudo — sudo drops env vars unless
-# /etc/sudoers.d/ebpf-edr has: Defaults env_keep += "GOOGLE_CLOUD_PROJECT"
-export GOOGLE_CLOUD_PROJECT=ebpfagent
-sudo ./ebpf-edr-demo --runtime=docker
-```
-
-### One-time VM setup (cross-project Cloud Logging + Pub/Sub auth)
+## One-time VM setup
 
 The Docker VM is in a different GCP project than `ebpfagent`. Run once after first SSH:
 
@@ -123,78 +110,68 @@ echo "GOOGLE_CLOUD_PROJECT=ebpfagent" | sudo tee -a /etc/environment
 # allow sudo to preserve GOOGLE_CLOUD_PROJECT
 echo 'Defaults env_keep += "GOOGLE_CLOUD_PROJECT"' | sudo tee /etc/sudoers.d/ebpf-edr
 
-# grant Pub/Sub scope — VM default OAuth scopes don't include pubsub
+# grant ADC credentials — VM default OAuth scopes don't include pubsub or cross-project logging
 # --no-launch-browser is required (VM is headless)
-gcloud auth application-default login --no-launch-browser
+sudo gcloud auth application-default login --no-launch-browser
+sudo gcloud auth application-default set-quota-project ebpfagent
 ```
 
-After this, new SSH sessions only need:
-```bash
-export GOOGLE_CLOUD_PROJECT=ebpfagent
-sudo ./ebpf-edr-demo --runtime=docker
-```
+## Running the Full System
 
-## Running the Full System (end-to-end)
+### On the Docker VM
 
-### 1 — Build the binary (laptop or VM)
+**Terminal 1 — EDR agent:**
 
 ```bash
-# cross-compiles to linux/amd64 from any host
-make build
+make build && make run-docker
 ```
 
-If building on your laptop, copy the binary to the Docker VM:
-
-```bash
-scp ebpf-edr-demo yifeng2019@<VM_IP>:~/workspace/ebpf-edr-demo/
-```
-
-### 2 — Run the EDR agent on the Docker VM (requires root)
-
-```bash
-make run-docker
-# equivalent: sudo env GOOGLE_CLOUD_PROJECT=ebpfagent ./ebpf-edr-demo --runtime=docker
-```
-
-Confirm startup output:
+Confirm startup:
 ```
 Cloud Logging enabled: project=ebpfagent
-Pub/Sub publisher enabled: topic=edr-alerts
+Pub/Sub enabled: topic=edr-alerts
 ```
 
-### 3 — Run the Alert Router on your laptop
-
-In a new terminal on your laptop:
-
-```bash
-make run-alert-router
-# equivalent: go run ./cmd/alert-router/
-```
-
-Open the monitoring UI: **http://localhost:8080**
-
-The page loads the last 100 alerts from Cloud Logging, then streams new alerts live via WebSocket.
-
-### 4 — Run validation tests on the Docker VM
-
-In a new terminal on the VM:
+**Terminal 2 — Docker validation:**
 
 ```bash
 sudo ./validate.sh
 ```
 
-Expected alerts in the UI (in arrival order):
+**Terminal 3 — Integration tests (optional, simulates normal traffic):**
 
-| Test | Level    | Rule                       |
-|------|----------|----------------------------|
-| T1   | CRITICAL | shell_spawn_container      |
-| T2   | HIGH     | network_tool_container     |
-| T3   | HIGH     | sensitive_file_access      |
-| T4   | CRITICAL | sensitive_file_access      |
-| T5   | HIGH     | unauthorized_external_connect |
-| T6   | (no alert — inventory-service is allowlisted) |
-| T7   | CRITICAL | host_reads_container_fs    |
-| T8   | MEDIUM   | sensitive_file_access      |
+```bash
+bash /home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/run_all_tests.sh all
+```
+
+### On your laptop
+
+**Terminal 1 — Alert Router:**
+
+```bash
+make run-alert-router
+```
+
+Open **http://localhost:8888** — alerts from both Docker VM and GKE stream in real-time.
+
+**Terminal 2 — GKE validation:**
+
+```bash
+./validate-gke.sh   # from cloud-native-order-processor/gcp_gke/
+```
+
+### Expected alerts in the UI after Docker validation (T1–T8)
+
+| Test | Level    | Rule                            | Details               |
+|------|----------|---------------------------------|-----------------------|
+| T1   | CRITICAL | `shell_spawn_container`         | comm=bash             |
+| T2   | HIGH     | `network_tool_container`        | comm=nc or wget       |
+| T3   | HIGH     | `sensitive_file_access`         | /etc/shadow           |
+| T4   | CRITICAL | `sensitive_file_access`         | /root/.ssh/id_rsa     |
+| T5   | HIGH     | `unauthorized_external_connect` | 8.8.8.8:80            |
+| T6   | (no alert — inventory-service external connects are allowlisted) | |
+| T7   | CRITICAL | `host_reads_container_fs`       | service=host          |
+| T8   | MEDIUM   | `sensitive_file_access`         | /etc/passwd           |
 
 ---
 

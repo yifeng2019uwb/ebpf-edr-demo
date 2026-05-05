@@ -30,13 +30,16 @@ var whitelistComm = []string{
 // unknownNsCommsWhitelist — node-level GKE infrastructure processes that run outside
 // any pod namespace. These trip unknown_namespace_process but are not threats.
 var unknownNsCommsWhitelist = []string{
-	"iptables",         // kube-proxy network rules
-	"iptables-legacy",  // older iptables variant on some nodes
-	"iptables-restore", // bulk iptables rule restore
-	"ip6tables",        // IPv6 iptables
-	"conntrack",        // connection tracking tool
-	"ip",               // iproute2 — route/addr management
-	"kube-proxy",       // Kubernetes network proxy
+	"iptables",                  // kube-proxy network rules
+	"iptables-legacy",           // older iptables variant on some nodes
+	"iptables-restore",          // bulk iptables rule restore
+	"ip6tables",                 // IPv6 iptables
+	"conntrack",                 // connection tracking tool
+	"ip",                        // iproute2 — route/addr management
+	"kube-proxy",                // Kubernetes network proxy
+	"pause",                     // GKE pod sandbox container
+	"systemd-sysctl",            // node sysctl configuration
+	"bridge-network-interface",  // udev network bridge setup
 }
 
 // shellBinaries — binary path suffixes that indicate an interactive shell.

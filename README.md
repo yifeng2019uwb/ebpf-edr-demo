@@ -28,7 +28,9 @@ Detector
                            │
 AlertHandler
   ├── stdout + local file      (always-on)
-  └── Google Cloud Logging     (structured JSON, centralized, 365-day retention)
+  ├── Google Cloud Logging     (structured JSON, centralized, 365-day retention)
+  └── Pub/Sub edr-alerts       (real-time stream, <1s latency)
+       └── Alert Router → WebSocket → browser dashboard
 ```
 
 Two runtimes supported from a single binary:
@@ -74,17 +76,18 @@ Every alert carries workload context resolved from mount namespace IDs at event 
 
 Attack simulations run against live deployments. All rules verified end-to-end: kernel capture → workload enrichment → alert → Cloud Logging.
 
-### Docker VM — 6/7 pass
+### Docker VM — 8/8 pass
 
-| Test                         | Rule                            | Result |
-|------------------------------|---------------------------------|--------|
-| `docker exec bash`           | `shell_spawn_container`         | PASS   |
-| read `/etc/shadow`           | `sensitive_file_access` (HIGH)  | PASS   |
-| read `/etc/passwd`           | `sensitive_file_access` (MED)   | PASS   |
-| run `nc` in container        | `network_tool_container`        | PASS   |
-| connect to external IP       | `unauthorized_external_connect` | PASS   |
-| read SSH key in container    | `sensitive_file_access` (CRIT)  | PASS   |
-| `unknown_namespace_process`  | —                               | N/A (host-only; expected no alert in container context) |
+| Test                              | Rule                            | Result |
+|-----------------------------------|---------------------------------|--------|
+| shell spawn in container          | `shell_spawn_container`         | PASS   |
+| network tool in container         | `network_tool_container`        | PASS   |
+| read `/etc/shadow`                | `sensitive_file_access` (HIGH)  | PASS   |
+| read SSH private key              | `sensitive_file_access` (CRIT)  | PASS   |
+| unauthorized external connect     | `unauthorized_external_connect` | PASS   |
+| authorized external connect       | (no alert — service allowlisted)| PASS   |
+| host reads container filesystem   | `host_reads_container_fs`       | PASS   |
+| read `/etc/passwd`                | `sensitive_file_access` (MED)   | PASS   |
 
 ### GKE DaemonSet — 5/5 pass
 
@@ -102,7 +105,17 @@ All GKE alerts carry full workload identity: `service`, `pod`, `namespace`, `clu
 
 ## Centralized Alerting
 
-All alerts write to Google Cloud Logging as structured JSON in real time:
+Three output paths run simultaneously from every agent node:
+
+```
+Agent
+  ├── stdout + local file      — always-on, no external dependency
+  ├── Cloud Logging            — compliance, forensics, 365-day retention
+  └── Pub/Sub edr-alerts       — real-time stream to Alert Router
+       └── WebSocket → browser dashboard (<1s latency)
+```
+
+Structured alert payload written to Cloud Logging:
 
 ```json
 {
@@ -120,9 +133,10 @@ All alerts write to Google Cloud Logging as structured JSON in real time:
 }
 ```
 
-- Dual write: local file + Cloud Logging SDK (no log loss if network unavailable)
+- Dual write: local file + Cloud Logging (no log loss if network unavailable)
 - Cross-project: Docker VM and GKE agents both write to centralized `ebpfagent` project
 - 365-day retention — infrastructure managed as code via Pulumi (`infra/`)
+- Real-time UI: Alert Router (`cmd/alert-router/`) subscribes via Pub/Sub, broadcasts via WebSocket
 
 ---
 
@@ -135,13 +149,19 @@ All alerts write to Google Cloud Logging as structured JSON in real time:
 
 **Docker VM:**
 ```bash
-export GOOGLE_CLOUD_PROJECT=ebpfagent
-sudo ./ebpf-edr-demo --runtime=docker
+make run-docker      # sudo env GOOGLE_CLOUD_PROJECT=ebpfagent ./ebpf-edr-demo --runtime=docker
+```
+
+**Alert Router (VM, port 8888):**
+```bash
+make run-alert-router
+# SSH tunnel from laptop: ssh -L 8888:localhost:8888 <user>@<VM_IP>
+# Open: http://localhost:8888
 ```
 
 **Validation:**
 ```bash
-./validate.sh        # Docker VM attack simulation
+sudo ./validate.sh   # Docker VM — 8 attack tests
 ./validate-gke.sh    # GKE attack simulation
 ```
 
@@ -150,13 +170,14 @@ sudo ./ebpf-edr-demo --runtime=docker
 ## Project Structure
 
 ```
-cmd/edr-monitor/    — main entry point, pipeline wiring
+cmd/edr-monitor/    — EDR agent: main entry point, pipeline wiring
+cmd/alert-router/   — Alert Router: Pub/Sub subscriber, WebSocket hub, browser UI
 kernel/             — eBPF C programs (execsnoop, opensnoop, lsm-connect)
 pkg/bpf/            — generated BPF loaders (bpf2go output, committed)
 pkg/workload/       — WorkloadResolver: DockerResolver + K8sResolver
 pkg/detector/       — detection rules and policy (allowlists, whitelists)
-internal/alert/     — AlertHandler: local file + Cloud Logging SDK
-infra/              — Pulumi stack: Cloud Logging bucket, log sink, IAM
+internal/alert/     — AlertHandler: local file + Cloud Logging + Pub/Sub publish
+infra/              — Pulumi stack: Cloud Logging bucket, Pub/Sub topic/sub, IAM
 k8s/                — GKE DaemonSet manifest
 ```
 

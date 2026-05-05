@@ -13,7 +13,7 @@ import (
 const (
 	projectID  = "ebpfagent"
 	subID      = "edr-alerts-router-sub"
-	listenAddr = ":8080"
+	listenAddr = ":8888"
 )
 
 const historySize = 100
@@ -55,17 +55,12 @@ func (h *hub) remove(conn *websocket.Conn) {
 
 func (h *hub) broadcast(data []byte) {
 	h.mu.Lock()
+	defer h.mu.Unlock()
 	if len(h.history) >= historySize {
 		h.history = h.history[1:]
 	}
 	h.history = append(h.history, data)
-	clients := make([]*websocket.Conn, 0, len(h.clients))
 	for conn := range h.clients {
-		clients = append(clients, conn)
-	}
-	h.mu.Unlock()
-
-	for _, conn := range clients {
 		if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
 			log.Printf("broadcast write error: %v", err)
 		}

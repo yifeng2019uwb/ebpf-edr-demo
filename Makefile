@@ -43,6 +43,6 @@ docker-push: build
 run-docker:
 	sudo env GOOGLE_CLOUD_PROJECT=ebpfagent ./$(BINARY) --runtime=docker
 
-## run-alert-router — run the Alert Router locally (open http://localhost:8080)
+## run-alert-router — run the Alert Router on laptop (open http://localhost:8888)
 run-alert-router:
 	go run ./cmd/alert-router/
