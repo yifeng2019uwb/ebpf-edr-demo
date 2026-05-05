@@ -80,6 +80,10 @@ Agent (GKE DaemonSet / Docker VM)
 - If Pub/Sub publish fails: log and continue — Cloud Logging is the source of truth for retention
 - No retry on Pub/Sub publish failure: real-time path is best-effort; compliance path is durable
 
+### Alert display ordering
+
+Alerts in the browser UI appear in **Pub/Sub delivery order** (arrival order at the Alert Router), not by event timestamp (`ts`). Pub/Sub does not guarantee ordering across messages, so the `ts` field on an alert may differ slightly from its position in the table. For chronologically ordered investigation, query Cloud Logging directly — it stores alerts with the exact `ts` set by the agent at detection time.
+
 ---
 
 ## Alert Router — falcosidekick Pattern

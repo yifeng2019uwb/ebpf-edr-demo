@@ -112,7 +112,7 @@ export GOOGLE_CLOUD_PROJECT=ebpfagent
 sudo ./ebpf-edr-demo --runtime=docker
 ```
 
-### One-time VM setup (cross-project Cloud Logging auth)
+### One-time VM setup (cross-project Cloud Logging + Pub/Sub auth)
 
 The Docker VM is in a different GCP project than `ebpfagent`. Run once after first SSH:
 
@@ -122,6 +122,10 @@ echo "GOOGLE_CLOUD_PROJECT=ebpfagent" | sudo tee -a /etc/environment
 
 # allow sudo to preserve GOOGLE_CLOUD_PROJECT
 echo 'Defaults env_keep += "GOOGLE_CLOUD_PROJECT"' | sudo tee /etc/sudoers.d/ebpf-edr
+
+# grant Pub/Sub scope — VM default OAuth scopes don't include pubsub
+# --no-launch-browser is required (VM is headless)
+gcloud auth application-default login --no-launch-browser
 ```
 
 After this, new SSH sessions only need:

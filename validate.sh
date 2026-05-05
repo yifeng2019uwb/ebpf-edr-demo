@@ -51,7 +51,7 @@ if ! pgrep -x ebpf-edr-demo > /dev/null 2>&1; then
 fi
 
 echo ""
-echo "EDR Validation — 7 attack tests + concurrent integration traffic"
+echo "EDR Validation — 8 attack tests + concurrent integration traffic"
 echo "Log: tail -f ${LOG}"
 
 # ── Start integration tests in background ────────────────────────────────────
@@ -78,14 +78,14 @@ sleep 3
 
 # ── T1: Shell spawn in container ─────────────────────────────────────────────
 
-header 1 7 "Shell spawn in container" "CRITICAL shell_spawn_container"
+header 1 8 "Shell spawn in container" "CRITICAL shell_spawn_container"
 docker exec "${TARGET}" bash -c "id" 2>/dev/null || true
 pass
 sleep 3
 
 # ── T2: Network recon tool in container ──────────────────────────────────────
 
-header 2 7 "Network tool in container" "HIGH network_tool_container"
+header 2 8 "Network tool in container" "HIGH network_tool_container"
 # Try nc first (netcat-openbsd ships in many Debian-based images).
 # Fall back to wget if nc is absent (requires apt-get install, which may fail
 # due to missing /var/lib/apt/lists/partial perms in hardened containers).
@@ -106,14 +106,14 @@ sleep 3
 
 # ── T3: Read /etc/shadow ──────────────────────────────────────────────────────
 
-header 3 7 "Read /etc/shadow from container" "HIGH sensitive_file_access"
+header 3 8 "Read /etc/shadow from container" "HIGH sensitive_file_access"
 docker exec "${TARGET}" cat /etc/shadow 2>/dev/null || true
 pass
 sleep 3
 
 # ── T4: Read SSH private key ──────────────────────────────────────────────────
 
-header 4 7 "Read SSH private key from container" "CRITICAL sensitive_file_access"
+header 4 8 "Read SSH private key from container" "CRITICAL sensitive_file_access"
 
 # Create a test key so the file exists to be read
 # Note: bash spawn here also triggers CRITICAL shell_spawn_container — expected
@@ -128,7 +128,7 @@ sleep 3
 
 # ── T5: Unauthorized external network connect ─────────────────────────────────
 
-header 5 7 "Unauthorized external connect from container" "HIGH unauthorized_external_connect"
+header 5 8 "Unauthorized external connect from container" "HIGH unauthorized_external_connect"
 docker exec "${TARGET}" python3 -c "
 import socket
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -143,7 +143,7 @@ sleep 3
 
 # ── T6: Authorized external connect (inventory_service audit log) ─────────────
 
-header 6 7 "Authorized external connect — inventory_service" "LOW external_connect_allowed"
+header 6 8 "Authorized external connect — inventory_service" "LOW external_connect_allowed"
 echo "  Triggering inventory_service to call CoinGecko..."
 echo "  Run manually in another terminal if needed:"
 echo "    curl http://localhost:8080/api/v1/assets"
@@ -163,7 +163,7 @@ sleep 3
 
 # ── T7: Host reads container filesystem ──────────────────────────────────────
 
-header 7 7 "Host process reads container filesystem" "CRITICAL host_reads_container_fs"
+header 7 8 "Host process reads container filesystem" "CRITICAL host_reads_container_fs"
 
 MERGED=$(docker inspect "${TARGET}" \
     --format '{{.GraphDriver.Data.MergedDir}}' 2>/dev/null || echo "")
@@ -175,6 +175,15 @@ else
     cat "${MERGED}/etc/hostname" 2>/dev/null || true
     pass
 fi
+sleep 3
+
+# ── T8: System file recon (MEDIUM) ───────────────────────────────────────────
+# Reads /etc/passwd directly via `cat` — comm is "cat", not in fileCommWhitelist.
+# bash is whitelisted (reads /etc/passwd for prompt); cat is not.
+
+header 8 8 "Read /etc/passwd from container (system recon)" "MEDIUM sensitive_file_access"
+docker exec "${TARGET}" cat /etc/passwd 2>/dev/null || true
+pass
 sleep 3
 
 # ── summary ───────────────────────────────────────────────────────────────────
@@ -207,12 +216,13 @@ echo "    level=CRITICAL rule=shell_spawn_container runtime=docker service=auth-
 echo ""
 echo "  Expected attack alerts:"
 echo "    T1  CRITICAL shell_spawn_container        service=auth-service"
-echo "    T2  HIGH     network_tool_container        service=auth-service"
+echo "    T2  HIGH     network_tool_container        service=auth-service  (nc/wget must be installed)"
 echo "    T3  HIGH     sensitive_file_access         filename=/etc/shadow"
 echo "    T4  CRITICAL sensitive_file_access         filename=/root/.ssh/id_rsa"
 echo "    T5  HIGH     unauthorized_external_connect dst=8.8.8.8:80"
-echo "    T6  LOW      external_connect_allowed      service=inventory-service"
+echo "    T6  (no alert — inventory-service external connects are allowlisted)"
 echo "    T7  CRITICAL host_reads_container_fs       service=host"
+echo "    T8  MEDIUM   sensitive_file_access         filename=/etc/passwd"
 echo ""
 echo "  Normal service traffic (integration tests) should NOT"
 echo "  produce any CRITICAL or HIGH alerts."

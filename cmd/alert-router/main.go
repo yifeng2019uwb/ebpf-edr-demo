@@ -16,14 +16,28 @@ const (
 	listenAddr = ":8080"
 )
 
-// hub manages active WebSocket connections and broadcasts messages to all of them.
+const historySize = 100
+
+// hub manages active WebSocket connections and a ring buffer of recent alerts.
 type hub struct {
-	mu      sync.RWMutex
+	mu      sync.Mutex
 	clients map[*websocket.Conn]struct{}
+	history [][]byte
 }
 
 func newHub() *hub {
 	return &hub{clients: make(map[*websocket.Conn]struct{})}
+}
+
+// sendHistory replays stored alerts to a newly connected client.
+func (h *hub) sendHistory(conn *websocket.Conn) {
+	h.mu.Lock()
+	msgs := make([][]byte, len(h.history))
+	copy(msgs, h.history)
+	h.mu.Unlock()
+	for _, msg := range msgs {
+		conn.WriteMessage(websocket.TextMessage, msg) //nolint:errcheck
+	}
 }
 
 func (h *hub) add(conn *websocket.Conn) {
@@ -40,9 +54,18 @@ func (h *hub) remove(conn *websocket.Conn) {
 }
 
 func (h *hub) broadcast(data []byte) {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
+	h.mu.Lock()
+	if len(h.history) >= historySize {
+		h.history = h.history[1:]
+	}
+	h.history = append(h.history, data)
+	clients := make([]*websocket.Conn, 0, len(h.clients))
 	for conn := range h.clients {
+		clients = append(clients, conn)
+	}
+	h.mu.Unlock()
+
+	for _, conn := range clients {
 		if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
 			log.Printf("broadcast write error: %v", err)
 		}
@@ -85,6 +108,7 @@ func main() {
 			log.Printf("ws upgrade: %v", err)
 			return
 		}
+		h.sendHistory(conn)
 		h.add(conn)
 		defer h.remove(conn)
 		// Read loop — keeps connection alive; client sends no messages.
@@ -119,14 +143,12 @@ const indexHTML = `<!DOCTYPE html>
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th { text-align: left; padding: 8px 10px; background: #222; color: #888; border-bottom: 2px solid #333;
        font-weight: normal; letter-spacing: 0.05em; text-transform: uppercase; font-size: 11px; }
-  td { padding: 7px 10px; border-bottom: 1px solid #222; vertical-align: top; }
-  tr.CRITICAL td { background: #2a0a0a; }
-  tr.HIGH     td { background: #2a1500; }
-  tr.MEDIUM   td { background: #1e1e00; }
+  td { padding: 7px 10px; border-bottom: 1px solid #222; vertical-align: top; white-space: nowrap; }
+  td.detail { white-space: normal; }
   .badge { display: inline-block; padding: 1px 7px; border-radius: 3px; font-size: 11px; font-weight: bold; letter-spacing: 0.05em; }
-  .badge.CRITICAL { background: #c0392b; color: #fff; }
-  .badge.HIGH     { background: #d35400; color: #fff; }
-  .badge.MEDIUM   { background: #b8860b; color: #fff; }
+  .badge.CRITICAL { background: #FF2C2C; color: #fff; }
+  .badge.HIGH     { background: #FF7400; color: #fff; }
+  .badge.MEDIUM   { background: #FFC100; color: #111; }
   .rule   { color: #aaa; }
   .detail { color: #888; font-size: 12px; }
   .empty  { text-align: center; color: #444; padding: 40px; }
@@ -157,11 +179,29 @@ const indexHTML = `<!DOCTYPE html>
   </tbody>
 </table>
 <script>
-  let count = 0;
-  const tbody  = document.getElementById('tbody');
-  const dot    = document.getElementById('dot');
-  const status = document.getElementById('status');
+  const tbody   = document.getElementById('tbody');
+  const dot     = document.getElementById('dot');
+  const status  = document.getElementById('status');
   const countEl = document.getElementById('count');
+  let count = 0;
+
+  function buildRow(a) {
+    const details = a.filename
+      ? a.filename
+      : (a.dst_ip ? a.dst_ip + ':' + a.dst_port : '—');
+    const ts = a.ts ? a.ts.replace('T', ' ').replace('Z', '') : '—';
+    const row = document.createElement('tr');
+    row.innerHTML =
+      '<td>' + esc(ts) + '</td>' +
+      '<td><span class="badge ' + esc(a.level) + '">' + esc(a.level) + '</span></td>' +
+      '<td class="rule">' + esc(a.rule) + '</td>' +
+      '<td>' + esc(a.service   || '—') + '</td>' +
+      '<td>' + esc(a.pod       || '—') + '</td>' +
+      '<td>' + esc(a.namespace || '—') + '</td>' +
+      '<td>' + esc(a.runtime   || '—') + '</td>' +
+      '<td class="detail">' + esc(details) + '</td>';
+    return row;
+  }
 
   function connect() {
     const ws = new WebSocket('ws://' + location.host + '/ws');
@@ -179,30 +219,10 @@ const indexHTML = `<!DOCTYPE html>
 
     ws.onmessage = (evt) => {
       const a = JSON.parse(evt.data);
-
       if (count === 0) tbody.innerHTML = '';
       count++;
       countEl.textContent = count;
-
-      const details = a.filename
-        ? a.filename
-        : (a.dst_ip ? a.dst_ip + ':' + a.dst_port : '—');
-
-      const ts = a.ts ? a.ts.replace('T', ' ').replace('Z', '') : '—';
-
-      const row = document.createElement('tr');
-      row.className = a.level || '';
-      row.innerHTML =
-        '<td>' + esc(ts) + '</td>' +
-        '<td><span class="badge ' + esc(a.level) + '">' + esc(a.level) + '</span></td>' +
-        '<td class="rule">' + esc(a.rule) + '</td>' +
-        '<td>' + esc(a.service || '—') + '</td>' +
-        '<td>' + esc(a.pod    || '—') + '</td>' +
-        '<td>' + esc(a.namespace || '—') + '</td>' +
-        '<td>' + esc(a.runtime || '—') + '</td>' +
-        '<td class="detail">' + esc(details) + '</td>';
-
-      tbody.insertBefore(row, tbody.firstChild);
+      tbody.insertBefore(buildRow(a), tbody.firstChild);
     };
   }
 

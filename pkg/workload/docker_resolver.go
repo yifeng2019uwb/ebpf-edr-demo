@@ -45,8 +45,12 @@ func (r *DockerResolver) Start() error {
 }
 
 func (r *DockerResolver) bareResult(state ResolveState) ResolveResult {
+	service := ""
+	if state == StateHost {
+		service = "host"
+	}
 	return ResolveResult{
-		Identity: WorkloadIdentity{Runtime: "docker"},
+		Identity: WorkloadIdentity{Runtime: "docker", Service: service},
 		Meta:     WorkloadMeta{Node: r.node, Region: r.region, Cluster: r.cluster},
 		State:    state,
 	}

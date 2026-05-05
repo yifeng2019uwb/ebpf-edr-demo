@@ -46,8 +46,12 @@ func (r *K8sResolver) Start() error {
 }
 
 func (r *K8sResolver) bareResult(state ResolveState) ResolveResult {
+	service := ""
+	if state == StateHost {
+		service = "host"
+	}
 	return ResolveResult{
-		Identity: WorkloadIdentity{Runtime: "k8s"},
+		Identity: WorkloadIdentity{Runtime: "k8s", Service: service},
 		Meta:     WorkloadMeta{Node: r.node, Region: r.region, Cluster: r.cluster},
 		State:    state,
 	}

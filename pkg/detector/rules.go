@@ -113,6 +113,11 @@ func checkProcessRules(event processor.ProcessEvent, res workload.ResolveResult)
 	}
 
 	if res.State == workload.StateUnknown {
+		for _, w := range unknownNsCommsWhitelist {
+			if comm == w {
+				return nil
+			}
+		}
 		return newProcessAlert(event, res, comm, alert.Critical, "unknown_namespace_process", "Process in unrecognized namespace — possible container escape")
 	}
 

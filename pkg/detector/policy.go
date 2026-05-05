@@ -27,6 +27,18 @@ var whitelistComm = []string{
 	"getconf",    // GCP guest agent
 }
 
+// unknownNsCommsWhitelist — node-level GKE infrastructure processes that run outside
+// any pod namespace. These trip unknown_namespace_process but are not threats.
+var unknownNsCommsWhitelist = []string{
+	"iptables",         // kube-proxy network rules
+	"iptables-legacy",  // older iptables variant on some nodes
+	"iptables-restore", // bulk iptables rule restore
+	"ip6tables",        // IPv6 iptables
+	"conntrack",        // connection tracking tool
+	"ip",               // iproute2 — route/addr management
+	"kube-proxy",       // Kubernetes network proxy
+}
+
 // shellBinaries — binary path suffixes that indicate an interactive shell.
 // Any match inside a container triggers CRITICAL shell_spawn_container.
 var shellBinaries = []string{
