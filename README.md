@@ -154,10 +154,9 @@ Structured alert payload written to Cloud Logging:
 make run-docker      # sudo env GOOGLE_CLOUD_PROJECT=ebpfagent ./ebpf-edr-demo --runtime=docker
 ```
 
-**Alert Router (VM, port 8888):**
+**Alert Router (laptop):**
 ```bash
 make run-alert-router
-# SSH tunnel from laptop: ssh -L 8888:localhost:8888 <user>@<VM_IP>
 # Open: http://localhost:8888
 ```
 
@@ -189,12 +188,12 @@ k8s/                — GKE DaemonSet manifest
 
 | Doc                                                             | Description                                                         |
 |-----------------------------------------------------------------|---------------------------------------------------------------------|
-| [SETUP.md](docs/SETUP.md)                                       | Environment setup, build, Cloud Logging VM config                   |
-| [VALIDATION.md](docs/VALIDATION.md)                             | Docker VM test cases and validation procedure                       |
-| [VALIDATION-GKE.md](docs/VALIDATION-GKE.md)                    | GKE validation plan and test cases                                  |
+| [cnop-ebpf-monitor-design.md](docs/cnop-ebpf-monitor-design.md) | Start here — system design: monitors, detection pipeline, threat model |
+| [alert-router-design.md](docs/alert-router-design.md)           | Real-time dashboard: Pub/Sub, Alert Router, WebSocket UI            |
+| [centralized-logging.md](docs/centralized-logging.md)           | Cloud Logging: retention, reliability, IaC                          |
+| [gke-expansion-design.md](docs/gke-expansion-design.md)         | GKE deployment: K8sResolver, DaemonSet, workload identity           |
 | [MITRE-COVERAGE.md](docs/MITRE-COVERAGE.md)                    | MITRE ATT&CK technique coverage                                     |
-| [cnop-ebpf-monitor-design.md](docs/cnop-ebpf-monitor-design.md) | System design: monitors, detection pipeline, threat model           |
-| [gke-expansion-design.md](docs/gke-expansion-design.md)         | GKE deployment design: K8sResolver, DaemonSet, workload identity    |
-| [centralized-logging.md](docs/centralized-logging.md)           | Cloud Logging design: retention, reliability, IaC                   |
-| [alert-router-design.md](docs/alert-router-design.md)           | Alert routing design: Pub/Sub, Alert Router, WebSocket UI           |
+| [VALIDATION.md](docs/VALIDATION.md)                             | Docker VM validation — 8 attack test cases                          |
+| [VALIDATION-GKE.md](docs/VALIDATION-GKE.md)                    | GKE validation — 5 attack test cases                                |
+| [SETUP.md](docs/SETUP.md)                                       | Environment setup, build, how to run                                |
 | [NOTES.md](docs/NOTES.md)                                       | Development notes and debugging reference                           |

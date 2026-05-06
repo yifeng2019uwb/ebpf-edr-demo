@@ -21,7 +21,7 @@ Build a working EDR agent that monitors containerized services using Go + cilium
 - Each monitor validated against real container behavior before moving on
 
 ### Out of scope
-- Production hardening, scalability, dashboards
+- Production hardening, scalability
 - Android or embedded targets
 
 ## 2. Environment
@@ -186,8 +186,9 @@ See [centralized-logging.md](centralized-logging.md) for retention policy, relia
 | Whitelist | Suppresses |
 |-----------|-----------|
 | `whitelistComm` (process) | `sshd`, `runc`, `dockerd`, `containerd` — never alert on process rules |
-| `fileCommWhitelist` | `runc`, `runc:[1:CHILD]`, `runc:[2:INIT]`, `curl`, `bash`, `id` — read `/etc/passwd` during init |
-| `externalAllowedServices` | `inventory-service` — silently allowed (no alert); removed LOW audit log as noise |
+| `fileCommWhitelist` | `runc`, `runc:[1:CHILD]`, `runc:[2:INIT]`, `curl`, `bash`, `id`, `dockerd` — `dockerd` reads overlay2 on every `docker exec` |
+| `unknownNsCommsWhitelist` | `iptables`, `kube-proxy`, `ip`, `conntrack`, `pause`, `systemd-sysctl`, `bridge-network-interface` — GKE node-level infra |
+| `externalAllowedServices` | `inventory-service` — silently allowed (no alert) |
 | `systemNamespaces` | `kube-system`, `gmp-system`, `gke-managed-cim` — GKE infra namespaces skipped entirely |
 | Host namespace filter | All `state=host` processes skipped in process and file rules |
 | GKE service CIDR | Auto-detected from GCP metadata (`34.118.x.x`); added to `privateNets` at startup |
@@ -214,10 +215,11 @@ See [centralized-logging.md](centralized-logging.md) for retention policy, relia
 - [x] Phase 4 — GKE DaemonSet deployed on all clusters; cgroup v2 systemd parser; debugfs/tracefs mounts ✅
 - [x] Phase 5 — GKE functional validation: all 5 tests pass ✅
 - [x] Phase 6 — Centralized Cloud Logging: dual write, structured JSON, 365-day retention, cross-project IAM (see centralized-logging.md)
-- [ ] Phase 7 — Real-time Monitoring: Pub/Sub publish from agent → Alert Router → WebSocket UI (see alert-router-design.md)
-  - V2 CRITICAL shell_spawn_container ✓  V3 HIGH sensitive_file_access ✓  V4 HIGH unauthorized_external_connect ✓
-  - V5 inventory-service allowlist (no HIGH) ✓  V6 no CRITICAL from normal gateway traffic ✓
-  - Fixed: GKE service CIDR auto-detected from GCP metadata; system namespace suppression; validate-gke.sh timing
+- [x] Phase 7 — Real-time Monitoring: Pub/Sub publish from agent → Alert Router → WebSocket UI (see alert-router-design.md) ✅
+  - Agent publishes alerts to Pub/Sub topic `edr-alerts` (async, fire-and-forget)
+  - Alert Router runs on laptop, subscribes via Pub/Sub v2, broadcasts via WebSocket hub
+  - Browser dashboard: dark theme, CRITICAL/HIGH/MEDIUM badge colors, arrival-order display
+  - Fixed: concurrent WebSocket write panic (Pub/Sub v2 calls receive callback concurrently — hold hub mutex through writes)
 
 ## 6. Validation
 
@@ -228,14 +230,15 @@ See `VALIDATION.md` for full test procedure and `validate.sh` for automated exec
 | Test | Command | Expected | Result |
 |------|---------|----------|--------|
 | T1 Shell spawn | `docker exec auth_service bash -c "id"` | CRITICAL `shell_spawn_container` | ✅ |
-| T2 Network tool | `docker exec auth_service nc/wget ...` | HIGH `network_tool_container` | ⚠️ infra* |
+| T2 Network tool | `docker exec auth_service nc/wget ...` | HIGH `network_tool_container` | ✅ |
 | T3 Shadow file | `docker exec auth_service cat /etc/shadow` | HIGH `sensitive_file_access` | ✅ |
 | T4 SSH key | `docker exec auth_service cat /root/.ssh/id_rsa` | CRITICAL `sensitive_file_access` | ✅ |
 | T5 Unauthorized connect | python3 socket to 8.8.8.8:80 from auth_service | HIGH `unauthorized_external_connect` | ✅ |
-| T6 Authorized connect | inventory_service → CoinGecko | LOW `external_connect_allowed` | ✅ |
+| T6 Authorized connect | inventory_service → CoinGecko | (no alert — allowlisted) | ✅ |
 | T7 Host reads container FS | `cat /var/lib/docker/overlay2/.../etc/hostname` | CRITICAL `host_reads_container_fs` | ✅ |
+| T8 System file recon | `docker exec auth_service cat /etc/passwd` | MEDIUM `sensitive_file_access` | ✅ |
 
-*T2: `nc`/`ncat`/`wget` not installed in Python uvicorn container; `apt-get` fails with permission denied on `/var/lib/apt/lists/partial`. Detection rule is correct — pre-installing the binary would confirm it.
+**8/8 passed.**
 
 ### Integration test validation ✅
 
