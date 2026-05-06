@@ -4,6 +4,8 @@ eBPF-based runtime security monitor for containerized workloads. Detects threats
 
 Monitors [cloud-native-order-processor](https://github.com/yifeng2019uwb/cloud-native-order-processor) — a production-style microservices platform running on Docker VM and GKE.
 
+![eBPF EDR Live Alert Dashboard](snapshots/alert_router_ui_05042201.png)
+
 ---
 
 ## How It Works
