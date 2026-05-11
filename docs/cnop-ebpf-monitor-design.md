@@ -373,7 +373,7 @@ Each new domain adds a new namespace and a new workload to simulate attacks agai
 
 | Domain | Namespace | Workloads | Pattern | Status |
 |--------|-----------|-----------|---------|--------|
-| IoT sensor endpoints | `sensor-fleet` | env-sensor, gps-tracker, device-health | streaming telemetry, no HTTP | Next phase — see [iot-sensor-design.md](iot-sensor-design.md) |
+| Continuous telemetry | `sensor-fleet` | env-sensor, gps-tracker, device-health | continuous emission, persistent egress, no HTTP | Next phase — see [iot-sensor-design.md](iot-sensor-design.md) |
 | AI/RBAC services | TBD | healthcare-ai with AI governance | HTTP + AI inference, role-gated endpoints | Future — after healthcare-ai RBAC complete |
 
 ### Key principle

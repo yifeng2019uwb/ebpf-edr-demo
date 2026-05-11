@@ -199,6 +199,6 @@ k8s/                — GKE DaemonSet manifest
 | [MITRE-COVERAGE.md](docs/MITRE-COVERAGE.md)                    | MITRE ATT&CK technique coverage                                     |
 | [VALIDATION.md](docs/VALIDATION.md)                             | Docker VM validation — 8 attack test cases                          |
 | [VALIDATION-GKE.md](docs/VALIDATION-GKE.md)                    | GKE validation — 9 attack test cases                                |
-| [iot-sensor-design.md](docs/iot-sensor-design.md)               | IoT sensor simulation — design and scope (next phase)               |
+| [iot-sensor-design.md](docs/iot-sensor-design.md)               | Continuous telemetry workload — design and scope (next phase)       |
 | [SETUP.md](docs/SETUP.md)                                       | Environment setup, build, how to run                                |
 | [NOTES.md](docs/NOTES.md)                                       | Development notes and debugging reference                           |
