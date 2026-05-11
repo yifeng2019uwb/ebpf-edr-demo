@@ -16,31 +16,31 @@ indefinitely, maintains persistent network egress, and has no legitimate reason 
 shell or read credential files. The same eBPF rules apply, but the behavioral baseline is
 different from an API service.
 
-**Scope**: three simulated sensor containers in a `sensor-fleet` namespace, monitored by the
-same eBPF agent, with 3 attack scenarios in `validate-gke.sh`.
+**Scope**: three simulated sensor containers on a dedicated sensor VM, monitored by the same
+eBPF agent in Docker mode, with 3 sensor-specific attack scenarios.
 
 ---
 
-## 2. What Changes (and What Doesn't)
+## 2. Deployment
 
-**No changes to the eBPF agent.** The agent monitors by mount namespace ID — it picks up any
-container on the node automatically, regardless of workload type or namespace.
+**Separate GCP VM — not the existing Docker VM, not GKE.**
 
-**What we add:**
+This simulates the real-world separation between edge sensor nodes and cloud backend services.
+The VM is droppable — created for testing, destroyed when not needed.
 
-| Component | Description |
-|-----------|-------------|
-| `sensor/main.go` | Go binary — reads `SENSOR_TYPE` + `DEVICE_ID` env vars, streams JSON telemetry |
-| `sensor/Dockerfile` | Multi-stage Go build. One image for all three sensor types |
-| `k8s/sensor-deployment.yaml` | 3 Deployments in `sensor-fleet` namespace |
-| `validate-gke.sh` V11–V13 | 3 attack scenarios, one per sensor type |
+Its OS and kernel version are intentionally not fixed to match the existing Docker VM.
+This makes it the **CO-RE validation environment**: the eBPF agent binary must load BPF
+programs on whatever kernel the new VM runs. If a compatibility gap is found, CO-RE support
+must be implemented before sensor work proceeds.
+
+All agents write to the same Cloud Logging destination and Pub/Sub topic — sensor alerts
+appear in the Alert Router dashboard alongside Docker VM and GKE alerts.
 
 ---
 
 ## 3. Sensor Types
 
-One Go binary, three configurations via `SENSOR_TYPE` env var. Each type streams only the
-fields its physical hardware produces, at a realistic interval.
+Each sensor type streams only the fields its physical hardware produces, at a realistic interval.
 
 | Sensor | Service name | Data fields | Interval |
 |--------|-------------|-------------|----------|
@@ -61,10 +61,24 @@ fields its physical hardware produces, at a realistic interval.
 { "device_id": "health-monitor-001", "ts": "...", "battery_pct": 78.3, "rssi_dbm": -72, "firmware_ver": "1.4.2" }
 ```
 
+### Sensor environment
+
+Each sensor container has:
+- Device certificate + private key (mounted from host, simulating device identity provisioned at manufacturing)
+- Config file (endpoint URL, device ID)
+- Outbound connection to internal `telemetry-collector` (same Docker network, private IP)
+
+This gives eBPF meaningful events to observe at startup (file reads) and runtime (network).
+
 ### Identity in alerts
 
-All three sensors appear in ebpf alerts with `namespace=sensor-fleet` and the correct
-`service=` name (`env-sensor`, `gps-tracker`, `device-health`).
+Docker mode — no K8s namespace. Identity from container name:
+
+| Field | Value |
+|-------|-------|
+| `service` | `env-sensor` / `gps-tracker` / `device-health` |
+| `runtime` | `docker` |
+| `namespace` | — |
 
 ---
 
@@ -75,14 +89,12 @@ not the rule firing in isolation.
 
 | Sensor | Expected behavior | Deviation = threat signal |
 |--------|------------------|--------------------------|
-| `gps-tracker` | Persistent outbound telemetry to known endpoints | Connection to unknown IP or non-telemetry port |
+| `gps-tracker` | Persistent outbound telemetry to known internal endpoint | Connection to unknown external IP or non-telemetry port |
 | `device-health` | Periodic health reporting — no shell, no credential access | Any shell execution is unambiguous RCE |
-| `env-sensor` | Reads sensors, signs and emits readings | Access to signing key material enables telemetry forgery |
+| `env-sensor` | Reads cert + key at startup, signs and emits readings | Access to key material by unexpected process enables telemetry forgery |
 
-This is what makes continuous telemetry a distinct security domain from API services: the
-behavioral baseline is narrower. An API service might legitimately spawn subprocesses, read
-config files, or connect to many backends. A telemetry process does one thing — emit data to
-one destination. The smaller the expected behavior, the stronger every alert signal.
+The behavioral baseline is narrower than an API service. A telemetry process does one thing —
+emit data to one destination. The smaller the expected behavior, the stronger every alert signal.
 
 ---
 
@@ -95,7 +107,7 @@ one destination. The smaller the expected behavior, the stronger every alert sig
 **Threat**: Attacker compromises the firmware update path and spawns a shell. A device health
 monitor has no legitimate reason to ever run a shell — any spawn is unambiguous RCE.
 
-**Expected**: `CRITICAL shell_spawn_container service=device-health namespace=sensor-fleet`
+**Expected**: `CRITICAL shell_spawn_container service=device-health`
 
 ---
 
@@ -127,32 +139,37 @@ enables telemetry forgery — injecting false sensor readings without backend de
 | Item | Reason |
 |------|--------|
 | Real sensor protocols (MQTT, CoAP) | Simulation only — domain is the point, not the protocol |
-| Telemetry collector/receiver | Sensors stream to stdout; no backend needed |
 | New detection rules | Existing rules cover all 3 scenarios |
-| Multi-sensor fleet scale | One pod per type is enough to validate the domain |
+| Multi-sensor fleet scale | One container per type is enough to validate the domain |
 | healthcare-ai integration | Separate project, separate phase |
+| Bare-metal / systemd sensors | Future direction — loses mount namespace identity needed by current workload resolver |
 
 ---
 
-## 7. Implementation Plan
+## 7. Implementation Phases
 
-**Phase 1 — Sensor workload**
-- `sensor/main.go` + `Dockerfile`
-- `k8s/sensor-deployment.yaml` — `sensor-fleet` namespace, 3 Deployments
-- Verify: ebpf alerts show correct `service=` and `namespace=sensor-fleet`
+**Phase 1 — Sensor VM + CO-RE validation**
+- Provision separate GCP VM
+- Deploy eBPF agent — verify BPF programs load on this kernel
+- If CO-RE gap: implement BTF relocation support before proceeding
 
-**Phase 2 — Attack validation**
-- Add V11–V13 to `validate-gke.sh`
-- Update `VALIDATION-GKE.md` and `README.md` to reflect 12/12
+**Phase 2 — Sensor environment**
+- Device cert + key generation (one-time, simulates manufacturing provisioning)
+- Sensor containers + internal telemetry collector
+- Verify: eBPF alerts carry correct `service=` per sensor type
 
-**Phase 3 — Docker VM (optional)**
-- Add sensor to Docker Compose, add to `validate.sh`
+**Phase 3 — Attack validation**
+- Attack scenarios for sensor VM
+- Alerts appear in Alert Router alongside Docker VM and GKE alerts
 
 ---
 
 ## 8. Definition of Done
 
-- Three sensor pods running in `sensor-fleet` namespace: `env-sensor`, `gps-tracker`, `device-health`
-- Each pod logs correct JSON payload for its type at its interval
-- `./validate-gke.sh` passes V11, V12, V13
-- No new eBPF probes, no new detection rules, no agent changes
+- Separate GCP sensor VM running, eBPF agent loaded — CO-RE result documented
+- Three sensor containers running: `env-sensor`, `gps-tracker`, `device-health`
+- Each container reads cert + key at startup, connects to internal telemetry collector
+- eBPF alerts carry correct `service=` per sensor type
+- All 3 attack scenarios pass
+- Alerts visible in Alert Router dashboard alongside other environments
+- No new eBPF probes, no new detection rules, no agent binary changes

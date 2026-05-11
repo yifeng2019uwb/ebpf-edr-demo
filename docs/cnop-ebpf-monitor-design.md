@@ -324,11 +324,28 @@ Documented as learning targets for future work.
 
 ### CO-RE (Compile Once, Run Everywhere)
 
-**Industry**: Production agents ship a single pre-compiled `.o` file that works across kernel versions (Debian 12, RHEL 9, Ubuntu 22.04) using BTF (BPF Type Format). The kernel exposes its own type information at runtime, so the BPF program can relocate struct field offsets automatically.
+**Status: active design requirement** — not optional once the sensor VM is added.
 
-**This project**: BPF programs are compiled against a specific kernel's vmlinux headers (`-I .../vmlinux/x86`). The binary must be recompiled if deployed to a different kernel version. Acceptable for a single-VM demo, but a significant operational gap for any multi-host deployment.
+The project now targets three environments with different kernels:
 
-**Path forward**: Compile with `bpftool btf dump` to generate a portable BTF section, or use libbpf's CO-RE relocation support. Requires verifying that all `BPF_CORE_READ` calls in the `.bpf.c` files are correct (this project already uses `BPF_CORE_READ` for `mnt_ns_id` — a good start).
+| Environment | OS | Kernel |
+|-------------|-----|--------|
+| Docker VM | Debian 12 | 6.1 |
+| GKE DaemonSet | Ubuntu 24.04 | 6.8 |
+| Sensor VM | GCP default (varies) | unknown until provisioned |
+
+A single agent binary must load BPF programs on all three kernels without recompilation.
+This is the CO-RE requirement — the same challenge production agents like Falco and Tetragon solve.
+
+**Industry approach**: Ship a single pre-compiled `.o` file with a portable BTF section.
+The kernel exposes its own type information at `/sys/kernel/btf/vmlinux` at runtime.
+The BPF verifier relocates struct field offsets automatically using BTF relocation records.
+
+**Implementation path**:
+- Verify all `BPF_CORE_READ` calls in `.bpf.c` files are correct (already done for `mnt_ns_id`)
+- Compile with `bpftool btf dump` to generate portable BTF section, or enable libbpf CO-RE relocation
+- Test load on each kernel — sensor VM being a different version is the validation test
+- Document which kernels pass and which require recompilation — this is an honest finding
 
 ---
 
@@ -363,34 +380,51 @@ The same 3 probes (execsnoop, opensnoop, lsm-connect) and 6 rules apply to all o
 This means the project can expand to new workload domains without changing the agent binary.
 Each new domain adds a new namespace and a new workload to simulate attacks against.
 
-### Current domains
+### Monitored environments
 
-| Domain | Namespace | Workloads | Pattern |
-|--------|-----------|-----------|---------|
-| API services | `order-processor` | gateway, auth, user, inventory, order, insights | HTTP request/response |
+| Environment | Workload domain | Agent mode | OS / kernel | Status |
+|-------------|----------------|------------|-------------|--------|
+| Docker VM | API services (order-processor) | Docker | Debian 12 / 6.1 | Complete |
+| GKE DaemonSet | API services (order-processor) | K8s | Ubuntu 24.04 / 6.8 | Complete |
+| Sensor VM | Continuous telemetry | Docker | GCP default / varies | Next phase |
 
-### Planned domains
+The sensor VM is a separate GCP VM — not the same node as order-processor.
+It is droppable: created for testing, destroyed when not needed.
+Its kernel version is intentionally not fixed — this is the CO-RE validation environment.
 
-| Domain | Namespace | Workloads | Pattern | Status |
-|--------|-----------|-----------|---------|--------|
-| Continuous telemetry | `sensor-fleet` | env-sensor, gps-tracker, device-health | continuous emission, persistent egress, no HTTP | Next phase — see [iot-sensor-design.md](iot-sensor-design.md) |
-| AI/RBAC services | TBD | healthcare-ai with AI governance | HTTP + AI inference, role-gated endpoints | Future — after healthcare-ai RBAC complete |
+### Planned workload domains
+
+| Domain | Environment | Behavioral profile | Status |
+|--------|-------------|-------------------|--------|
+| API services | Docker VM + GKE | HTTP request/response | Complete |
+| Continuous telemetry | Sensor VM (Docker) | Persistent egress, no inbound, narrow file access | Next phase — see [iot-sensor-design.md](iot-sensor-design.md) |
+| AI inference | TBD | Model file reads, inference process, no shell invariant | Future — after healthcare-ai AI component complete |
 
 ### Key principle
 
-Domains are independent — they may be on the same cluster in different namespaces, or on
-separate clusters entirely. The agent monitors all namespaces on a node by mount namespace ID.
-Workloads do not need to be related to each other. A sensor fleet and an API service running
-on the same GKE node are monitored by the same DaemonSet pod with no configuration change.
+The agent monitors by mount namespace ID — it does not care what workload type runs inside
+the container, which environment it is on, or which kernel version the host runs.
+Each environment runs its own agent instance. All agents write to the same Cloud Logging
+destination and Pub/Sub topic. The Alert Router dashboard shows alerts from all environments.
 
-What changes per domain:
-- K8s namespace (separates workloads cleanly)
-- Workload identity in alerts (`service`, `namespace`)
-- Attack scenarios in `validate-gke.sh`
+What changes per environment:
+- Agent mode (`--runtime=docker` or `--runtime=k8s`)
+- Workload resolver (DockerResolver vs K8sResolver)
+- Kernel version (CO-RE requirement)
 
-What stays the same:
-- Agent binary
+What stays the same across all environments:
+- Agent binary (CO-RE goal)
 - Detection rules
-- Cloud Logging output
+- Cloud Logging destination
+- Pub/Sub topic
 - Alert Router dashboard
+
+### Future direction — bare-metal / systemd
+
+Real edge sensors often run as systemd services on bare Linux, not inside containers.
+This is more realistic for embedded Linux, industrial gateways, and defense edge nodes.
+Not implemented now because container identity (mount namespace → workload resolver) is
+the foundation of the current architecture. Without containers, process attribution and
+workload grouping require a different approach.
+Mention as a future direction when the containerized sensor domain is validated.
 

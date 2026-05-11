@@ -35,12 +35,16 @@ AlertHandler
        └── Alert Router → WebSocket → browser dashboard
 ```
 
-Two runtimes supported from a single binary:
+Three runtimes — CO-RE target: single binary across all kernels:
 
-| Environment   | Host OS      | Kernel | Identity Source         |
-|---------------|--------------|--------|-------------------------|
-| Docker VM     | Debian 12    | 6.1    | Docker API              |
-| GKE DaemonSet | Ubuntu 24.04 | 6.8    | Kubernetes API + CRI    |
+| Environment   | Host OS           | Kernel   | Identity Source         | Workload domain       |
+|---------------|-------------------|----------|-------------------------|-----------------------|
+| Docker VM     | Debian 12         | 6.1      | Docker API              | API services          |
+| GKE DaemonSet | Ubuntu 24.04      | 6.8      | Kubernetes API + CRI    | API services          |
+| Sensor VM     | GCP default       | varies   | Docker API              | Continuous telemetry  |
+
+Sensor VM is a separate GCP VM — droppable, provisioned for testing. Its kernel version
+is intentionally not fixed, making it the CO-RE validation environment.
 
 ---
 
