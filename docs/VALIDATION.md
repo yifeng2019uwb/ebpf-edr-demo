@@ -68,10 +68,7 @@ docker exec order-processor-auth_service wget --timeout=2 -q http://1.1.1.1 2>/d
 level=HIGH rule=network_tool_container container=order-processor-auth_service comm=wget
 ```
 
-**Note**: Detection fires on binary execution, not network connection. Python uvicorn containers do
-not ship with `nc`, `ncat`, or `wget`, and `apt-get` fails with permission denied on
-`/var/lib/apt/lists/partial` in this hardened image. The detection rule is correct — pre-installing
-any of the binaries manually would confirm it fires. This is a test infrastructure limitation only.
+**Note**: Detection fires on binary execution, not network connection. `validate.sh` attempts `nc`, `ncat`, then falls back to `wget` — at least one is typically available in the container image.
 
 ---
 
@@ -156,10 +153,10 @@ connection from an unauthorized container triggers HIGH.
 
 ---
 
-### T6 — Authorized External Connection (Audit Log)
+### T6 — Authorized External Connection (No Alert)
 
 **Threat model**: Verify the allowlist works — `inventory_service` is the only container permitted
-to call the external CoinGecko API. This test confirms the LOW audit log fires (not a HIGH alert).
+to call the external CoinGecko API. This test confirms no alert fires (not even LOW).
 
 **Monitor**: lsm-connect
 
@@ -168,14 +165,8 @@ to call the external CoinGecko API. This test confirms the LOW audit log fires (
 curl http://localhost:8080/api/v1/assets   # adjust endpoint to match your gateway route
 ```
 
-**Expected alert**:
-```
-level=LOW rule=external_connect_allowed container=order-processor-inventory_service
-msg=order-processor-inventory_service external connect to <ip>:443 (expected: api.coingecko.com)
-```
-
-**Why LOW not HIGH**: `inventory_service` is listed in `externalAllowedContainers`. The connection
-is expected but still logged for audit — operator can verify the destination IP resolves to CoinGecko.
+**Expected**: No alert. `inventory_service` is in `externalAllowedServices` — the connection is
+silently allowed. A HIGH `unauthorized_external_connect` would indicate the allowlist is broken.
 
 ---
 
@@ -205,6 +196,29 @@ No legitimate application reads container overlay mounts directly.
 
 ---
 
+### T8 — System File Recon: `/etc/passwd`
+
+**Threat**: Attacker reads the user account list to identify targets for privilege escalation or lateral movement.
+
+**Monitor**: opensnoop
+
+**Command**:
+```bash
+docker exec order-processor-auth_service cat /etc/passwd
+```
+
+**Expected alert**:
+```
+level=MEDIUM rule=sensitive_file_access container=order-processor-auth_service comm=cat
+msg=Container accessed system file: /etc/passwd
+```
+
+**Why MEDIUM not HIGH**: `/etc/passwd` is world-readable and not a direct credential. Reading it
+is suspicious from application code but lower risk than `/etc/shadow` or private keys.
+`bash` is whitelisted (reads `/etc/passwd` at startup for prompt); `cat` is not.
+
+---
+
 ## Out of Scope
 
 | Scenario | Why excluded |
@@ -221,12 +235,13 @@ No legitimate application reads container overlay mounts directly.
 **Attack detection:**
 
 - [x] T1 — CRITICAL `shell_spawn_container`
-- [⚠️] T2 — HIGH `network_tool_container` — rule correct, binary not installable in this container image
+- [x] T2 — HIGH `network_tool_container`
 - [x] T3 — HIGH `sensitive_file_access` (`/etc/shadow`)
 - [x] T4 — CRITICAL `sensitive_file_access` (SSH key)
 - [x] T5 — HIGH `unauthorized_external_connect`
-- [x] T6 — LOW `external_connect_allowed` (inventory_service)
+- [x] T6 — No alert (inventory_service allowlisted — correct)
 - [x] T7 — CRITICAL `host_reads_container_fs`
+- [x] T8 — MEDIUM `sensitive_file_access` (`/etc/passwd`)
 
 **False positive check — confirmed clean:**
 

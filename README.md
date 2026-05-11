@@ -91,15 +91,19 @@ Attack simulations run against live deployments. All rules verified end-to-end: 
 | host reads container filesystem   | `host_reads_container_fs`       | PASS   |
 | read `/etc/passwd`                | `sensitive_file_access` (MED)   | PASS   |
 
-### GKE DaemonSet — 5/5 pass
+### GKE DaemonSet — 9/9 pass
 
-| Test                         | Rule                            | Result |
-|------------------------------|---------------------------------|--------|
-| `kubectl exec bash`          | `shell_spawn_container`         | PASS   |
-| read `/etc/shadow`           | `sensitive_file_access` (HIGH)  | PASS   |
-| read `/etc/passwd`           | `sensitive_file_access` (MED)   | PASS   |
-| run `nc` in pod              | `network_tool_container`        | PASS   |
-| connect to external IP       | `unauthorized_external_connect` | PASS   |
+| Test                              | Rule                            | Result |
+|-----------------------------------|---------------------------------|--------|
+| `kubectl exec bash`               | `shell_spawn_container`         | PASS   |
+| read `/etc/shadow`                | `sensitive_file_access` (HIGH)  | PASS   |
+| connect to external IP            | `unauthorized_external_connect` | PASS   |
+| inventory-service allowlist       | (no alert — allowlisted)        | PASS   |
+| no CRITICAL from gateway traffic  | (no false positive)             | PASS   |
+| read SSH key `/root/.ssh/id_rsa`  | `sensitive_file_access` (CRIT)  | PASS   |
+| run `nc` in pod                   | `network_tool_container`        | PASS   |
+| read `/etc/passwd`                | `sensitive_file_access` (MED)   | PASS   |
+| reverse shell simulation          | `shell_spawn_container` (CRIT) + `unauthorized_external_connect` (HIGH) | PASS |
 
 All GKE alerts carry full workload identity: `service`, `pod`, `namespace`, `cluster`, `region`.
 
@@ -194,6 +198,7 @@ k8s/                — GKE DaemonSet manifest
 | [gke-expansion-design.md](docs/gke-expansion-design.md)         | GKE deployment: K8sResolver, DaemonSet, workload identity           |
 | [MITRE-COVERAGE.md](docs/MITRE-COVERAGE.md)                    | MITRE ATT&CK technique coverage                                     |
 | [VALIDATION.md](docs/VALIDATION.md)                             | Docker VM validation — 8 attack test cases                          |
-| [VALIDATION-GKE.md](docs/VALIDATION-GKE.md)                    | GKE validation — 5 attack test cases                                |
+| [VALIDATION-GKE.md](docs/VALIDATION-GKE.md)                    | GKE validation — 9 attack test cases                                |
+| [iot-sensor-design.md](docs/iot-sensor-design.md)               | IoT sensor simulation — design and scope (next phase)               |
 | [SETUP.md](docs/SETUP.md)                                       | Environment setup, build, how to run                                |
 | [NOTES.md](docs/NOTES.md)                                       | Development notes and debugging reference                           |

@@ -308,6 +308,13 @@ Policy config would need to be workload-aware — either per-VM config files or 
 - Central alert aggregation across VMs
 - Per-container network allowlists (currently one global list)
 
+### Open problems for future exploration
+- **File write detection** — current opensnoop tracks file reads; write-side events (firmware tampering, malware dropping, config modification) are a natural expansion for embedded/IoT endpoints
+- **Device file access** — on sensor devices, `/dev/mem`, `/dev/ttyS*`, `/dev/i2c-*` access by unexpected processes is a meaningful signal; how to model "normal" hardware access vs. suspicious is an open question
+- **Full command-line capture** — current execsnoop captures process name only; full argv is needed to detect obfuscated commands and script injections, but raises volume and privacy tradeoffs
+- **Persistence detection** — Linux has no registry, but crontab writes, systemd unit changes, and `/proc/sys/` modifications serve the same role; defining a useful signal-to-noise threshold is the challenge
+- **IoT/sensor endpoint simulation** — current demo uses a microservices application as the monitored workload; the agent operates at the kernel level and applies equally to any Linux endpoint (sensor devices, embedded systems, industrial controllers); a realistic sensor workload simulation (e.g., MQTT-publishing GPS/IMU containers) would better represent the embedded use case
+
 ---
 
 ## 8. Industry Gaps — Known Challenges
@@ -345,4 +352,45 @@ Documented as learning targets for future work.
 
 The same concern applies to Cloud Logging throughput: eBPF events can burst faster than Cloud Logging API quota allows. The centralized logging design addresses this with per-rule rate limiting and burst aggregation before the Cloud Logging write — see [centralized-logging.md](centralized-logging.md).
 
+---
+
+## 9. Monitored Workload Domains
+
+The eBPF agent attaches to the kernel — it monitors whatever runs on the node, regardless of
+what the workload does. Workload type, protocol, or domain has no effect on detection.
+The same 3 probes (execsnoop, opensnoop, lsm-connect) and 6 rules apply to all of them.
+
+This means the project can expand to new workload domains without changing the agent binary.
+Each new domain adds a new namespace and a new workload to simulate attacks against.
+
+### Current domains
+
+| Domain | Namespace | Workloads | Pattern |
+|--------|-----------|-----------|---------|
+| API services | `order-processor` | gateway, auth, user, inventory, order, insights | HTTP request/response |
+
+### Planned domains
+
+| Domain | Namespace | Workloads | Pattern | Status |
+|--------|-----------|-----------|---------|--------|
+| IoT sensor endpoints | `sensor-fleet` | env-sensor, gps-tracker, device-health | streaming telemetry, no HTTP | Next phase — see [iot-sensor-design.md](iot-sensor-design.md) |
+| AI/RBAC services | TBD | healthcare-ai with AI governance | HTTP + AI inference, role-gated endpoints | Future — after healthcare-ai RBAC complete |
+
+### Key principle
+
+Domains are independent — they may be on the same cluster in different namespaces, or on
+separate clusters entirely. The agent monitors all namespaces on a node by mount namespace ID.
+Workloads do not need to be related to each other. A sensor fleet and an API service running
+on the same GKE node are monitored by the same DaemonSet pod with no configuration change.
+
+What changes per domain:
+- K8s namespace (separates workloads cleanly)
+- Workload identity in alerts (`service`, `namespace`)
+- Attack scenarios in `validate-gke.sh`
+
+What stays the same:
+- Agent binary
+- Detection rules
+- Cloud Logging output
+- Alert Router dashboard
 

