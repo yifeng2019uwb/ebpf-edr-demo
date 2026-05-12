@@ -206,3 +206,4 @@ k8s/                — GKE DaemonSet manifest
 | [iot-sensor-design.md](docs/iot-sensor-design.md)               | Continuous telemetry workload — design and scope (next phase)       |
 | [SETUP.md](docs/SETUP.md)                                       | Environment setup, build, how to run                                |
 | [NOTES.md](docs/NOTES.md)                                       | Development notes and debugging reference                           |
+| [NOTES-sensor.md](docs/NOTES-sensor.md)                         | Sensor VM implementation notes — phases 1-5 checklist              |

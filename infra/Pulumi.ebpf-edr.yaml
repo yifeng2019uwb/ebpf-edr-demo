@@ -1,2 +1,3 @@
 config:
   gcp:project: ebpfagent
+  ebpf-edr-infra:sensorEnabled: "true"
