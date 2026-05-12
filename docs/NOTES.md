@@ -40,6 +40,137 @@ kubectl logs -n kube-system -l app=ebpf-edr --tail=10    # confirm no crash
 
 ---
 
+## Monitoring Dashboard
+
+Four ways to see alerts, from most interactive to most raw.
+
+### 1 — Live alert router (Mac web dashboard)
+
+Subscribes to Pub/Sub and renders alerts in a browser table in real time.
+Run from your Mac while the sensor VM or GKE agents are active.
+
+```bash
+# in ebpf-edr-demo/
+make run-alert-router          # starts HTTP server at http://localhost:8888
+```
+
+Open **http://localhost:8888**. Columns: Time (UTC) · Severity · Rule · Service · Pod · Namespace · Runtime · Details (filename or dst IP:port).
+
+- Badge colours: CRITICAL = red, HIGH = orange, MEDIUM = yellow
+- New alerts appear at the top (newest first)
+- Last 100 alerts replayed on reconnect — safe to close and reopen the tab
+- Status dot turns red when the WebSocket disconnects; reconnects automatically
+
+**Requires**: `gcloud auth application-default login` on your Mac for project `ebpfagent`
+(the router pulls from Pub/Sub subscription `edr-alerts-router-sub` in that project).
+
+---
+
+### 2 — Cloud Logging Log Explorer (GCP console)
+
+Direct link (opens to the right project and log):
+```
+https://console.cloud.google.com/logs/query?project=ebpfagent
+```
+
+Then enter this query:
+```
+logName="projects/ebpfagent/logs/ebpf-edr-alerts"
+```
+
+Useful filters to bookmark:
+
+```
+# CRITICAL alerts only
+logName="projects/ebpfagent/logs/ebpf-edr-alerts" AND severity=CRITICAL
+
+# Sensor VM alerts (node=sensor-vm)
+logName="projects/ebpfagent/logs/ebpf-edr-alerts" AND jsonPayload.node="sensor-vm"
+
+# GKE alerts only
+logName="projects/ebpfagent/logs/ebpf-edr-alerts" AND jsonPayload.runtime="k8s"
+
+# Sensitive file access rule
+logName="projects/ebpfagent/logs/ebpf-edr-alerts" AND jsonPayload.rule="sensitive_file_access"
+
+# Specific service (e.g. env-sensor after the normalizeServiceName fix)
+logName="projects/ebpfagent/logs/ebpf-edr-alerts" AND jsonPayload.service="env-sensor"
+```
+
+Severity mapping (Cloud Logging has no HIGH/MEDIUM): CRITICAL → CRITICAL, HIGH → ERROR, MEDIUM → WARNING.
+The original level is always in `jsonPayload.level`.
+
+---
+
+### 3 — gcloud CLI (from Mac)
+
+```bash
+# Last 10 alerts
+gcloud logging read 'logName="projects/ebpfagent/logs/ebpf-edr-alerts"' \
+  --project=ebpfagent --limit=10 --format=json
+
+# CRITICAL only
+gcloud logging read \
+  'logName="projects/ebpfagent/logs/ebpf-edr-alerts" AND severity=CRITICAL' \
+  --project=ebpfagent --limit=10
+
+# Sensor VM sensitive file access
+gcloud logging read \
+  'logName="projects/ebpfagent/logs/ebpf-edr-alerts" AND jsonPayload.node="sensor-vm" AND jsonPayload.rule="sensitive_file_access"' \
+  --project=ebpfagent --limit=20
+```
+
+---
+
+### 4 — Local alert log on the VM
+
+The agent writes to `alerts/alert.log` relative to its working directory.
+The systemd unit has no `WorkingDirectory`, so it defaults to `/` → file is at `/alerts/alert.log`.
+
+```bash
+# Confirm actual path (run on sensor-vm)
+sudo systemctl show ebpf-edr -p WorkingDirectory
+sudo find / -name alert.log -maxdepth 5 2>/dev/null
+
+# Stream alerts live
+sudo tail -f /alerts/alert.log
+
+# Last 20 alerts
+sudo tail -20 /alerts/alert.log
+```
+
+Watch agent logs and alerts side-by-side:
+```bash
+# Terminal 1 — agent logs (systemd, includes DBG file-* debug lines)
+sudo journalctl -u ebpf-edr -f
+
+# Terminal 2 — structured alert lines only
+sudo tail -f /alerts/alert.log
+
+# To filter debug pipeline for a specific file
+sudo journalctl -u ebpf-edr -f | grep "DBG file" | grep -E "device|passwd"
+```
+
+---
+
+### 5 — Pub/Sub resources
+
+| Resource | Name | Project |
+|---|---|---|
+| Topic | `edr-alerts` | `ebpfagent` |
+| Subscription (alert router) | `edr-alerts-router-sub` | `ebpfagent` |
+
+Inspect raw messages without the router running:
+```bash
+gcloud pubsub subscriptions pull edr-alerts-router-sub \
+  --project=ebpfagent --limit=5 --auto-ack
+```
+
+> **Warning**: pulling messages consumes them — the alert router will miss them.
+> Only use this when the router is NOT running (e.g. one-off debugging).
+
+---
+
 ## Completed
 
 - [x] `execsnoop.bpf.c` + `main.go` — process monitor capturing execve events

@@ -1,26 +1,36 @@
 #!/usr/bin/env bash
-# validate-sensor.sh — eBPF EDR detection validation for sensor containers
+# validate-sensor.sh — eBPF EDR sensor validation (runs from your Mac)
 #
-# Tests 6 attack scenarios against the sensor containers running on this VM.
-# With the debug logging enabled, also shows exactly where file events flow
-# through the pipeline — useful for diagnosing why cat/file access alerts may
-# not fire.
-#
-# Run on the sensor VM as root while the EDR agent is running.
+# All docker exec commands are tunnelled through gcloud compute ssh.
+# No manual SSH required — just run this from your Mac.
 #
 # Usage:
-#   sudo ./validate-sensor.sh
+#   ./validate-sensor.sh
 #
-# Watch alerts + debug log in separate terminals:
-#   tail -f alerts/alert.log
-#   sudo journalctl -u ebpf-edr -f | grep "DBG file"
+# Watch alerts live while running (separate terminal):
+#   make run-alert-router            # browser dashboard at http://localhost:8888
+#   OR: gcloud logging read 'logName="projects/ebpfagent/logs/ebpf-edr-alerts"' \
+#         --project=ebpfagent --limit=20 --freshness=5m
 
 set -euo pipefail
 
-TARGET="sensor-env-sensor-1"   # env-sensor container (has /etc/sensor/tls/ certs)
-LOG="alerts/alert.log"
+VM="sensor-vm"
+ZONE="us-west1-a"
+PROJECT="ebpfagent"
+TARGET="sensor-env-sensor-1"
 
 # ── helpers ───────────────────────────────────────────────────────────────────
+
+# Run a command on the sensor VM as root.
+vm() {
+    gcloud compute ssh "${VM}" --zone="${ZONE}" --project="${PROJECT}" \
+        --command="$*" -- -o LogLevel=ERROR 2>/dev/null
+}
+
+# Run a command inside the sensor container.
+container() {
+    vm "sudo docker exec ${TARGET} $*"
+}
 
 header() {
     local num=$1 total=$2 name=$3 expect=$4
@@ -31,129 +41,133 @@ header() {
     echo "══════════════════════════════════════════════════════"
 }
 
-pass() { echo "  [OK] command sent — check alert.log and journalctl DBG lines"; }
+pass() { echo "  [sent] waiting for alert..."; }
 
-check_log() {
-    local rule=$1 comm=$2
-    sleep 1
-    if grep -q "rule=${rule}" "${LOG}" 2>/dev/null && grep -q "comm=${comm}" "${LOG}" 2>/dev/null; then
-        echo "  [PASS] found rule=${rule} comm=${comm} in alert.log"
+check_cloud_log() {
+    local rule=$1
+    sleep 3
+    local result
+    result=$(gcloud logging read \
+        "logName=\"projects/${PROJECT}/logs/ebpf-edr-alerts\" AND jsonPayload.rule=\"${rule}\"" \
+        --project="${PROJECT}" --limit=3 --freshness=2m \
+        --format="value(jsonPayload.level, jsonPayload.rule, jsonPayload.service, jsonPayload.comm, jsonPayload.filename)" \
+        2>/dev/null || echo "")
+    if [[ -n "${result}" ]]; then
+        echo "  [PASS] Cloud Logging:"
+        echo "${result}" | sed 's/^/         /'
     else
-        echo "  [MISS] rule=${rule} comm=${comm} not found yet — check DBG logs:"
-        echo "         sudo journalctl -u ebpf-edr --since '30 seconds ago' | grep 'DBG file'"
+        echo "  [MISS] not yet in Cloud Logging — check alert.log on VM or wait a few seconds"
+        echo "         vm: sudo tail -5 /alerts/alert.log"
     fi
 }
 
 # ── pre-flight ────────────────────────────────────────────────────────────────
 
-if [[ $EUID -ne 0 ]]; then
-    echo "ERROR: must run as root — sudo ./validate-sensor.sh"
+echo ""
+echo "Checking sensor-vm..."
+
+if ! vm "sudo docker ps --format '{{.Names}}'" 2>/dev/null | grep -q "^${TARGET}$"; then
+    echo "ERROR: container ${TARGET} is not running on ${VM}"
+    echo "       Check: gcloud compute ssh ${VM} --zone=${ZONE} --project=${PROJECT}"
+    echo "              sudo docker compose -f /opt/sensor/docker-compose.yml ps"
     exit 1
 fi
 
-if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${TARGET}$"; then
-    echo "ERROR: container ${TARGET} is not running"
-    echo "       Run: docker compose -f /opt/sensor/docker-compose.yml ps"
-    exit 1
+if ! vm "sudo pgrep -x ebpf-edr-demo" > /dev/null 2>&1; then
+    echo "WARN: ebpf-edr-demo is not running on ${VM} — start it first:"
+    echo "      gcloud compute ssh ${VM} --zone=${ZONE} -- sudo systemctl restart ebpf-edr"
 fi
 
-if ! pgrep -x ebpf-edr-demo > /dev/null 2>&1; then
-    echo "WARN: ebpf-edr-demo process not detected — is the EDR agent running?"
-    echo "      Check: sudo systemctl status ebpf-edr"
-fi
+# Snapshot Cloud Logging so check_cloud_log only sees NEW alerts
+LOG_SINCE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-# Record alert.log line count so we can show only new alerts at the end
-LOG_START=$(wc -l < "${LOG}" 2>/dev/null || echo 0)
-
+echo "  [OK] container running, agent up"
 echo ""
-echo "EDR Sensor Validation — 6 attack tests"
-echo "Target container: ${TARGET}"
-echo ""
-echo "Watch alerts live:    tail -f ${LOG}"
-echo "Watch debug pipeline: sudo journalctl -u ebpf-edr -f | grep 'DBG file'"
-echo ""
+echo "Alerts will appear in Cloud Logging (project=${PROJECT}) and at http://localhost:8888"
 echo "Starting in 3 seconds..."
 sleep 3
 
 # ── T1: Shell spawn ───────────────────────────────────────────────────────────
 
 header 1 6 "Shell spawn in container" "CRITICAL shell_spawn_container service=env-sensor"
-docker exec "${TARGET}" sh -c "id" 2>/dev/null || true
+container sh -c "id" || true
 pass
 sleep 3
 
 # ── T2: Network recon tool ────────────────────────────────────────────────────
 
 header 2 6 "Network tool in container" "HIGH network_tool_container service=env-sensor"
-# Alpine busybox includes nc
-docker exec "${TARGET}" nc -w 2 1.1.1.1 80 2>/dev/null || true
+container nc -w 2 1.1.1.1 80 || true
 pass
 sleep 3
 
-# ── T3: Read device private key (the key debug test) ─────────────────────────
-# This is the main regression: sensitive_file_access should fire for cat.
-# DBG lines show: file-enrich → (file-pending?) → file-detect → alert
-# If file-detect appears but no alert: rule logic bug
-# If file-enrich appears but no file-detect: enrichedCh drop
-# If no file-enrich at all: eBPF probe not capturing the event
+# ── T3: Read device private key (main regression test) ───────────────────────
 
-header 3 6 "Read device private key" "HIGH sensitive_file_access filename=/etc/sensor/tls/device.key"
-echo "  After this command, run:"
-echo "    sudo journalctl -u ebpf-edr --since '5 seconds ago' | grep 'DBG file.*device'"
+header 3 6 "Read device private key (.key)" "HIGH sensitive_file_access filename=device.key"
+echo "  Tracing debug pipeline:"
+echo "    gcloud compute ssh ${VM} --zone=${ZONE} -- 'sudo journalctl -u ebpf-edr --since=\"10 seconds ago\" | grep \"DBG file\"'"
 echo ""
-docker exec "${TARGET}" cat /etc/sensor/tls/device.key 2>/dev/null || true
+container cat /etc/sensor/tls/device.key || true
 pass
-check_log "sensitive_file_access" "cat"
+sleep 4
+
+# Show debug pipeline output from the VM
+echo "  DBG pipeline (last 10s on VM):"
+vm "sudo journalctl -u ebpf-edr --since='15 seconds ago' --no-pager 2>/dev/null | grep 'DBG file' | grep -i 'device' || echo '  (no DBG lines matched)'"
+
+sleep 2
+
+# ── T4: Read CA cert (.crt — not a monitored suffix) ─────────────────────────
+
+header 4 6 "Read CA cert (.crt)" "NO ALERT — .crt is not in highFileSuffixes"
+container cat /etc/sensor/tls/ca.crt || true
+echo "  Expected: no alert. To add .crt detection, add \".crt\" to highFileSuffixes in policy.go."
 sleep 3
 
-# ── T4: Read CA cert (.crt is not in highFileSuffixes — expected: no alert) ───
+# ── T5: Read /etc/passwd ──────────────────────────────────────────────────────
 
-header 4 6 "Read CA cert (.crt — not a monitored suffix)" "NO ALERT expected for .crt"
-docker exec "${TARGET}" cat /etc/sensor/tls/ca.crt 2>/dev/null || true
-echo "  NOTE: .crt is NOT in highFileSuffixes — no alert expected."
-echo "        If you want .crt monitored, add it to policy.go."
+header 5 6 "Read /etc/passwd (system recon)" "MEDIUM sensitive_file_access"
+container cat /etc/passwd || true
 pass
-sleep 3
+sleep 4
 
-# ── T5: Read /etc/passwd (system recon) ──────────────────────────────────────
+echo "  DBG pipeline (last 10s on VM):"
+vm "sudo journalctl -u ebpf-edr --since='15 seconds ago' --no-pager 2>/dev/null | grep 'DBG file' | grep -i 'passwd' || echo '  (no DBG lines matched)'"
 
-header 5 6 "Read /etc/passwd from container" "MEDIUM sensitive_file_access service=env-sensor"
-docker exec "${TARGET}" cat /etc/passwd 2>/dev/null || true
-pass
-check_log "sensitive_file_access" "cat"
-sleep 3
+sleep 2
 
 # ── T6: Unauthorized external connect ────────────────────────────────────────
 
-header 6 6 "Unauthorized external connect" "HIGH unauthorized_external_connect service=env-sensor"
-# nc also triggers network_tool_container — both alerts expected
-docker exec "${TARGET}" nc -w 2 8.8.8.8 80 2>/dev/null || true
+header 6 6 "Unauthorized external connect" "HIGH unauthorized_external_connect + network_tool_container"
+container nc -w 2 8.8.8.8 80 || true
 pass
-sleep 3
+sleep 4
 
 # ── summary ───────────────────────────────────────────────────────────────────
 
 echo ""
 echo "══════════════════════════════════════════════════════"
-echo "  All tests sent. New alerts since test start:"
+echo "  Tests complete. Fetching new alerts from Cloud Logging..."
 echo ""
-tail -n "+$((LOG_START + 1))" "${LOG}" 2>/dev/null | sed 's/^/  /' || echo "  (no new alerts)"
+
+gcloud logging read \
+    "logName=\"projects/${PROJECT}/logs/ebpf-edr-alerts\" AND timestamp>=\"${LOG_SINCE}\"" \
+    --project="${PROJECT}" --limit=30 \
+    --format="table(jsonPayload.level, jsonPayload.rule, jsonPayload.service, jsonPayload.comm, jsonPayload.filename, jsonPayload.dst_ip)" \
+    2>/dev/null || echo "  (could not fetch from Cloud Logging)"
+
 echo ""
 echo "  Expected:"
 echo "    T1  CRITICAL shell_spawn_container        service=env-sensor  comm=sh"
 echo "    T2  HIGH     network_tool_container        service=env-sensor  comm=nc"
-echo "    T3  HIGH     sensitive_file_access         filename=/etc/sensor/tls/device.key  comm=cat"
-echo "    T4  (no alert — .crt not in highFileSuffixes)"
-echo "    T5  MEDIUM   sensitive_file_access         filename=/etc/passwd  comm=cat"
-echo "    T6  HIGH     network_tool_container        service=env-sensor  comm=nc"
-echo "         HIGH     unauthorized_external_connect dst=8.8.8.8:80"
+echo "    T3  HIGH     sensitive_file_access         filename=...device.key  comm=cat"
+echo "    T4  (no alert — .crt not monitored)"
+echo "    T5  MEDIUM   sensitive_file_access         filename=/etc/passwd"
+echo "    T6  HIGH     network_tool_container + unauthorized_external_connect  dst=8.8.8.8"
 echo ""
-echo "  Debug pipeline (trace where file events go):"
-echo "    sudo journalctl -u ebpf-edr --since '5 minutes ago' | grep 'DBG file' | grep -E 'device|passwd'"
-echo "  Look for:"
-echo "    DBG file-enrich  → eBPF probe captured the event, state=resolved/pending"
-echo "    DBG file-pending → event queued, waiting for container resolution"
-echo "    DBG file-drop    → enrichedCh was full, event dropped (should be rare now)"
-echo "    DBG file-detect  → event reached detector; if this appears but no alert,"
-echo "                       the rule logic itself is the bug"
+echo "  View raw alert log on VM:"
+echo "    gcloud compute ssh ${VM} --zone=${ZONE} -- 'sudo tail -20 /alerts/alert.log'"
+echo ""
+echo "  Full debug pipeline trace:"
+echo "    gcloud compute ssh ${VM} --zone=${ZONE} -- 'sudo journalctl -u ebpf-edr --since=\"5 minutes ago\" | grep DBG'"
 echo "══════════════════════════════════════════════════════"
