@@ -1,0 +1,40 @@
+networks:
+  sensor-net:
+    driver: bridge
+
+services:
+  telemetry-collector:
+    image: us-west1-docker.pkg.dev/ebpfagent/ebpf-edr/collector:latest
+    networks: [sensor-net]
+    ports:
+      - "8080:8080"
+
+  env-sensor:
+    image: us-west1-docker.pkg.dev/ebpfagent/ebpf-edr/sensor:latest
+    environment:
+      SENSOR_TYPE: env-sensor
+      COLLECTOR_URL: http://telemetry-collector:8080/telemetry
+    volumes:
+      - /etc/sensor/env-sensor/tls:/etc/sensor/tls:ro
+    networks: [sensor-net]
+    depends_on: [telemetry-collector]
+
+  gps-tracker:
+    image: us-west1-docker.pkg.dev/ebpfagent/ebpf-edr/sensor:latest
+    environment:
+      SENSOR_TYPE: gps-tracker
+      COLLECTOR_URL: http://telemetry-collector:8080/telemetry
+    volumes:
+      - /etc/sensor/gps-tracker/tls:/etc/sensor/tls:ro
+    networks: [sensor-net]
+    depends_on: [telemetry-collector]
+
+  device-health:
+    image: us-west1-docker.pkg.dev/ebpfagent/ebpf-edr/sensor:latest
+    environment:
+      SENSOR_TYPE: device-health
+      COLLECTOR_URL: http://telemetry-collector:8080/telemetry
+    volumes:
+      - /etc/sensor/device-health/tls:/etc/sensor/tls:ro
+    networks: [sensor-net]
+    depends_on: [telemetry-collector]

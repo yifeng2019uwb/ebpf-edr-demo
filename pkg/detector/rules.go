@@ -5,6 +5,7 @@ package detector
 
 import (
 	"fmt"
+	"log"
 	"net"
 	"path/filepath"
 	"strings"
@@ -142,6 +143,7 @@ func checkProcessRules(event processor.ProcessEvent, res workload.ResolveResult)
 func checkFileRules(event processor.FileEvent, res workload.ResolveResult) *alert.Alert {
 	filename := processor.CString(event.Filename[:])
 	comm := processor.CString(event.Comm[:])
+	log.Printf("DBG file-detect: comm=%q mntNsID=%d state=%s file=%q", comm, event.MntNsId, res.State, filename)
 
 	for _, w := range fileCommWhitelist {
 		if comm == w {

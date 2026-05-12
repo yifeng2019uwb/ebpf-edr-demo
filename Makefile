@@ -1,8 +1,10 @@
-BINARY         := ebpf-edr-demo
+BINARY          := ebpf-edr-demo
 DOCKER_REGISTRY := us-west1-docker.pkg.dev/ebpfagent/ebpf-edr
 DOCKER_IMAGE    := $(DOCKER_REGISTRY)/ebpf-edr:latest
+SENSOR_IMAGE    := $(DOCKER_REGISTRY)/sensor:latest
+COLLECTOR_IMAGE := $(DOCKER_REGISTRY)/collector:latest
 
-.PHONY: generate build rebuild test vet clean docker-build docker-push run-docker run-alert-router
+.PHONY: generate build rebuild test vet clean docker-build docker-push sensor-build sensor-push run-docker run-alert-router infra-up infra-down
 
 ## generate — compile .bpf.c → .o and regenerate Go wrappers in pkg/bpf/
 ## Requires: clang, llvm, libbpf-dev (run on GCP VM, not Mac)
@@ -46,3 +48,23 @@ run-docker:
 ## run-alert-router — run the Alert Router on laptop (open http://localhost:8888)
 run-alert-router:
 	go run ./cmd/alert-router/
+
+## sensor-build — cross-compile sensor + collector binaries for linux/amd64
+sensor-build:
+	cd sensor && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o sensor .
+	cd sensor/collector && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o collector .
+
+## sensor-push — build and push sensor + collector images to Artifact Registry
+sensor-push: sensor-build
+	docker buildx build --platform linux/amd64 --no-cache --push \
+		-t $(SENSOR_IMAGE) sensor/
+	docker buildx build --platform linux/amd64 --no-cache --push \
+		-t $(COLLECTOR_IMAGE) sensor/collector/
+
+## infra-up — provision all infrastructure via Pulumi (logging, pubsub, IAM, sensor VM)
+infra-up:
+	cd infra && pulumi up
+
+## infra-down — destroy all Pulumi-managed infrastructure (drops sensor VM when not in use)
+infra-down:
+	cd infra && pulumi destroy

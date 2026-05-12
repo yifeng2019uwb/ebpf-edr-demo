@@ -91,7 +91,7 @@ func (r *DockerResolver) buildCache() map[uint32]ResolveResult {
 		m[hostNsID] = r.bareResult(StateHost)
 	}
 
-	idToName := dockerIDToName()
+	idToInfo := dockerIDToInfo()
 
 	entries, err := filepath.Glob("/proc/[0-9]*/ns/mnt")
 	if err != nil {
@@ -126,11 +126,11 @@ func (r *DockerResolver) buildCache() map[uint32]ResolveResult {
 		}
 
 		rawName := containerID[:dockerShortIDLen] // short ID fallback when not in docker ps
-		if name, ok := idToName[containerID]; ok {
-			rawName = name
+		service := rawName
+		if info, ok := idToInfo[containerID]; ok {
+			rawName = info.name
+			service = info.service
 		}
-
-		service := normalizeServiceName(rawName)
 
 		m[nsID] = ResolveResult{
 			Identity: WorkloadIdentity{
@@ -151,16 +151,26 @@ func (r *DockerResolver) buildCache() map[uint32]ResolveResult {
 	return m
 }
 
+// containerIDInfo holds the Docker container name and its resolved service name.
+type containerIDInfo struct {
+	name    string // full container name, e.g. "sensor-env-sensor-1"
+	service string // service name for policy matching, e.g. "env-sensor"
+}
 
-func dockerIDToName() map[string]string {
-	m := make(map[string]string)
+// dockerIDToInfo returns a map from full container ID to containerIDInfo.
+// It uses the Docker Compose service label (com.docker.compose.service) when present,
+// which correctly handles Compose v2 names like "sensor-env-sensor-1" → "env-sensor".
+// Falls back to normalizeServiceName for non-Compose containers.
+// Service names cannot contain spaces, so space-separated fields are safe here.
+func dockerIDToInfo() map[string]containerIDInfo {
+	m := make(map[string]containerIDInfo)
 
 	out, err := exec.Command(
 		"docker",
 		"ps",
 		"--no-trunc",
 		"--format",
-		"{{.ID}} {{.Names}}",
+		`{{.ID}} {{.Names}} {{.Label "com.docker.compose.service"}}`,
 	).Output()
 	if err != nil {
 		return m
@@ -169,9 +179,15 @@ func dockerIDToName() map[string]string {
 	scanner := bufio.NewScanner(strings.NewReader(string(out)))
 	for scanner.Scan() {
 		fields := strings.Fields(scanner.Text())
-		if len(fields) == 2 {
-			m[fields[0]] = fields[1]
+		if len(fields) < 2 {
+			continue
 		}
+		id, name := fields[0], fields[1]
+		service := normalizeServiceName(name)
+		if len(fields) >= 3 {
+			service = fields[2]
+		}
+		m[id] = containerIDInfo{name: name, service: service}
 	}
 
 	return m
