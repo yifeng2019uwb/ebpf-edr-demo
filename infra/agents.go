@@ -11,13 +11,16 @@ import (
 // To add a new environment: add its SA member string to the returned array
 // and run pulumi up — base.go picks it up automatically.
 //
-// GCP-native (GCP VM, GKE): use compute/workload-identity SA — no key file needed.
-// Non-GCP (Oracle VMs):     dedicated SA with key file — created as Pulumi resource.
+// GCP-native environments (GCP VM, GKE): use compute/workload-identity SA — no key file needed.
+// Non-GCP environments (Oracle VMs): dedicated SA with key file — created as Pulumi resource.
+//
+// Note: sensor VM IAM is managed separately in sensor.go (deploySensor),
+// only provisioned when sensorEnabled=true. No entry needed here.
 func deployAgentIdentities(ctx *pulumi.Context) (pulumi.StringArray, error) {
 
 	// ── GCP-native agents ─────────────────────────────────────────────────────
 
-	// GCP Compute VM running Docker (cloud-native-order-processor)
+	// GCP Compute VM running Docker (cloud-native-order-processor, OpenClaw project)
 	gcpDockerVMSA := pulumi.String("serviceAccount:323172929342-compute@developer.gserviceaccount.com")
 
 	// GKE Workload Identity SA (order-processor-sa, bound via K8s ServiceAccount)
@@ -43,7 +46,7 @@ func deployAgentIdentities(ctx *pulumi.Context) (pulumi.StringArray, error) {
 	if err != nil {
 		return nil, err
 	}
-	ctx.Export("oracleAgentKey", pulumi.ToSecret(oracleKey.PrivateKeyData))
+	ctx.Export("oracleAgentKey", pulumi.ToSecret(oracleKey.PrivateKey))
 
 	oracleSAMember := oracleSA.Email.ApplyT(func(e string) string {
 		return "serviceAccount:" + e

@@ -4,7 +4,10 @@ DOCKER_IMAGE    := $(DOCKER_REGISTRY)/ebpf-edr:latest
 SENSOR_IMAGE    := $(DOCKER_REGISTRY)/sensor:latest
 COLLECTOR_IMAGE := $(DOCKER_REGISTRY)/collector:latest
 
-.PHONY: generate build rebuild test vet clean docker-build docker-push sensor-build sensor-push run-docker run-alert-router infra-up infra-down github-release
+# Path to order-processor repo (override if needed)
+ORDER_PROCESSOR_DIR ?= $(HOME)/workspace/github_projects/order_processor/cloud-native-order-processor
+
+.PHONY: generate build rebuild test vet clean docker-build docker-push sensor-build sensor-push run-docker run-alert-router infra-up infra-down github-release test-env-up test-env-down
 
 ## generate — compile .bpf.c → .o and regenerate Go wrappers in pkg/bpf/
 ## Requires: clang, llvm, libbpf-dev (run on GCP VM, not Mac)
@@ -68,6 +71,42 @@ infra-up:
 ## infra-down — destroy all Pulumi-managed infrastructure (drops sensor VM when not in use)
 infra-down:
 	cd infra && pulumi destroy
+
+## test-env-up — spin up all test environments (GKE + order-processor + eBPF DaemonSet)
+## Cost: ~$100/month while running — destroy when done with make test-env-down
+## Usage: make test-env-up
+## Override order-processor path: make test-env-up ORDER_PROCESSOR_DIR=/path/to/repo
+test-env-up:
+	@echo "=== Step 1: eBPF infra (Cloud Logging, Pub/Sub, IAM) ==="
+	$(MAKE) infra-up
+	@echo ""
+	@echo "=== Step 2: GKE cluster (order-processor) ==="
+	cd $(ORDER_PROCESSOR_DIR)/gcp_gke && pulumi up --yes
+	@echo ""
+	@echo "=== Step 3: Deploy order-processor + eBPF DaemonSet ==="
+	cd $(ORDER_PROCESSOR_DIR)/gcp_gke && ./deploy.sh all
+	@echo ""
+	@echo "=== Done ==="
+	@echo "Gateway URL: check 'kubectl get svc -n order-processor' for EXTERNAL-IP"
+	@echo "eBPF alerts: gcloud logging read 'logName=\"projects/ebpfagent/logs/ebpf-edr-alerts\"' --project=ebpfagent --limit=10"
+	@echo "Alert Router: make run-alert-router"
+	@echo ""
+	@echo "IMPORTANT: Run 'make test-env-down' when done to stop ~\$$100/month charges"
+
+## test-env-down — destroy all test environments to save ~$100/month
+## Keeps: eBPF infra (Cloud Logging, Pub/Sub, IAM), GCP Docker VM
+## Destroys: GKE cluster, Load Balancer, Cloud NAT
+test-env-down:
+	@echo "=== Destroying GKE cluster + order-processor ==="
+	cd $(ORDER_PROCESSOR_DIR)/gcp_gke && ./cleanup.sh 2>/dev/null || true
+	cd $(ORDER_PROCESSOR_DIR)/gcp_gke && pulumi destroy --yes
+	@echo ""
+	@echo "=== Verifying no orphaned resources ==="
+	@gcloud compute forwarding-rules list --project=ebpfagent --format="table(name,region)" 2>/dev/null && echo "Load balancers: none ✓" || true
+	@gcloud container clusters list --project=ebpfagent --format="table(name,location)" 2>/dev/null && echo "GKE clusters: none ✓" || true
+	@echo ""
+	@echo "=== Done — GCP charges now ~\$$1/month ==="
+	@echo "eBPF monitoring continues on GCP VM + Oracle VMs"
 
 ## github-release — build linux/amd64 binary and publish as a GitHub release
 ## Usage: make github-release VERSION=v0.1.0

@@ -99,6 +99,63 @@ Run manually (Linux only):
 make generate   # runs: go generate ./pkg/bpf/
 ```
 
+## Infra Deployment (Pulumi)
+
+Manages: Cloud Logging bucket, Pub/Sub topic, IAM for all eBPF agents.
+Run once after initial clone, and again whenever agents are added/removed.
+
+### Prerequisites
+
+```bash
+# Authenticated gcloud
+gcloud auth application-default login
+
+# Pulumi logged in
+pulumi login
+```
+
+### Deploy / update infra
+
+```bash
+make infra-up
+```
+
+This provisions:
+- Cloud Logging custom bucket (`ebpf-edr-security-logs-us-west1`, 365-day retention)
+- Pub/Sub topic `edr-alerts` + subscription `edr-alerts-router-sub`
+- IAM bindings for all agent SAs (`logging.logWriter`, `pubsub.publisher`)
+- Oracle VM SA (`healthcare-oracle-agent`) + key (see below)
+
+### Oracle VM — get SA key after deploy
+
+Oracle VMs have no GCE metadata server, so they use an explicit SA key file.
+After `make infra-up`, retrieve the key:
+
+```bash
+cd infra && pulumi stack output oracleAgentKey --show-secrets | base64 -d > /tmp/oracle-agent.json
+```
+
+Deploy to both Oracle VMs (VM1 + VM2) via the health-ai setup script:
+
+```bash
+# In healthcare-ai-microservices repo:
+EBPF_SA_KEY_FILE=/tmp/oracle-agent.json ./docker/setup-vm.sh
+```
+
+### Add a new monitored environment
+
+1. Add the new SA member string to `agentMembers` in `infra/agents.go`
+2. Run `make infra-up`
+3. Deploy the agent binary to the new host (see per-environment sections below)
+
+### Tear down infra
+
+```bash
+make infra-down
+```
+
+---
+
 ## One-time VM setup
 
 The Docker VM is in a different GCP project than `ebpfagent`. Run once after first SSH:

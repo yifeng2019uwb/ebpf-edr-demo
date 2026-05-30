@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/pulumi/pulumi-gcp/sdk/v9/go/gcp/logging"
 	"github.com/pulumi/pulumi-gcp/sdk/v9/go/gcp/projects"
 	"github.com/pulumi/pulumi-gcp/sdk/v9/go/gcp/pubsub"
@@ -40,15 +42,18 @@ func deployBase(ctx *pulumi.Context, agentMembers pulumi.StringArray) (*pubsub.T
 
 	// ── logging.logWriter — all agents write to central Cloud Logging ─────────
 	//
-	// IAMBinding is authoritative for this role.
+	// Uses IAMMember (additive) not IAMBinding (authoritative) so that
+	// sensor.go can independently manage sensor VM IAM without conflicts.
 	// Add new environments in agents.go — no changes needed here.
-	_, err = projects.NewIAMBinding(ctx, "ebpf-agents-logging-writer", &projects.IAMBindingArgs{
-		Project: pulumi.String(project),
-		Role:    pulumi.String("roles/logging.logWriter"),
-		Members: agentMembers,
-	})
-	if err != nil {
-		return nil, err
+	for i, member := range agentMembers {
+		_, err = projects.NewIAMMember(ctx, fmt.Sprintf("ebpf-agent-logging-writer-%d", i), &projects.IAMMemberArgs{
+			Project: pulumi.String(project),
+			Role:    pulumi.String("roles/logging.logWriter"),
+			Member:  member.(pulumi.StringInput),
+		})
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// ── Pub/Sub — real-time alert stream ─────────────────────────────────────
@@ -76,14 +81,16 @@ func deployBase(ctx *pulumi.Context, agentMembers pulumi.StringArray) (*pubsub.T
 	}
 
 	// All agents — publisher on edr-alerts topic (topic-level, not project-wide)
-	_, err = pubsub.NewTopicIAMBinding(ctx, "ebpf-agents-pubsub-publisher", &pubsub.TopicIAMBindingArgs{
-		Topic:   topic.Name,
-		Project: pulumi.String(project),
-		Role:    pulumi.String("roles/pubsub.publisher"),
-		Members: agentMembers,
-	})
-	if err != nil {
-		return nil, err
+	for i, member := range agentMembers {
+		_, err = pubsub.NewTopicIAMMember(ctx, fmt.Sprintf("ebpf-agent-pubsub-publisher-%d", i), &pubsub.TopicIAMMemberArgs{
+			Topic:   topic.Name,
+			Project: pulumi.String(project),
+			Role:    pulumi.String("roles/pubsub.publisher"),
+			Member:  member.(pulumi.StringInput),
+		})
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// ── Cold storage: GCS bucket + lifecycle + sink ───────────────────────────
