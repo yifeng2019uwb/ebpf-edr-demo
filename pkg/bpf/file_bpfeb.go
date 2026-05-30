@@ -13,7 +13,7 @@ import (
 	"github.com/cilium/ebpf"
 )
 
-type filePendingOpen struct {
+type fileFileEvent struct {
 	_        structs.HostLayout
 	MntNsId  uint64
 	Pid      int32
