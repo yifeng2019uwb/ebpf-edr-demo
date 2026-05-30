@@ -32,6 +32,7 @@ const (
 type WorkloadIdentity struct {
 	Runtime string // "docker" | "k8s"
 	Service string // logical service name used by detection rules
+	Env     string // deployment environment, e.g. "gcp-vm", "gke", "oracle-vm2" — set via ENV env var
 }
 
 // WorkloadMeta keeps raw/debug information.

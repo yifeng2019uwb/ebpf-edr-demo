@@ -4,7 +4,7 @@ DOCKER_IMAGE    := $(DOCKER_REGISTRY)/ebpf-edr:latest
 SENSOR_IMAGE    := $(DOCKER_REGISTRY)/sensor:latest
 COLLECTOR_IMAGE := $(DOCKER_REGISTRY)/collector:latest
 
-.PHONY: generate build rebuild test vet clean docker-build docker-push sensor-build sensor-push run-docker run-alert-router infra-up infra-down
+.PHONY: generate build rebuild test vet clean docker-build docker-push sensor-build sensor-push run-docker run-alert-router infra-up infra-down github-release
 
 ## generate — compile .bpf.c → .o and regenerate Go wrappers in pkg/bpf/
 ## Requires: clang, llvm, libbpf-dev (run on GCP VM, not Mac)
@@ -68,3 +68,14 @@ infra-up:
 ## infra-down — destroy all Pulumi-managed infrastructure (drops sensor VM when not in use)
 infra-down:
 	cd infra && pulumi destroy
+
+## github-release — build linux/amd64 binary and publish as a GitHub release
+## Usage: make github-release VERSION=v0.1.0
+## Requires: gh CLI authenticated (gh auth login)
+VERSION ?= $(shell git describe --tags --always --dirty)
+github-release: build
+	mv $(BINARY) ebpf-edr-linux-amd64
+	gh release create $(VERSION) ebpf-edr-linux-amd64 \
+		--title "eBPF EDR $(VERSION)" \
+		--notes "linux/amd64 binary for deployment to Docker VMs (GCP, Oracle Cloud, etc.)"
+	mv ebpf-edr-linux-amd64 $(BINARY)

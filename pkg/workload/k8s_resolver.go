@@ -25,6 +25,7 @@ type K8sResolver struct {
 	node      string
 	region    string
 	cluster   string
+	env       string
 }
 
 func (r *K8sResolver) Start() error {
@@ -51,7 +52,7 @@ func (r *K8sResolver) bareResult(state ResolveState) ResolveResult {
 		service = "host"
 	}
 	return ResolveResult{
-		Identity: WorkloadIdentity{Runtime: "k8s", Service: service},
+		Identity: WorkloadIdentity{Runtime: "k8s", Service: service, Env: r.env},
 		Meta:     WorkloadMeta{Node: r.node, Region: r.region, Cluster: r.cluster},
 		State:    state,
 	}
@@ -99,7 +100,7 @@ func (r *K8sResolver) buildCache() map[uint32]ResolveResult {
 		m[id] = r.bareResult(StateHost)
 	}
 
-	containerMap := crictlContainerMap(r.node, r.region, r.cluster)
+	containerMap := crictlContainerMap(r.node, r.region, r.cluster, r.env)
 
 	entries, err := filepath.Glob("/proc/[0-9]*/ns/mnt")
 	if err != nil {
@@ -196,7 +197,7 @@ type crictlOutput struct {
 	} `json:"containers"`
 }
 
-func crictlContainerMap(node, region, cluster string) map[string]ResolveResult {
+func crictlContainerMap(node, region, cluster, env string) map[string]ResolveResult {
 	m := make(map[string]ResolveResult)
 
 	out, err := exec.Command("crictl", "ps", "--output", "json").Output()
@@ -224,6 +225,7 @@ func crictlContainerMap(node, region, cluster string) map[string]ResolveResult {
 			Identity: WorkloadIdentity{
 				Runtime: "k8s",
 				Service: service,
+				Env:     env,
 			},
 			Meta: WorkloadMeta{
 				Container: containerName,

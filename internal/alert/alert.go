@@ -58,6 +58,7 @@ type alertPayload struct {
 	Comm          string `json:"comm"`
 	Runtime       string `json:"runtime"`
 	Service       string `json:"service"`
+	Env           string `json:"env,omitempty"`
 	State         string `json:"state"`
 	Cluster       string `json:"cluster"`
 	Pod           string `json:"pod"`
@@ -133,12 +134,13 @@ func (h *Handler) Send(a Alert) {
 	state := a.Workload.State
 
 	line := fmt.Sprintf(
-		"[%s] ALERT level=%s rule=%s runtime=%s service=%s state=%s pod=%s namespace=%s pid=%d ppid=%d uid=%d comm=%s%s msg=%s\n",
+		"[%s] ALERT level=%s rule=%s runtime=%s service=%s env=%s state=%s pod=%s namespace=%s pid=%d ppid=%d uid=%d comm=%s%s msg=%s\n",
 		now.Format("2006-01-02 15:04:05"),
 		a.Level,
 		a.Rule,
 		id.Runtime,
 		id.Service,
+		id.Env,
 		state,
 		meta.Pod,
 		meta.Namespace,
@@ -168,6 +170,7 @@ func (h *Handler) Send(a Alert) {
 		Comm:          a.Comm,
 		Runtime:       id.Runtime,
 		Service:       id.Service,
+		Env:           id.Env,
 		State:         string(state),
 		Cluster:       meta.Cluster,
 		Pod:           meta.Pod,

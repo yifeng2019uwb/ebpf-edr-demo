@@ -13,6 +13,7 @@ bin/
 # Ignore compiled BPF object files — Go wrappers (*_bpfel.go, *_bpfeb.go) are tracked
 # so CI can build without needing clang installed.
 *.o
+infra/ebpf_edr_infra
 
 # --- Dependency Management ---
 # Keep go.mod and go.sum, but ignore the vendor folder if you use one

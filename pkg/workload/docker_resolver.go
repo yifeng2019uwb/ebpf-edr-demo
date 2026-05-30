@@ -27,6 +27,7 @@ type DockerResolver struct {
 	node      string
 	region    string
 	cluster   string
+	env       string
 }
 
 func (r *DockerResolver) Start() error {
@@ -50,7 +51,7 @@ func (r *DockerResolver) bareResult(state ResolveState) ResolveResult {
 		service = "host"
 	}
 	return ResolveResult{
-		Identity: WorkloadIdentity{Runtime: "docker", Service: service},
+		Identity: WorkloadIdentity{Runtime: "docker", Service: service, Env: r.env},
 		Meta:     WorkloadMeta{Node: r.node, Region: r.region, Cluster: r.cluster},
 		State:    state,
 	}
@@ -136,6 +137,7 @@ func (r *DockerResolver) buildCache() map[uint32]ResolveResult {
 			Identity: WorkloadIdentity{
 				Runtime: "docker",
 				Service: service,
+				Env:     r.env,
 			},
 			Meta: WorkloadMeta{
 				Container: rawName,
@@ -183,8 +185,8 @@ func dockerIDToInfo() map[string]containerIDInfo {
 			continue
 		}
 		id, name := fields[0], fields[1]
-		service := normalizeServiceName(name)
-		if len(fields) >= 3 {
+		service := name // use full container name; overridden by Compose label if present
+		if len(fields) >= 3 && fields[2] != "" {
 			service = fields[2]
 		}
 		m[id] = containerIDInfo{name: name, service: service}

@@ -7,14 +7,11 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
 
-const (
-	openclawComputeSA = "serviceAccount:323172929342-compute@developer.gserviceaccount.com"
-	gkeSA             = "serviceAccount:order-processor-sa@" + project + ".iam.gserviceaccount.com"
-)
+// deployBase provisions Cloud Logging, Pub/Sub, and IAM for all eBPF agents.
+// agentMembers is the full list of agent SA member strings from deployAgentIdentities.
+// Returns the edr-alerts topic so deploySensor can attach additional grants.
+func deployBase(ctx *pulumi.Context, agentMembers pulumi.StringArray) (*pubsub.Topic, error) {
 
-// deployBase provisions Cloud Logging, Pub/Sub, and cross-project IAM for monitored environments.
-// Returns the edr-alerts topic so deploySensor can attach publisher grants.
-func deployBase(ctx *pulumi.Context) (*pubsub.Topic, error) {
 	// ── Hot storage: Cloud Logging custom bucket, 365-day retention ──────────
 	//
 	// Replaces the _Default bucket (30-day) for ebpf-edr-alerts.
@@ -41,40 +38,23 @@ func deployBase(ctx *pulumi.Context) (*pubsub.Topic, error) {
 		return nil, err
 	}
 
-	// ── Cross-project agent access ───────────────────────────────────────────
+	// ── logging.logWriter — all agents write to central Cloud Logging ─────────
 	//
-	// Each monitored project's compute SA gets logging.logWriter on ebpfagent.
-	// The agent only needs GOOGLE_CLOUD_PROJECT=ebpfagent in /etc/environment —
-	// no key file, no manual credentials.
-	//
-	// To add a new monitored project: find its compute SA
-	//   gcloud iam service-accounts list --project=<project-id>
-	// then add an entry below and run pulumi up.
-
-	// OpenClaw project — Docker VM (instance-20260318-023006)
-	_, err = projects.NewIAMMember(ctx, "openclaw-vm-logging-writer", &projects.IAMMemberArgs{
+	// IAMBinding is authoritative for this role.
+	// Add new environments in agents.go — no changes needed here.
+	_, err = projects.NewIAMBinding(ctx, "ebpf-agents-logging-writer", &projects.IAMBindingArgs{
 		Project: pulumi.String(project),
 		Role:    pulumi.String("roles/logging.logWriter"),
-		Member:  pulumi.String(openclawComputeSA),
+		Members: agentMembers,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	// Healthcare AI project — add compute SA once agent is deployed there
-	// _, err = projects.NewIAMMember(ctx, "healthcare-vm-logging-writer", &projects.IAMMemberArgs{
-	// 	Project: pulumi.String(project),
-	// 	Role:    pulumi.String("roles/logging.logWriter"),
-	// 	Member:  pulumi.String("serviceAccount:<project-number>-compute@developer.gserviceaccount.com"),
-	// })
-	// if err != nil {
-	// 	return nil, err
-	// }
-
-	// ── Pub/Sub — real-time alert stream ────────────────────────────────────
+	// ── Pub/Sub — real-time alert stream ─────────────────────────────────────
 	//
-	// Agent publishes CRITICAL/HIGH alerts here (fire-and-forget, async).
-	// Alert Router subscribes locally and fans out via WebSocket to the browser.
+	// Agents publish CRITICAL/HIGH alerts here (fire-and-forget, async).
+	// Alert Router subscribes and fans out via WebSocket to the browser.
 	// Topic-level IAM keeps publisher grants minimal (not project-wide).
 	topic, err := pubsub.NewTopic(ctx, "edr-alerts-topic", &pubsub.TopicArgs{
 		Name:    pulumi.String("edr-alerts"),
@@ -95,23 +75,12 @@ func deployBase(ctx *pulumi.Context) (*pubsub.Topic, error) {
 		return nil, err
 	}
 
-	// GKE agent SA — publisher on edr-alerts topic
-	_, err = pubsub.NewTopicIAMMember(ctx, "gke-sa-pubsub-publisher", &pubsub.TopicIAMMemberArgs{
+	// All agents — publisher on edr-alerts topic (topic-level, not project-wide)
+	_, err = pubsub.NewTopicIAMBinding(ctx, "ebpf-agents-pubsub-publisher", &pubsub.TopicIAMBindingArgs{
 		Topic:   topic.Name,
 		Project: pulumi.String(project),
 		Role:    pulumi.String("roles/pubsub.publisher"),
-		Member:  pulumi.String(gkeSA),
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	// Docker VM compute SA — publisher on edr-alerts topic
-	_, err = pubsub.NewTopicIAMMember(ctx, "openclaw-vm-pubsub-publisher", &pubsub.TopicIAMMemberArgs{
-		Topic:   topic.Name,
-		Project: pulumi.String(project),
-		Role:    pulumi.String("roles/pubsub.publisher"),
-		Member:  pulumi.String(openclawComputeSA),
+		Members: agentMembers,
 	})
 	if err != nil {
 		return nil, err
@@ -128,52 +97,9 @@ func deployBase(ctx *pulumi.Context) (*pubsub.Topic, error) {
 	//
 	// Regulation basis: SOC 2 Type II (1yr), PCI DSS 10.7 (1yr), NIST SP 800-92 (3yr)
 	//
-	// gcsBucket, err := storage.NewBucket(ctx, "ebpf-edr-cold-bucket", &storage.BucketArgs{
-	// 	Name:                     pulumi.Sprintf("ebpf-edr-cold-%s", region),
-	// 	Location:                 pulumi.String(region),
-	// 	StorageClass:             pulumi.String("STANDARD"),
-	// 	UniformBucketLevelAccess: pulumi.Bool(true),
-	// 	LifecycleRules: storage.BucketLifecycleRuleArray{
-	// 		&storage.BucketLifecycleRuleArgs{
-	// 			Action: &storage.BucketLifecycleRuleActionArgs{
-	// 				Type:         pulumi.String("SetStorageClass"),
-	// 				StorageClass: pulumi.String("COLDLINE"),
-	// 			},
-	// 			Condition: &storage.BucketLifecycleRuleConditionArgs{Age: pulumi.IntPtr(365)},
-	// 		},
-	// 		&storage.BucketLifecycleRuleArgs{
-	// 			Action: &storage.BucketLifecycleRuleActionArgs{
-	// 				Type:         pulumi.String("SetStorageClass"),
-	// 				StorageClass: pulumi.String("ARCHIVE"),
-	// 			},
-	// 			Condition: &storage.BucketLifecycleRuleConditionArgs{Age: pulumi.IntPtr(1095)},
-	// 		},
-	// 	},
-	// })
-	// if err != nil {
-	// 	return nil, err
-	// }
-	//
-	// gcsSink, err := logging.NewProjectSink(ctx, "ebpf-edr-to-gcs", &logging.ProjectSinkArgs{
-	// 	Name:                 pulumi.Sprintf("ebpf-edr-to-gcs-%s", region),
-	// 	Destination:          pulumi.Sprintf("storage.googleapis.com/ebpf-edr-cold-%s", region),
-	// 	Filter:               pulumi.Sprintf(`logName="projects/%s/logs/%s"`, project, logName),
-	// 	UniqueWriterIdentity: pulumi.Bool(true),
-	// })
-	// if err != nil {
-	// 	return nil, err
-	// }
-	//
-	// // GCP auto-creates a writer SA for each sink. Grant it objectCreator on the GCS bucket.
-	// // gcsSink.WriterIdentity is resolved at deploy time — do not hardcode.
-	// _, err = storage.NewBucketIAMMember(ctx, "ebpf-edr-sink-gcs-writer", &storage.BucketIAMMemberArgs{
-	// 	Bucket: gcsBucket.Name,
-	// 	Role:   pulumi.String("roles/storage.objectCreator"),
-	// 	Member: gcsSink.WriterIdentity,
-	// })
-	// if err != nil {
-	// 	return nil, err
-	// }
+	// gcsBucket, err := storage.NewBucket(ctx, "ebpf-edr-cold-bucket", &storage.BucketArgs{ ... })
+	// gcsSink, err := logging.NewProjectSink(ctx, "ebpf-edr-to-gcs", &logging.ProjectSinkArgs{ ... })
+	// _, err = storage.NewBucketIAMMember(ctx, "ebpf-edr-sink-gcs-writer", ...)
 
 	return topic, nil
 }

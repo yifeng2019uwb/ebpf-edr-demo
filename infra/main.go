@@ -13,7 +13,12 @@ const (
 
 func main() {
 	pulumi.Run(func(ctx *pulumi.Context) error {
-		topic, err := deployBase(ctx)
+		agentMembers, err := deployAgentIdentities(ctx)
+		if err != nil {
+			return err
+		}
+
+		topic, err := deployBase(ctx, agentMembers)
 		if err != nil {
 			return err
 		}

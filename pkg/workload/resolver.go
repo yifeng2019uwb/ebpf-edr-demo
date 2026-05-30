@@ -14,11 +14,12 @@ func NewResolver(runtime string) WorkloadResolver {
 	}
 	region := os.Getenv("REGION")
 	cluster := os.Getenv("CLUSTER_NAME")
+	env := os.Getenv("ENV")
 
 	switch runtime {
 	case "k8s":
-		return &K8sResolver{node: node, region: region, cluster: cluster}
+		return &K8sResolver{node: node, region: region, cluster: cluster, env: env}
 	default:
-		return &DockerResolver{node: node, region: region, cluster: cluster}
+		return &DockerResolver{node: node, region: region, cluster: cluster, env: env}
 	}
 }
