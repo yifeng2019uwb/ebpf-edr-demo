@@ -105,7 +105,7 @@ int handle_enter(struct trace_event_raw_sys_enter *ctx)
 // The attempt against an existing sensitive file IS the signal,
 // whether the OS allowed it or not.
 SEC("tracepoint/syscalls/sys_exit_openat")
-int handle_valid_open(struct trace_event_raw_sys_exit *ctx)
+int handle_exit(struct trace_event_raw_sys_exit *ctx)
 {
 	u64 id  = bpf_get_current_pid_tgid();
 	u32 tid = (u32)id;
