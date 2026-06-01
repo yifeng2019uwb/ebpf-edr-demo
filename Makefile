@@ -16,7 +16,7 @@ generate:
 
 ## build — compile the EDR agent binary (cross-compiles to linux/amd64 from any host)
 build:
-	GOOS=linux GOARCH=amd64 go build -o $(BINARY) ./cmd/edr-monitor/
+	GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o $(BINARY) ./cmd/edr-monitor/
 
 ## rebuild — regenerate BPF wrappers then build (use after editing .bpf.c files)
 rebuild: generate build
