@@ -1,4 +1,4 @@
-BINARY          := ebpf-edr-demo
+BINARY          := ebpf-edr
 DOCKER_REGISTRY := us-west1-docker.pkg.dev/ebpfagent/ebpf-edr
 DOCKER_IMAGE    := $(DOCKER_REGISTRY)/ebpf-edr:latest
 SENSOR_IMAGE    := $(DOCKER_REGISTRY)/sensor:latest
@@ -68,9 +68,23 @@ sensor-push: sensor-build
 infra-up:
 	cd infra && pulumi up
 
-## infra-down — destroy all Pulumi-managed infrastructure (drops sensor VM when not in use)
+## infra-down — destroy all Pulumi-managed infrastructure
 infra-down:
 	cd infra && pulumi destroy
+
+## infra-refresh — sync Pulumi state with actual GCP state (fixes drift from manual changes)
+## Run this if resources were changed outside Pulumi (e.g. manually deleted via gcloud)
+infra-refresh:
+	cd infra && pulumi refresh --yes && pulumi up --yes
+
+## sensor-up — provision sensor VM (IoT workload testing)
+sensor-up:
+	cd infra && pulumi config set sensorEnabled true && pulumi up
+
+## sensor-down — destroy sensor VM to save costs (~$15/month)
+## Always use this instead of gcloud compute instances delete
+sensor-down:
+	cd infra && pulumi config set sensorEnabled false && pulumi up
 
 ## test-env-up — spin up all test environments (GKE + order-processor + eBPF DaemonSet)
 ## Cost: ~$100/month while running — destroy when done with make test-env-down
@@ -113,8 +127,6 @@ test-env-down:
 ## Requires: gh CLI authenticated (gh auth login)
 VERSION ?= $(shell git describe --tags --always --dirty)
 github-release: build
-	mv $(BINARY) ebpf-edr-linux-amd64
-	gh release create $(VERSION) ebpf-edr-linux-amd64 \
+	gh release create $(VERSION) $(BINARY) \
 		--title "eBPF EDR $(VERSION)" \
-		--notes "linux/amd64 binary for deployment to Docker VMs (GCP, Oracle Cloud, etc.)"
-	mv ebpf-edr-linux-amd64 $(BINARY)
+		--notes "linux/amd64 binary — deploy to any Linux env (GCP VM, Oracle Cloud, GKE, etc.)"

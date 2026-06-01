@@ -23,6 +23,29 @@ GKE costs ~$100/month — bring up only for testing, destroy after with `make te
 
 ---
 
+## Infrastructure Rules
+
+**Always use Makefile targets to provision and remove cloud resources — never raw `gcloud`, `kubectl`, or `pulumi` commands directly.**
+
+Bypassing Pulumi creates state drift (Pulumi thinks a resource exists when it doesn't), which causes failures on the next `pulumi up`.
+
+| Task | Command | Never do |
+|------|---------|---------|
+| Deploy all infra | `make infra-up` | `gcloud ... create` |
+| Destroy all infra | `make infra-down` | `gcloud ... delete` |
+| Fix state drift | `make infra-refresh` | `pulumi state delete` |
+| Add sensor VM | `make sensor-up` | `gcloud compute instances create` |
+| Remove sensor VM | `make sensor-down` | `gcloud compute instances delete` |
+| Deploy GKE + app | `make test-env-up` | `pulumi up` directly |
+| Destroy GKE + app | `make test-env-down` | `kubectl delete` + `pulumi destroy` |
+
+If resources were changed outside Pulumi (e.g. manual deletion), sync state first:
+```bash
+make infra-refresh   # pulumi refresh → detect drift → pulumi up to reconcile
+```
+
+---
+
 ## Step 1 — GCP Docker VM
 
 Services: order-processor (8 containers)
@@ -61,7 +84,7 @@ docker compose up -d
 
 ```bash
 # On GCP VM — is agent running?
-pgrep -a ebpf-edr-demo
+pgrep -a ebpf-edr
 ```
 
 Expected: process listed with `--runtime=docker`
@@ -69,7 +92,7 @@ Expected: process listed with `--runtime=docker`
 If not running — start it:
 ```bash
 cd ~/workspace/ebpf-edr-demo
-sudo env GOOGLE_CLOUD_PROJECT=ebpfagent ./ebpf-edr-demo --runtime=docker
+sudo env GOOGLE_CLOUD_PROJECT=ebpfagent ./ebpf-edr --runtime=docker
 ```
 
 Confirm startup:
@@ -92,6 +115,10 @@ tail -5 ~/workspace/ebpf-edr-demo/alerts/alert.log
 Services: healthcare-gateway (8080), healthcare-auth (8082)
 eBPF runtime: `--runtime=docker` via systemd service `ebpf-edr`
 
+> **After VM reboot:** Services do NOT auto-start. Always start VM2 first (gateway depends on backend).
+> eBPF agent auto-starts via systemd.
+> `BACKEND_VM_IP` in VM1's `.env` must be VM2's **private IP** (`10.0.1.55`) — set by `deploy-vm.sh` automatically.
+
 ### 2a. Service check
 
 ```bash
@@ -105,10 +132,16 @@ healthcare-auth     Up X minutes
 healthcare-gateway  Up X minutes
 ```
 
-If containers not running:
+If containers not running (start VM2 first — see Step 3a, then):
 ```bash
 ssh -i ~/.ssh/oracle_vm opc@163.192.46.25 \
   "cd ~/healthcare/docker && sudo docker compose -f compose-gateway.yml up -d"
+```
+
+Verify `BACKEND_VM_IP` is set to private IP (not public):
+```bash
+ssh -i ~/.ssh/oracle_vm opc@163.192.46.25 "grep BACKEND_VM_IP ~/healthcare/docker/.env"
+# Expected: BACKEND_VM_IP=10.0.1.55
 ```
 
 Validate service health:
@@ -141,9 +174,9 @@ EBPF_SA_KEY_FILE=/tmp/oracle-agent.json ./docker/setup-vm.sh
 
 Verify agent sees containers:
 ```bash
-# Trigger test event on VM1
+# Trigger CRITICAL alert — shell spawn inside container
 ssh -i ~/.ssh/oracle_vm opc@163.192.46.25 \
-  "sudo docker exec healthcare-auth ls /tmp"
+  "sudo docker exec healthcare-gateway bash -c 'id'"
 
 # Check Cloud Logging for VM1 events
 gcloud logging read 'jsonPayload.env="oracle-vm1"' \
@@ -158,6 +191,9 @@ gcloud logging read 'jsonPayload.env="oracle-vm1"' \
 Services: healthcare-provider (8083), healthcare-ai (8085)
 eBPF runtime: `--runtime=docker` via systemd service `ebpf-edr`
 
+> **After VM reboot:** Start VM2 BEFORE VM1. Services do NOT auto-start. eBPF agent auto-starts via systemd.
+> VM2 is backend-only — accessible only from VM1 via internal VCN (10.0.1.x). Not publicly reachable.
+
 ### 3a. Service check
 
 ```bash
@@ -171,9 +207,8 @@ healthcare-provider  Up X minutes
 healthcare-ai        Up X minutes
 ```
 
-If containers not running:
+If containers not running (start VM2 FIRST, before VM1):
 ```bash
-# Start VM2 before VM1 (gateway depends on backend)
 ssh -i ~/.ssh/oracle_vm opc@163.192.30.193 \
   "cd ~/healthcare/docker && sudo docker compose -f compose-backend.yml up -d"
 ```
@@ -393,7 +428,7 @@ eBPF Cloud Logging and Pub/Sub infra kept (near zero cost).
 
 ```bash
 echo "=== GCP VM ===" && \
-gcloud compute instances list --project=project-3f1d99fa-d525-4aff-a03 --format="table(name,status)" 2>/dev/null
+gcloud compute instances list --project=project-3f1d99fa-d525-4aff-a03 --format="table(name,zone,status)" 2>/dev/null
 
 echo "=== GKE ===" && \
 gcloud container clusters list --project=ebpfagent --format="table(name,status)" 2>/dev/null || echo "not running"

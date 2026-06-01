@@ -24,7 +24,9 @@ func deployAgentIdentities(ctx *pulumi.Context) (pulumi.StringArray, error) {
 	gcpDockerVMSA := pulumi.String("serviceAccount:323172929342-compute@developer.gserviceaccount.com")
 
 	// GKE Workload Identity SA (order-processor-sa, bound via K8s ServiceAccount)
-	gkeWorkloadSA := pulumi.String("serviceAccount:order-processor-sa@" + project + ".iam.gserviceaccount.com")
+	// Commented out — SA is deleted when GKE cluster is destroyed.
+	// Uncomment when running: make test-env-up
+	// gkeWorkloadSA := pulumi.String("serviceAccount:order-processor-sa@" + project + ".iam.gserviceaccount.com")
 
 	// ── Non-GCP agents ────────────────────────────────────────────────────────
 
@@ -54,7 +56,7 @@ func deployAgentIdentities(ctx *pulumi.Context) (pulumi.StringArray, error) {
 
 	return pulumi.StringArray{
 		gcpDockerVMSA,
-		gkeWorkloadSA,
+		// gkeWorkloadSA, // add back when GKE is running (make test-env-up)
 		oracleSAMember,
 	}, nil
 }
