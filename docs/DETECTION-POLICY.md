@@ -133,19 +133,12 @@ A recurring pattern across environments: system monitoring daemons that poll `/p
 
 ## DBG Logging Policy
 
-DBG log lines (`DBG file-detect`, `DBG file-enrich`, `DBG file-pending`, `DBG file-drop`) are for development only.
+DBG log lines (`DBG file-detect`, `DBG file-enrich`, `DBG file-pending`, `DBG file-drop`) have been removed entirely.
 
-- **Default (production)**: `EBPF_DEBUG` not set → DBG lines suppressed
-- **Debug mode**: `EBPF_DEBUG=1` → all DBG lines enabled
-
-> **Status**: DBG gating behind `EBPF_DEBUG=1` is not yet implemented — pending rebuild.
-> Currently ALL file events are logged to journal, causing high CPU and journal flood on Oracle VMs.
-
-Set in systemd service to enable:
-```ini
-[Service]
-Environment=EBPF_DEBUG=1
-```
+The agent logs only:
+- Startup messages (Cloud Logging enabled/disabled, Pub/Sub enabled/disabled)
+- Warnings (dropped events, channel full)
+- Alerts (written to stdout, `alerts/alert.log`, and Cloud Logging)
 
 ---
 
@@ -153,7 +146,7 @@ Environment=EBPF_DEBUG=1
 
 | Change | Environment | Status | File |
 |--------|-------------|--------|------|
-| Add `pmdaproc` to `fileCommWhitelist` | Oracle VM1, VM2 | Pending rebuild | `policy.go` |
-| Add `pmdalinux` to `fileCommWhitelist` | Oracle VM1, VM2 | Pending rebuild | `policy.go` |
-| Gate DBG lines behind `EBPF_DEBUG=1` | All | Pending rebuild | `rules.go`, `main.go` |
-| Rebuild binary + redeploy Oracle VMs | Oracle VM1, VM2 | Blocked on above | — |
+| Add `pmdaproc` to `fileCommWhitelist` | Oracle VM1, VM2 | Done — pending rebuild | `policy.go` |
+| Add `pmdalinux` to `fileCommWhitelist` | Oracle VM1, VM2 | Done — pending rebuild | `policy.go` |
+| Remove DBG log lines entirely | All | Done — pending rebuild | `rules.go`, `main.go` |
+| Rebuild binary + redeploy Oracle VMs | Oracle VM1, VM2 | Pending | — |

@@ -71,6 +71,9 @@ var fileCommWhitelist = []string{
 	"bash",             // getpwuid() at startup reads /etc/passwd for prompt/PS1 — shell_spawn CRITICAL already fires
 	"containerd-shim",  // K8s container shim — manages container stdio and lifecycle files under /run/containerd/
 	"dockerd",          // Docker daemon reads overlay2 on every docker exec / container lifecycle event
+	// Oracle VM — Performance Co-Pilot (PCP) monitoring agents
+	"pmdaproc",         // Oracle PCP process daemon — polls /proc/*/stat, /proc/*/statm, /proc/*/wchan for every process every 30s
+	"pmdalinux",        // Oracle PCP Linux metrics daemon — polls /sys/class/net/*, /proc/net/*, /proc/self/mounts
 }
 
 // containerFSPrefixes — host filesystem paths that hold container layer data.

@@ -142,11 +142,6 @@ func main() {
 			// pending-ns logic → NOW uses State
 			if ev.Workload.State == workload.StatePending {
 				nsID := mntNsIDOf(*ev)
-				if ev.Type == pipeline.FileEventType {
-					log.Printf("DBG file-pending: comm=%q mntNsID=%d file=%q — waiting for container resolution",
-						processor.CString(ev.File.Comm[:]), ev.File.MntNsId,
-						processor.CString(ev.File.Filename[:]))
-				}
 				pendingMu.Lock()
 				pendingBuf[nsID] = append(pendingBuf[nsID], pendingEntry{
 					ev: *ev, mntNsID: nsID, firstSeen: time.Now(),
@@ -161,11 +156,6 @@ func main() {
 				n := enrichedDropped.Add(1)
 				if n == 1 || n%100 == 0 {
 					log.Printf("warning: enrichedCh full, %d enriched events dropped", n)
-				}
-				if ev.Type == pipeline.FileEventType {
-					log.Printf("DBG file-drop: enrichedCh full, dropped comm=%q file=%q",
-						processor.CString(ev.File.Comm[:]),
-						processor.CString(ev.File.Filename[:]))
 				}
 			}
 		}
@@ -289,10 +279,6 @@ func enrich(raw pipeline.RawEvent, r workload.WorkloadResolver) *pipeline.Enrich
 			return nil
 		}
 		res := r.Resolve(uint32(ev.MntNsId), uint32(ev.Pid))
-		log.Printf("DBG file-enrich: comm=%q pid=%d mntNsID=%d state=%s file=%q",
-			processor.CString(ev.Comm[:]), ev.Pid, ev.MntNsId, res.State,
-			processor.CString(ev.Filename[:]))
-
 		return &pipeline.EnrichedEvent{
 			Type:      pipeline.FileEventType,
 			File:      &ev,
