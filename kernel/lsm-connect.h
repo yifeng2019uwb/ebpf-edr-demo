@@ -19,15 +19,14 @@
 // This works because reading big-endian bytes as little-endian uint reverses
 // the byte order, and extracting LSB→MSB gives back the original octets.
 
-// Phase 2 — lpm_key: key type for the blocked_ips LPMTrie map in lsm-connect.bpf.c.
+// lpm_key: key type for the blocked_ips LPMTrie map in lsm-connect.bpf.c.
 // prefixlen must be the first field; the kernel uses it as the CIDR prefix length.
 // Set prefixlen=32 for a single host; set < 32 for a CIDR range.
 // addr must be in network byte order (same representation as net_event.dst_ip).
-//
-// struct lpm_key {
-//     __u32 prefixlen;
-//     __u32 addr;
-// };
+struct lpm_key {
+    __u32 prefixlen;
+    __u32 addr;
+};
 
 struct net_event {
 	__u64 mnt_ns_id;         // offset 0  — mount namespace ID (container identity)

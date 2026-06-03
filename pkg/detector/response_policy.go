@@ -8,8 +8,8 @@ type ResponseAction string
 const (
 	ActionNone        ResponseAction = "none"
 	ActionKillProcess ResponseAction = "kill_process"
-	// Phase 2: ActionBlockIP        ResponseAction = "block_ip"         — block dst IP via eBPF map enforced in lsm-connect.bpf.c
-	// Phase 2: ActionQuarantineFile ResponseAction = "quarantine_file"  — move file to /quarantine/, chmod 000
+	ActionBlockIP     ResponseAction = "block_ip" // blocks dst IP via LPMTrie in lsm-connect.bpf.c (outbound only)
+	// Phase 2: ActionQuarantineFile ResponseAction = "quarantine_file" — move file to /quarantine/, chmod 000
 )
 
 type responseRule struct {
@@ -52,9 +52,10 @@ var responseRules = []responseRule{
 	// T1082 — system info discovery (/etc/passwd, /etc/group): no action — MEDIUM, too noisy
 
 	// Network rules
-	// T1041 — exfiltration over C2: excluded — kill after connect is too late
-	//   Phase 2: block before connect by returning -EPERM in lsm_socket_connect (lsm-connect.bpf.c)
-	// {rule: RuleT1041ExfiltrationOverC2, minLevel: alert.High, action: ActionBlockIP},
+	// T1041 — block dst IP in LPMTrie before TCP handshake (outbound only).
+	// First connection fires the alert and adds IP to map; subsequent connects to same IP are denied.
+	// Requires kernel side: blocked_ips map in lsm-connect.bpf.c + go generate on Linux.
+	{rule: RuleT1041ExfiltrationOverC2, minLevel: alert.High, action: ActionBlockIP},
 }
 
 // ResponseFor returns the response action for the given rule and alert level.

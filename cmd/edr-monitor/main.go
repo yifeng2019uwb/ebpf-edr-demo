@@ -79,6 +79,9 @@ func main() {
 	pendingBuf := make(map[uint32][]pendingEntry)
 
 	det := detector.NewRuleDetector()
+	// blockedIPs: nil until kernel side is activated (see pkg/detector/response.go blockIP comments).
+	// After go generate on GCP VM: pass loader.BlockedIPs here.
+	responder := detector.NewResponder(nil)
 
 	// Producers
 	go func() {
@@ -233,7 +236,7 @@ func main() {
 			for _, a := range det.Detect(ev) {
 				action := detector.ResponseFor(a.Rule, a.Level)
 				if action != detector.ActionNone {
-					detector.Respond(&a, action)
+					responder.Respond(&a, action)
 				}
 				a.ResponseAction = string(action)
 				select {
