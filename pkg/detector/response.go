@@ -22,15 +22,21 @@ func NewResponder(blockedIPs *ebpf.Map) *Responder {
 }
 
 // Respond executes the response action for an alert.
+// Returns the action that was actually executed — empty string if skipped (e.g. nil map).
 // Called synchronously in the detector goroutine immediately after detection fires.
-func (r *Responder) Respond(a *alert.Alert, action ResponseAction) {
+func (r *Responder) Respond(a *alert.Alert, action ResponseAction) ResponseAction {
 	switch action {
 	case ActionKillProcess:
 		killProcess(a)
+		return ActionKillProcess
 	case ActionBlockIP:
-		r.blockIP(a)
+		if r.blockIP(a) {
+			return ActionBlockIP
+		}
+		return ActionNone
 	// Phase 2: ActionQuarantineFile: quarantineFile(a.Filename)
 	}
+	return ActionNone
 }
 
 // killProcess sends SIGKILL to the process that triggered the alert.
@@ -60,15 +66,15 @@ func killProcess(a *alert.Alert) {
 //  2. Run `go generate ./pkg/bpf/...` on GCP VM (Linux) — adds lsmObjs.BlockedIps to generated code
 //  3. In pkg/bpf/loader.go: set l.BlockedIPs = l.lsmObjs.BlockedIps in Load()
 //  4. In cmd/edr-monitor/main.go: pass loader.BlockedIPs to NewResponder()
-func (r *Responder) blockIP(a *alert.Alert) {
+func (r *Responder) blockIP(a *alert.Alert) bool {
 	if r.blockedIPs == nil {
 		log.Printf("response: blockIP skipped — blocked_ips map not loaded (activate kernel side first)")
-		return
+		return false
 	}
 	ip := net.ParseIP(a.DstIP).To4()
 	if ip == nil {
 		log.Printf("response: blockIP skipped — invalid or non-IPv4 address: %s", a.DstIP)
-		return
+		return false
 	}
 	// lpmKey mirrors struct lpm_key in kernel/lsm-connect.h.
 	// prefixlen=32 blocks a single host (/32). Use <32 for CIDR range blocking.
@@ -80,9 +86,10 @@ func (r *Responder) blockIP(a *alert.Alert) {
 	copy(key.Addr[:], ip)
 	if err := r.blockedIPs.Put(key, uint8(1)); err != nil {
 		log.Printf("response: blockIP failed ip=%s: %v", a.DstIP, err)
-		return
+		return false
 	}
 	log.Printf("response: blocked ip=%s rule=%s level=%s", a.DstIP, a.Rule, a.Level)
+	return true
 }
 
 // Phase 2 — quarantineFile: move the accessed file to a quarantine directory and chmod 000.
