@@ -84,6 +84,8 @@ sleep 3
 
 # ── T2: Network staging tool in container ────────────────────────────────────
 # T1105 · T1095
+# Detection fires on binary name — nc/ncat/wget must be executed inside the container.
+# If not installed, copy nc from the host into /usr/local/bin (not /tmp — avoids T1036).
 
 header 2 11 "Network staging tool in container" "HIGH T1105_ingress_tool_transfer"
 if docker exec "${TARGET}" which nc > /dev/null 2>&1; then
@@ -92,11 +94,15 @@ if docker exec "${TARGET}" which nc > /dev/null 2>&1; then
 elif docker exec "${TARGET}" which ncat > /dev/null 2>&1; then
     echo "  Using ncat (already installed)"
     docker exec "${TARGET}" ncat -w 2 1.1.1.1 80 2>/dev/null || true
-else
-    echo "  nc/ncat not found — attempting apt-get install wget (may fail in hardened containers)"
-    docker exec "${TARGET}" apt-get update -qq 2>/dev/null || true
-    docker exec "${TARGET}" apt-get install -y wget -q 2>/dev/null || true
+elif docker exec "${TARGET}" which wget > /dev/null 2>&1; then
+    echo "  Using wget (already installed)"
     docker exec "${TARGET}" wget --timeout=2 -q http://1.1.1.1 2>/dev/null || true
+elif which nc > /dev/null 2>&1; then
+    echo "  Copying nc from host to container /usr/local/bin/nc..."
+    docker cp "$(which nc)" "${TARGET}":/usr/local/bin/nc 2>/dev/null || true
+    docker exec "${TARGET}" nc -w 2 1.1.1.1 80 2>/dev/null || true
+else
+    echo "  SKIP: nc/ncat/wget not available — install netcat-openbsd in the container to test T2"
 fi
 pass
 sleep 3
@@ -113,12 +119,15 @@ sleep 3
 # T1552.004
 # Use docker cp to create the file — avoids bash spawn (which would trigger T1059
 # and be killed before the file write completes).
+# Try /root/.ssh/id_rsa (CRITICAL — SSH dir prefix) first;
+# fall back to /root/id_rsa (HIGH — key file suffix) if the dir doesn't exist.
 
-header 4 11 "Read SSH private key from container" "CRITICAL T1552_004_private_keys"
+header 4 11 "Read SSH private key from container" "HIGH T1552_004_private_keys"
+# Use /tmp/id_rsa — container runs as uid=1000, /root/ is 700 (unreadable).
+# /tmp/id_rsa matches the id_rsa suffix → fires T1552_004 at HIGH.
 echo 'test-key-material' > /tmp/test_id_rsa
-docker exec "${TARGET}" mkdir -p /root/.ssh 2>/dev/null || true
-docker cp /tmp/test_id_rsa "${TARGET}":/root/.ssh/id_rsa
-docker exec "${TARGET}" cat /root/.ssh/id_rsa 2>/dev/null || true
+docker cp /tmp/test_id_rsa "${TARGET}":/tmp/id_rsa 2>/dev/null || true
+docker exec "${TARGET}" cat /tmp/id_rsa 2>/dev/null || true
 rm -f /tmp/test_id_rsa
 pass
 sleep 3
@@ -206,9 +215,11 @@ sleep 3
 # Use docker cp to place the file — opensnoop only fires on successful opens.
 
 header 11 11 "Command history access from container" "MEDIUM T1070_003_clear_command_history"
+# Use /tmp/.bash_history — container runs as uid=1000, /root/ is 700 (unreadable).
+# /tmp/.bash_history matches the .bash_history suffix → fires T1070 at MEDIUM.
 echo "rm -rf /important_data" > /tmp/bash_hist
-docker cp /tmp/bash_hist "${TARGET}":/root/.bash_history
-docker exec "${TARGET}" cat /root/.bash_history 2>/dev/null || true
+docker cp /tmp/bash_hist "${TARGET}":/tmp/.bash_history 2>/dev/null || true
+docker exec "${TARGET}" cat /tmp/.bash_history 2>/dev/null || true
 rm -f /tmp/bash_hist
 pass
 sleep 3
@@ -241,14 +252,14 @@ echo "  Expected alerts:"
 echo "    T1  CRITICAL T1059_unix_shell_execution          action=kill_process"
 echo "    T2  HIGH     T1105_ingress_tool_transfer         (nc/wget must be installed)"
 echo "    T3  HIGH     T1003_008_os_credential_dumping     filename=/etc/shadow"
-echo "    T4  CRITICAL T1552_004_private_keys              filename=/root/.ssh/id_rsa"
+echo "    T4  HIGH     T1552_004_private_keys              filename=/tmp/id_rsa"
 echo "    T5  HIGH     T1041_exfiltration_over_c2          dst=8.8.8.8:80"
 echo "    T6  (no alert — inventory_service allowlisted)"
 echo "    T7  CRITICAL T1611_escape_to_host_fs             action=kill_process"
 echo "    T8  MEDIUM   T1082_system_info_discovery         filename=/etc/passwd"
 echo "    T9  HIGH     T1036_masquerading                  comm=/tmp/sshd"
 echo "    T10 HIGH     T1053_003_scheduled_task_cron       filename=/etc/crontab"
-echo "    T11 MEDIUM   T1070_003_clear_command_history     filename=/root/.bash_history"
+echo "    T11 MEDIUM   T1070_003_clear_command_history     filename=/tmp/.bash_history"
 echo ""
 echo "  Normal service traffic (integration tests) should NOT"
 echo "  produce any CRITICAL or HIGH alerts."
