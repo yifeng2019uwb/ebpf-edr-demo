@@ -43,6 +43,8 @@ type Alert struct {
 	Filename string
 	DstIP    string
 	DstPort  uint16
+
+	ResponseAction string // set by responder after detection; empty means no action taken
 }
 
 // alertPayload is the structured JSON written to Cloud Logging.
@@ -65,9 +67,10 @@ type alertPayload struct {
 	Namespace     string `json:"namespace"`
 	Node          string `json:"node"`
 	Region        string `json:"region"`
-	Filename      string `json:"filename,omitempty"`
-	DstIP         string `json:"dst_ip,omitempty"`
-	DstPort       uint16 `json:"dst_port,omitempty"`
+	Filename       string `json:"filename,omitempty"`
+	DstIP          string `json:"dst_ip,omitempty"`
+	DstPort        uint16 `json:"dst_port,omitempty"`
+	ResponseAction string `json:"response_action,omitempty"`
 }
 
 const pubsubTopicID = "edr-alerts"
@@ -128,6 +131,9 @@ func (h *Handler) Send(a Alert) {
 	} else if a.DstIP != "" {
 		extra = fmt.Sprintf(" dst=%s:%d", a.DstIP, a.DstPort)
 	}
+	if a.ResponseAction != "" && a.ResponseAction != "none" {
+		extra += " action=" + a.ResponseAction
+	}
 
 	id := a.Workload.Identity
 	meta := a.Workload.Meta
@@ -177,9 +183,10 @@ func (h *Handler) Send(a Alert) {
 		Namespace:     meta.Namespace,
 		Node:          meta.Node,
 		Region:        meta.Region,
-		Filename:      a.Filename,
-		DstIP:         a.DstIP,
-		DstPort:       a.DstPort,
+		Filename:       a.Filename,
+		DstIP:          a.DstIP,
+		DstPort:        a.DstPort,
+		ResponseAction: a.ResponseAction,
 	}
 
 	if h.cloudLogger != nil {

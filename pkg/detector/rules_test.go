@@ -73,8 +73,8 @@ func TestDetect_ReturnsAlertForShellSpawn(t *testing.T) {
 	if len(alerts) != 1 {
 		t.Fatalf("expected 1 alert, got %d", len(alerts))
 	}
-	if alerts[0].Rule != "shell_spawn_container" {
-		t.Fatalf("Rule = %q, want shell_spawn_container", alerts[0].Rule)
+	if alerts[0].Rule != RuleT1059UnixShellExecution {
+		t.Fatalf("Rule = %q, want %s", alerts[0].Rule, RuleT1059UnixShellExecution)
 	}
 }
 
@@ -115,8 +115,8 @@ func TestDetect_FileEvent(t *testing.T) {
 	if len(alerts) != 1 {
 		t.Fatalf("expected 1 alert, got %d", len(alerts))
 	}
-	if alerts[0].Rule != "sensitive_file_access" {
-		t.Fatalf("Rule = %q, want sensitive_file_access", alerts[0].Rule)
+	if alerts[0].Rule != RuleT1003OsCredentialDumping {
+		t.Fatalf("Rule = %q, want %s", alerts[0].Rule, RuleT1003OsCredentialDumping)
 	}
 }
 
@@ -140,8 +140,8 @@ func TestDetect_NetEvent(t *testing.T) {
 	if len(alerts) != 1 {
 		t.Fatalf("expected 1 alert, got %d", len(alerts))
 	}
-	if alerts[0].Rule != "unauthorized_external_connect" {
-		t.Fatalf("Rule = %q, want unauthorized_external_connect", alerts[0].Rule)
+	if alerts[0].Rule != RuleT1041ExfiltrationOverC2 {
+		t.Fatalf("Rule = %q, want %s", alerts[0].Rule, RuleT1041ExfiltrationOverC2)
 	}
 }
 
@@ -158,8 +158,8 @@ func TestCheckProcessRules_ShellSpawn(t *testing.T) {
 			if a == nil {
 				t.Fatalf("expected CRITICAL alert, got nil")
 			}
-			if a.Rule != "shell_spawn_container" {
-				t.Fatalf("Rule = %q, want shell_spawn_container", a.Rule)
+			if a.Rule != RuleT1059UnixShellExecution {
+				t.Fatalf("Rule = %q, want %s", a.Rule, RuleT1059UnixShellExecution)
 			}
 			if a.Level != alert.Critical {
 				t.Fatalf("Level = %q, want CRITICAL", a.Level)
@@ -179,8 +179,8 @@ func TestCheckProcessRules_NetworkTool(t *testing.T) {
 			if a == nil {
 				t.Fatalf("expected HIGH alert, got nil")
 			}
-			if a.Rule != "network_tool_container" {
-				t.Fatalf("Rule = %q, want network_tool_container", a.Rule)
+			if a.Rule != RuleT1105IngressToolTransfer {
+				t.Fatalf("Rule = %q, want %s", a.Rule, RuleT1105IngressToolTransfer)
 			}
 			if a.Level != alert.High {
 				t.Fatalf("Level = %q, want HIGH", a.Level)
@@ -234,8 +234,8 @@ func TestCheckProcessRules_StateUnknown(t *testing.T) {
 	if a == nil {
 		t.Fatalf("expected CRITICAL for StateUnknown, got nil")
 	}
-	if a.Rule != "unknown_namespace_process" {
-		t.Fatalf("Rule = %q, want unknown_namespace_process", a.Rule)
+	if a.Rule != RuleT1611EscapeToHostNs {
+		t.Fatalf("Rule = %q, want %s", a.Rule, RuleT1611EscapeToHostNs)
 	}
 	if a.Level != alert.Critical {
 		t.Fatalf("Level = %q, want CRITICAL", a.Level)
@@ -271,8 +271,8 @@ func TestCheckFileRules_CriticalFiles(t *testing.T) {
 			if a.Level != alert.Critical {
 				t.Fatalf("Level = %q, want CRITICAL", a.Level)
 			}
-			if a.Rule != "sensitive_file_access" {
-				t.Fatalf("Rule = %q, want sensitive_file_access", a.Rule)
+			if a.Rule != RuleT1552PrivateKeys {
+				t.Fatalf("Rule = %q, want %s", a.Rule, RuleT1552PrivateKeys)
 			}
 		})
 	}
@@ -400,8 +400,8 @@ func TestCheckFileRules_HostReadsContainerFS(t *testing.T) {
 			if a == nil {
 				t.Fatalf("expected CRITICAL host_reads_container_fs, got nil")
 			}
-			if a.Rule != "host_reads_container_fs" {
-				t.Fatalf("Rule = %q, want host_reads_container_fs", a.Rule)
+			if a.Rule != RuleT1611EscapeToHostFs {
+				t.Fatalf("Rule = %q, want %s", a.Rule, RuleT1611EscapeToHostFs)
 			}
 			if a.Level != alert.Critical {
 				t.Fatalf("Level = %q, want CRITICAL", a.Level)
@@ -461,8 +461,8 @@ func TestCheckNetworkRules_PublicIPUnauthorized(t *testing.T) {
 	if a == nil {
 		t.Fatalf("expected HIGH for unauthorized external connect, got nil")
 	}
-	if a.Rule != "unauthorized_external_connect" {
-		t.Fatalf("Rule = %q, want unauthorized_external_connect", a.Rule)
+	if a.Rule != RuleT1041ExfiltrationOverC2 {
+		t.Fatalf("Rule = %q, want %s", a.Rule, RuleT1041ExfiltrationOverC2)
 	}
 	if a.Level != alert.High {
 		t.Fatalf("Level = %q, want HIGH", a.Level)
@@ -494,5 +494,130 @@ func TestCheckNetworkRules_StateHost(t *testing.T) {
 
 	if a != nil {
 		t.Fatalf("expected nil for StateHost, got rule=%q", a.Rule)
+	}
+}
+
+// ── T1036 — Masquerading ──────────────────────────────────────────────────────
+
+func TestCheckProcessRules_Masquerading(t *testing.T) {
+	suspicious := []string{"/tmp/sshd", "/dev/shm/backdoor", "/var/tmp/python3", "/run/user/1000/evil"}
+
+	for _, comm := range suspicious {
+		t.Run(comm, func(t *testing.T) {
+			ev := processor.ProcessEvent{Comm: commBytes(comm)}
+			a := checkProcessRules(ev, resolvedResult("auth-service"))
+
+			if a == nil {
+				t.Fatalf("expected HIGH alert for masquerading, got nil")
+			}
+			if a.Rule != RuleT1036Masquerading {
+				t.Fatalf("Rule = %q, want %s", a.Rule, RuleT1036Masquerading)
+			}
+			if a.Level != alert.High {
+				t.Fatalf("Level = %q, want HIGH", a.Level)
+			}
+		})
+	}
+}
+
+func TestCheckProcessRules_MasqueradingBeforeWhitelist(t *testing.T) {
+	// /tmp/sshd should fire even though "sshd" is in whitelistComm
+	ev := processor.ProcessEvent{Comm: commBytes("/tmp/sshd")}
+	a := checkProcessRules(ev, resolvedResult("auth-service"))
+
+	if a == nil {
+		t.Fatalf("expected alert for /tmp/sshd — masquerade check must run before whitelist")
+	}
+	if a.Rule != RuleT1036Masquerading {
+		t.Fatalf("Rule = %q, want %s", a.Rule, RuleT1036Masquerading)
+	}
+}
+
+func TestCheckProcessRules_NormalPath(t *testing.T) {
+	// binary in a normal system path must not trigger masquerading
+	ev := processor.ProcessEvent{Comm: commBytes("/usr/bin/python3")}
+	a := checkProcessRules(ev, resolvedResult("auth-service"))
+
+	if a != nil && a.Rule == RuleT1036Masquerading {
+		t.Fatalf("unexpected masquerading alert for %q", "/usr/bin/python3")
+	}
+}
+
+// ── T1613 — Container and Resource Discovery ──────────────────────────────────
+
+func TestCheckProcessRules_ContainerDiscovery(t *testing.T) {
+	tools := []string{"/usr/bin/kubectl", "/usr/bin/docker", "/usr/local/bin/crictl", "/usr/bin/podman"}
+
+	for _, comm := range tools {
+		t.Run(comm, func(t *testing.T) {
+			ev := processor.ProcessEvent{Comm: commBytes(comm)}
+			a := checkProcessRules(ev, resolvedResult("auth-service"))
+
+			if a == nil {
+				t.Fatalf("expected HIGH alert for container discovery tool, got nil")
+			}
+			if a.Rule != RuleT1613ContainerDiscovery {
+				t.Fatalf("Rule = %q, want %s", a.Rule, RuleT1613ContainerDiscovery)
+			}
+			if a.Level != alert.High {
+				t.Fatalf("Level = %q, want HIGH", a.Level)
+			}
+		})
+	}
+}
+
+// ── T1053.003 — Scheduled Task/Cron ──────────────────────────────────────────
+
+func TestCheckFileRules_CronAccess(t *testing.T) {
+	cronFiles := []string{
+		"/etc/cron.d/malicious",
+		"/etc/cron.daily/backdoor",
+		"/var/spool/cron/root",
+		"/etc/crontab",
+	}
+
+	for _, filename := range cronFiles {
+		t.Run(filename, func(t *testing.T) {
+			ev := processor.FileEvent{Comm: commBytes("sh"), Filename: filenameBytes(filename)}
+			a := checkFileRules(ev, resolvedResult("auth-service"))
+
+			if a == nil {
+				t.Fatalf("expected HIGH alert for cron access, got nil")
+			}
+			if a.Rule != RuleT1053ScheduledTaskCron {
+				t.Fatalf("Rule = %q, want %s", a.Rule, RuleT1053ScheduledTaskCron)
+			}
+			if a.Level != alert.High {
+				t.Fatalf("Level = %q, want HIGH", a.Level)
+			}
+		})
+	}
+}
+
+// ── T1070.003 — Clear Command History ────────────────────────────────────────
+
+func TestCheckFileRules_CommandHistoryAccess(t *testing.T) {
+	historyFiles := []string{
+		"/root/.bash_history",
+		"/home/user/.bash_history",
+		"/root/.zsh_history",
+		"/root/.ash_history",
+	}
+
+	for _, filename := range historyFiles {
+		t.Run(filename, func(t *testing.T) {
+			ev := processor.FileEvent{Comm: commBytes("sh"), Filename: filenameBytes(filename)}
+			a := checkFileRules(ev, resolvedResult("auth-service"))
+
+			if a == nil {
+				t.Fatalf("expected MEDIUM alert for history access, got nil")
+			}
+			if a.Rule != RuleT1070ClearCommandHistory {
+				t.Fatalf("Rule = %q, want %s", a.Rule, RuleT1070ClearCommandHistory)
+			}
+			if a.Level != alert.Medium {
+				t.Fatalf("Level = %q, want MEDIUM", a.Level)
+			}
+		})
 	}
 }

@@ -1,94 +1,196 @@
-# Session Handoff — 2026-05-30
+# Session Handoff — 2026-06-02
 
-## Current Task
-Deploy eBPF EDR agent to Oracle VMs (VM1 + VM2) and validate, so all environments
-(GCP VM, GKE, Oracle VMs) report to one central Cloud Logging dashboard.
+## Current State
 
-## IMMEDIATE NEXT STEP — fix Pulumi state drift
-`sensor-vm` was manually deleted via gcloud (mistake), causing Pulumi state drift.
-The last `pulumi up` left the stack with 1 errored resource (sensor-vm 404 on delete).
+**Oracle VMs: DOWN** — both deleted by accidental `pulumi up` during A1 attempt.
+Recovering Oracle VMs requires full redeploy (setup-vm.sh + deploy-vm.sh + eBPF install).
+Decision: pause Oracle VM work, focus EDR validation on GCP Docker VM (stable).
 
+**GCP Docker VM: ACTIVE** — eBPF agent running, order-processor deployed, validate.sh works.
+GCP credits expire 2026-06-17 (~16 days). Complete all validation before then.
+
+---
+
+## NEXT PHASE — EDR Response Actions (new, agreed 2026-06-02)
+
+Design agreed in last session. **NOT YET IMPLEMENTED.**
+
+### What to build
+
+**Loop:** Detect → Block → Alert → Notify
+
+**New files:**
+- `pkg/detector/response_policy.go` — maps rule+level → response action
+- `pkg/detector/response.go` — response implementations (kill_process)
+
+**Response policy table (agreed):**
+
+| Rule | Min Level | Action | Notes |
+|------|-----------|--------|-------|
+| shell_spawn_container | CRITICAL | kill_process | RCE — always bad |
+| host_reads_container_fs | CRITICAL | kill_process | Container escape |
+| sensitive_file_access | CRITICAL | kill_process | SSH key theft |
+| sensitive_file_access | HIGH | kill_process | /etc/shadow, .key, .env |
+| network_tool_container | HIGH | kill_process | Attacker staging tools |
+| unknown_namespace_process | — | none | Podman false positive (Phase 2 fix) |
+| unauthorized_external_connect | — | none | kill after connect is too late — LSM block is Phase 2 |
+
+**Notification:** skip email. Send `response_action` field in alert payload → goes to Pub/Sub → dashboard shows action taken alongside alert.
+
+**Open question before implementing:** Real-world EDR uses more than kill — block IP, quarantine, remove file. Need to decide final action set. See design discussion in session.
+
+---
+
+## IMMEDIATE NEXT STEP — EDR validation on GCP VM
+
+SSH to GCP VM and run full validation:
+```bash
+gcloud compute ssh instance-20260318-023006 --zone=us-west1-b \
+  --project=project-3f1d99fa-d525-4aff-a03
+
+# On GCP VM:
+cd ~/workspace/ebpf-edr-demo
+git pull          # get latest: pmdaproc whitelist + DBG removal
+make build
+git add ebpf-edr && git commit -m "rebuild: pmdaproc whitelist + remove DBG logging" && git push
+sudo pkill ebpf-edr || true
+make run-docker   # restart with new binary
+sudo ./validate.sh  # T1-T8 attack scenarios
+```
+
+Then confirm alerts in Cloud Logging:
+```bash
+gcloud logging read 'logName="projects/ebpfagent/logs/ebpf-edr-alerts"' \
+  --project=ebpfagent --limit=10 \
+  --format="table(timestamp,jsonPayload.env,jsonPayload.rule,jsonPayload.service)"
+```
+
+---
+
+## Oracle VMs — PAUSED
+
+Both VMs deleted by accidental `pulumi up` during A1 attempt. Recovery requires:
+1. `pulumi config set a1Enabled false && pulumi up --yes` (recreates E2.1.Micro VMs)
+2. `EBPF_SA_KEY_FILE=/tmp/oracle-agent.json ./docker/setup-vm.sh` (install Podman + eBPF)
+3. `./docker/deploy-vm.sh` (deploy healthcare services)
+
+Not worth doing now — VMs freeze too frequently to be reliable for testing.
+Resume when stable window available or A1 capacity opens.
+
+---
+
+## PREVIOUS NEXT STEP — Rebuild binary with policy changes
+
+The current binary on Oracle VMs was built BEFORE these code changes were committed:
+- `pmdaproc` + `pmdalinux` added to `fileCommWhitelist` (policy.go)
+- DBG log lines removed entirely (rules.go, main.go)
+- `-ldflags="-s -w"` added to Makefile (binary size reduction)
+
+**On GCP VM:**
 ```bash
 cd ~/workspace/ebpf-edr-demo
-make infra-refresh    # pulumi refresh → reconcile → pulumi up
+git pull
+make build
+git add ebpf-edr && git commit -m "rebuild: pmdaproc whitelist + remove DBG logging" && git push
 ```
 
-✅ Already created successfully: Oracle SA (`healthcare-oracle-agent`) + key, IAM bindings.
+**Then update both Oracle VMs** (from Mac, per docs/AGENT-DEPLOY.md):
+```bash
+ssh -i ~/.ssh/oracle_vm opc@163.192.46.25 "
+  sudo curl -fsSL https://raw.githubusercontent.com/yifengzh/ebpf-edr-demo/main/ebpf-edr \
+    -o /usr/local/bin/ebpf-edr &&
+  sudo chmod +x /usr/local/bin/ebpf-edr &&
+  sudo restorecon -v /usr/local/bin/ebpf-edr 2>/dev/null || true &&
+  sudo systemctl restart ebpf-edr
+"
+ssh -i ~/.ssh/oracle_vm opc@163.192.30.193 "
+  sudo curl -fsSL https://raw.githubusercontent.com/yifengzh/ebpf-edr-demo/main/ebpf-edr \
+    -o /usr/local/bin/ebpf-edr &&
+  sudo chmod +x /usr/local/bin/ebpf-edr &&
+  sudo restorecon -v /usr/local/bin/ebpf-edr 2>/dev/null || true &&
+  sudo systemctl restart ebpf-edr
+"
+```
 
-## Then — complete Oracle VM eBPF deployment
+## Then — Validate end-to-end pipeline
 
 ```bash
-# 1. Get Oracle SA key
-cd ~/workspace/ebpf-edr-demo/infra
-pulumi stack output oracleAgentKey --show-secrets | base64 -d > /tmp/oracle-agent.json
+# Trigger CRITICAL alert on VM1
+ssh -i ~/.ssh/oracle_vm opc@163.192.46.25 \
+  "sudo docker exec healthcare-gateway bash -c 'id'"
 
-# 2. Build binary ON GCP VM (Mac can't build — Pulumi GCP SDK OOMs, and BPF needs linux)
-#    SSH to GCP VM first, then:
-git checkout pkg/bpf/    # IMPORTANT: restore committed generated files
-                         # (handle_valid_open vs HandleExit mismatch if make generate was run)
-make build
-
-# 3. Publish binary to GitHub release
-make github-release VERSION=v0.1.0
-
-# 4. Deploy to BOTH Oracle VMs (installs Podman/swap/compose + eBPF agent)
-cd ~/workspace/github_projects/health-ai/healthcare-ai-microservices
-EBPF_SA_KEY_FILE=/tmp/oracle-agent.json ./docker/setup-vm.sh
-
-# 5. Validate — see docs/TESTING-GUIDE.md Steps 2b, 3b
+# Check Cloud Logging
+gcloud logging read 'logName="projects/ebpfagent/logs/ebpf-edr-alerts"' \
+  --project=ebpfagent --limit=5 \
+  --format="table(timestamp,jsonPayload.env,jsonPayload.rule,jsonPayload.service)"
 ```
 
-## What was completed this session
+---
 
-### Oracle VM healthcare deployment (DONE)
-- Fixed VM freezing: sequential Docker builds, rsync (not scp), buffer-cache clear, SSH keepalive in deploy-vm.sh
-- Memory tuning (all 4 services ~270MB total): JAVA_TOOL_OPTIONS, Hikari 5→2, actuator=health only, Tomcat threads 200→10, mem_limit + restart:unless-stopped in compose files
-- Fixed setup-vm.sh: swap persisted in /etc/fstab, x86_64 docker-compose binary (VMs are x86_64 NOT arm)
-- Services deployed on VM1 (163.192.46.25: gateway+auth) + VM2 (163.192.30.193: provider+ai), integration tests pass
-- Security: removed hardcoded VM password from compute.go → Pulumi config secret `vmPassword`; Pulumi.dev.yaml gitignored
+## What was completed this session (2026-05-30 → 2026-06-01)
 
-### eBPF code changes (DONE)
-- `pkg/workload/identity.go`: added `Env` field to WorkloadIdentity
-- `pkg/workload/resolver.go`: reads `ENV` env var → both resolvers
-- `pkg/workload/docker_resolver.go`: `env` field + fallback to full container name (no fake Compose labels)
-- `pkg/workload/k8s_resolver.go`: `env` propagated through crictlContainerMap
-- `internal/alert/alert.go`: `Env` in log line + Cloud Logging JSON payload
-- `infra/agents.go`: NEW — all agent SAs in one place; returns StringArray for base.go
-  - GKE SA commented out (deleted with cluster — re-enable on `make test-env-up`)
-  - sensor VM NOT here (sensor.go owns its own IAM)
-- `infra/base.go`: takes agentMembers; uses IAMMember loop (not IAMBinding — avoids sensor.go conflict)
-- `infra/main.go`: deployAgentIdentities → deployBase
+### Infrastructure
+- ✅ Fixed Pulumi state drift (`make infra-refresh` + `make infra-up`)
+- ✅ Fixed `BACKEND_VM_IP` → now uses VM2 private IP (`10.0.1.55`) via `instance2PrivateIp` Pulumi export
+- ✅ Updated `network.go` — SSH CIDR configurable via `pulumi config set sshAllowedCidr <ip>/32`
+- ✅ Updated `deploy-vm.sh` — uses `VM2_PRIVATE_IP` for `BACKEND_VM_IP`; SSH/SCP still use public IP
 
-### Makefile targets (DONE)
-- `github-release VERSION=vX` — build + publish binary
-- `test-env-up` / `test-env-down` — GKE + order-processor full cycle (~$100/mo when up)
-- `infra-refresh` — fix state drift
-- `sensor-up` / `sensor-down` — IoT sensor VM
+### eBPF Agent
+- ✅ Binary renamed `ebpf-edr-demo` → `ebpf-edr` everywhere (Makefile, setup-vm.sh)
+- ✅ Binary built with `-ldflags="-s -w"` (~18MB, under GitHub raw 25MB limit)
+- ✅ Binary committed to repo, downloaded via `raw.githubusercontent.com`
+- ✅ `pmdaproc` + `pmdalinux` added to `fileCommWhitelist` (Oracle PCP monitoring daemons)
+- ✅ All 4 DBG log lines removed (rules.go, main.go) — agent now silent except alerts
+- ✅ `setup-vm.sh` updated — raw GitHub URL, `restorecon` for SELinux
+- ✅ `setup-vm.sh` SA key note added (current: local file; future: Secret Manager)
+- ✅ eBPF agent deployed + running on VM1 (systemd, auto-start)
+- ✅ eBPF agent deployed + running on VM2 (systemd, auto-start)
+- ✅ Pipeline confirmed working — CRITICAL alerts firing on VM2
 
-### health-ai setup-vm.sh (DONE)
-- Installs eBPF agent on BOTH Oracle VMs via GitHub release binary + SA key
-- `--env=oracle-vm1` / `--env=oracle-vm2` per VM
-- Requires `EBPF_SA_KEY_FILE` env var
+### Integration Tests
+- ✅ Fixed `pom.xml` — removed `gateway.url=localhost:8080` override
+- ✅ `BaseIT.java` is now single source of truth for gateway URL
+- ✅ Auth + provider integration tests passing
 
-### GCP cost cleanup (DONE — was ~$132/mo, only $35 credits left, expires 2026-06-17)
-- Destroyed GKE cluster (`pulumi destroy` in order_processor/gcp_gke)
-- Deleted sensor-vm (manual gcloud — caused the state drift above)
-- Deleted GKE noise logs from Cloud Logging (kept ebpf-edr-alerts)
-- Disabled GKE managed logging: pulumi_gke.go LoggingService=none, MonitoringService=none (~$31/mo saved)
-- KEPT: GCP Docker VM `instance-20260318-023006` (e2-medium ~$43/mo), Oracle VMs (free)
+### Documentation
+- ✅ `docs/DETECTION-POLICY.md` — new: per-environment noise policy, whitelist rationale, pending changes
+- ✅ `docs/AGENT-DEPLOY.md` — new: deployment guide with ownership model, per-environment steps
+- ✅ `docs/TESTING-GUIDE.md` — updated: Oracle VM steps, reboot recovery, correct test trigger
+- ✅ `docs/SETUP.md` — existing, covers infra + GCP VM setup
+- ✅ `oracle-vm-runbook.md` (health-ai) — existing, covers Oracle VM operations
 
-### Docs created/updated
-- ebpf: docs/oracle-vm-deploy-design.md, docs/TESTING-GUIDE.md, docs/SETUP.md (infra section)
-- health-ai: docs/oracle-vm-runbook.md, docs/deploy-oracle-plan.md, BACKLOG.md, DAILY_WORK_LOG.md
-- order_processor: docs/deployment-guide.md (GCP GKE deploy/destroy section)
+---
 
-## Key facts / gotchas
-- Oracle VMs are x86_64 (not ARM) — `uname -m` = x86_64; the "aarch64" seen earlier was Cloud Shell
-- Oracle free tier VMs freeze randomly — known platform issue; mem_limit + restart:unless-stopped mitigate
-- Mac can't `go build` infra/ (Pulumi GCP SDK OOMs) — build on GCP VM
-- BTF confirmed present on Oracle VM2: /sys/kernel/btf/vmlinux exists, kernel 6.12
-- ALWAYS use Makefile targets for cloud resources, never raw gcloud/kubectl/pulumi (state drift)
-- GCP free tier (90-day) expires 2026-06-17 — plan to finish testing before then or move eBPF to laptop/local Docker
+## Key Facts / Gotchas
+
+### Oracle VMs
+- VM1: `163.192.46.25` (public) / `10.0.1.160` (private) — gateway + auth
+- VM2: `163.192.30.193` (public) / `10.0.1.55` (private) — provider + ai
+- Both freeze randomly (Oracle free tier platform instability — not fixable)
+- **Run eBPF validation and integration tests separately** — combined load triggers freezes
+- Services do NOT auto-start after reboot — always start VM2 first, then VM1
+- eBPF agent DOES auto-start (systemd enabled on both VMs)
+- `BACKEND_VM_IP` must be `10.0.1.55` (private IP) — public IP times out due to security list
+
+### eBPF Agent
+- Binary: `~/workspace/ebpf-edr-demo/ebpf-edr` (committed to repo, ~18MB stripped)
+- SA key: `/tmp/oracle-agent.json` (from `pulumi stack output oracleAgentKey --show-secrets | base64 -d`)
+- SA key note: currently local file; should move to GCP Secret Manager (see AGENT-DEPLOY.md)
+- `GOOGLE_CLOUD_PROJECT=ebpfagent` set in systemd service
+- Alerts go to: Cloud Logging (`ebpf-edr-alerts`) + local `/alerts/alert.log`
+
+### Known False Positives (Phase 2 fixes)
+- `unknown_namespace_process` CRITICAL from Podman health checks (`/bin/sh` + `wget`)
+  - Root cause: `containerIDFromDockerCgroup` only parses Docker cgroup paths, not Podman
+  - Podman exec creates new mount namespace per execution (different inode from container)
+  - Fix: update `docker_resolver.go` to handle Podman cgroup format
+  - Documented in `docs/DETECTION-POLICY.md`
+
+### GCP Credits
+- Expire: 2026-06-17 (~16 days)
+- GCP Docker VM `instance-20260318-023006` (~$43/mo) is the only paid resource
+- After expiry: Oracle VMs (free) remain; Cloud Logging free tier should cover alert volume
+- Plan: complete eBPF validation before 2026-06-17
 
 ## Timeline
-User plans to complete all eBPF testing in ~2 weeks.
+~2 weeks remaining. Priority: rebuild binary → validate pipeline → done.

@@ -229,6 +229,11 @@ func main() {
 	go func() {
 		for ev := range enrichedCh {
 			for _, a := range det.Detect(ev) {
+				action := detector.ResponseFor(a.Rule, a.Level)
+				if action != detector.ActionNone {
+					detector.Respond(&a, action)
+				}
+				a.ResponseAction = string(action)
 				select {
 				case alertCh <- a:
 				default:

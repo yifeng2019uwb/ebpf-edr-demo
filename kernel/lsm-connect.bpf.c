@@ -28,6 +28,20 @@ struct {
 	__uint(max_entries, 256 * 1024);
 } rb SEC(".maps");
 
+// Phase 2 — blocked_ips: LPMTrie for kernel-enforced IP blocking.
+// Go userspace writes entries via lsmObjs.BlockedIps.Put() (auto-generated after `go generate`).
+// Lookup fires at the LSM hook — before the TCP handshake, no data is ever sent.
+// Use lpm_key from lsm-connect.h: prefixlen=32 for single host, <32 for CIDR range.
+// BPF_F_NO_PREALLOC required for LPMTrie — kernel allocates nodes on demand.
+//
+// struct {
+//     __uint(type, BPF_MAP_TYPE_LPM_TRIE);
+//     __uint(max_entries, 1024);
+//     __uint(map_flags, BPF_F_NO_PREALLOC);
+//     __type(key, struct lpm_key);
+//     __type(value, __u8);
+// } blocked_ips SEC(".maps");
+
 // lsm/socket_connect — fires before every connect() syscall at kernel level.
 // No TOCTOU gap — runs in the same security context as the connecting process.
 // Audit mode: always returns 0 (allow). Policy enforcement happens in Go.
@@ -52,6 +66,16 @@ int BPF_PROG(handle_connect, struct socket *sock, struct sockaddr *address, int 
 	// so policy can be updated without recompiling BPF.
 	if ((dst_ip & 0xFF) == LOOPBACK_BYTE)
 		return 0;
+
+	// Phase 2 — blocked_ips enforcement point.
+	// Must run BEFORE the ringbuf write so that blocked connections are denied silently
+	// without producing a net_event (the alert fires in Go only for allowed connections).
+	// Blocked connections will instead generate a response_action=block_ip alert directly
+	// from Go when blockIP() writes the entry — no separate BPF-side alert needed.
+	//
+	// struct lpm_key key = { .prefixlen = 32, .addr = dst_ip };
+	// if (bpf_map_lookup_elem(&blocked_ips, &key))
+	//     return -EPERM;  // deny before handshake — connection never starts
 
 	struct net_event *e = bpf_ringbuf_reserve(&rb, sizeof(*e), 0);
 	if (!e)

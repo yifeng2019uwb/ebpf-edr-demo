@@ -55,6 +55,45 @@ var networkBinaries = []string{
 	"/nc", "/ncat", "/wget",
 }
 
+// ── T1036 — Masquerading ──────────────────────────────────────────────────────
+// Paths where legitimate system binaries should never run from.
+// Checked BEFORE the process whitelist — attacker may name malware after a legit process (e.g. /tmp/sshd).
+var t1036MasqueradingPaths = []string{
+	"/tmp/",      // world-writable temp directory
+	"/dev/shm/",  // shared memory — common dropper target
+	"/var/tmp/",  // persistent temp — survives reboots
+	"/run/user/", // user runtime dir — unexpected for system binaries
+}
+
+// ── T1613 — Container and Resource Discovery ──────────────────────────────────
+// Container management tools executed from inside a container indicate an attacker
+// doing reconnaissance. Legitimate services never need to call these tools.
+var t1613ContainerMgmtTools = []string{
+	"/kubectl", "/docker", "/crictl", "/ctr", "/podman",
+}
+
+// ── T1053.003 — Scheduled Task/Job: Cron ─────────────────────────────────────
+// Container access to cron config files indicates persistence attempt.
+// Containers should never read or write cron directories.
+var t1053CronPrefixes = []string{
+	"/etc/cron.d/",
+	"/etc/cron.hourly/",
+	"/etc/cron.daily/",
+	"/etc/cron.weekly/",
+	"/etc/cron.monthly/",
+	"/var/spool/cron/",
+	"/etc/crontab",
+}
+
+// ── T1070.003 — Clear Command History ────────────────────────────────────────
+// Shell history files — container access suggests an attacker covering tracks.
+var t1070HistoryFileSuffixes = []string{
+	".bash_history",
+	".zsh_history",
+	".ash_history",
+	".sh_history",
+}
+
 // ── File policy ───────────────────────────────────────────────────────────────
 
 // fileCommWhitelist — processes that legitimately read system files as part of
@@ -77,34 +116,30 @@ var fileCommWhitelist = []string{
 }
 
 // containerFSPrefixes — host filesystem paths that hold container layer data.
-// A host process (StateHost) reading these paths indicates possible container escape (T1611).
+// A host process (StateHost) reading these paths indicates container escape (T1611).
 var containerFSPrefixes = []string{
 	"/var/lib/docker/overlay2/", // Docker overlay filesystem layers
 	"/run/containerd/",          // containerd runtime task directories (K8s + containerd)
 }
 
-// Sensitive file paths — severity reflects actual risk.
-//
-// CRITICAL — credential material, direct privilege escalation
-// HIGH     — secrets, private keys, container escape indicators
-// MEDIUM   — world-readable system files: suspicious from app code
-var criticalFilePrefixes = []string{
+// ── T1611 — Escape to Host (via /proc) ───────────────────────────────────────
+// Container process reading the host init process — escape attempt indicator.
+var t1611ProcEscapePrefixes = []string{
+	"/proc/1/", // host PID 1 (init/systemd) — not reachable from inside a container normally
+}
+
+// ── T1552.004 — Unsecured Credentials: Private Keys ──────────────────────────
+// SSH key directories → CRITICAL. Key files by extension → HIGH.
+var t1552PrivateKeyDirPrefixes = []string{
 	"/root/.ssh/", // SSH private keys and authorized_keys
 	"/home/.ssh/", // user SSH keys
 }
 
-var highFilePrefixes = []string{
-	"/etc/shadow",   // password hashes — no legitimate app reads this at runtime
-	"/run/secrets/", // Docker secrets mount
-	"/proc/1/",      // host init process — container escape indicator
-}
-
-var highFileSuffixes = []string{
+var t1552PrivateKeySuffixes = []string{
 	".key",       // private keys
 	".pem",       // private keys and certificates — CA bundles excluded via pemExcludePaths
 	"id_rsa",     // SSH private key
 	"id_ed25519", // SSH private key
-	".env",       // environment secrets
 }
 
 // pemExcludePaths — .pem paths that are CA certificate bundles, not private keys.
@@ -114,8 +149,24 @@ var pemExcludePaths = []string{
 	"/certifi/",       // certifi library specifically
 }
 
-var mediumFilePrefixes = []string{
-	"/etc/passwd", // user accounts — world-readable but unexpected from app code
+// ── T1552.001 — Unsecured Credentials: Credentials in Files ──────────────────
+var t1552CredentialFilePrefixes = []string{
+	"/run/secrets/", // Docker secrets mount
+}
+
+var t1552CredentialFileSuffixes = []string{
+	".env", // environment variable files containing secrets
+}
+
+// ── T1003.008 — OS Credential Dumping ────────────────────────────────────────
+var t1003CredentialDumpPaths = []string{
+	"/etc/shadow", // password hashes — no legitimate app reads this at runtime
+}
+
+// ── T1082 — System Information Discovery ─────────────────────────────────────
+// World-readable system files — unexpected from application code (MEDIUM).
+var t1082SystemInfoPrefixes = []string{
+	"/etc/passwd", // user accounts
 	"/etc/group",  // group memberships
 }
 
