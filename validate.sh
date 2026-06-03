@@ -171,17 +171,21 @@ except OSError as e:
 " 2>&1 || true)
 echo "  ${BLOCK_RESULT}"
 
-echo "  Step 3: connect to 1.1.1.1 — expect success (different IP, not blocked)"
+echo "  Step 3: connect to private IP (10.0.0.1) — expect no EPERM (private IPs never blocked)"
 UNBLOCK_RESULT=$(docker exec "${TARGET}" python3 -c "
-import socket, sys
+import socket, errno, sys
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.settimeout(3)
+s.settimeout(1)
 try:
-    s.connect(('1.1.1.1', 80))
+    s.connect(('10.0.0.1', 80))
     s.close()
-    print('PASS: connection to 1.1.1.1 succeeded — surgical block confirmed')
+    print('PASS: connection to private IP not blocked')
 except OSError as e:
-    print(f'WARN: {e}')
+    if e.errno == errno.EPERM:
+        print('FAIL: private IP was blocked — should never happen')
+        sys.exit(1)
+    else:
+        print(f'PASS: private IP not blocked (got expected network error: {e.strerror})')
 " 2>&1 || true)
 echo "  ${UNBLOCK_RESULT}"
 
@@ -291,7 +295,10 @@ echo "    T1  CRITICAL T1059_unix_shell_execution          action=kill_process"
 echo "    T2  HIGH     T1105_ingress_tool_transfer         (nc/wget must be installed)"
 echo "    T3  HIGH     T1003_008_os_credential_dumping     filename=/etc/shadow"
 echo "    T4  HIGH     T1552_004_private_keys              filename=/tmp/id_rsa"
-echo "    T5  HIGH     T1041_exfiltration_over_c2          dst=8.8.8.8:80 + block_ip verified"
+echo "    T5  HIGH     T1041_exfiltration_over_c2          dst=8.8.8.8:80 + block_ip"
+echo "         step1: alert fires + IP added to blocked_ips BPF map"
+echo "         step2: second connect to same IP → EPERM (kernel blocks before handshake)"
+echo "         step3: private IP (10.0.0.1) → no EPERM (private IPs never blocked)"
 echo "    T6  (no alert — inventory_service allowlisted)"
 echo "    T7  CRITICAL T1611_escape_to_host_fs             action=kill_process"
 echo "    T8  MEDIUM   T1082_system_info_discovery         filename=/etc/passwd"

@@ -54,9 +54,10 @@ Run from your Mac while the sensor VM or GKE agents are active.
 make run-alert-router          # starts HTTP server at http://localhost:8888
 ```
 
-Open **http://localhost:8888**. Columns: Time (UTC) · Severity · Rule · Service · Pod · Namespace · Runtime · Details (filename or dst IP:port).
+Open **http://localhost:8888**. Columns: Time (UTC) · Severity · Rule · Service · Pod · Namespace · Runtime · **Response** · Details (filename, dst IP:port, or comm for process rules).
 
-- Badge colours: CRITICAL = red, HIGH = orange, MEDIUM = yellow
+- Severity badge colours: CRITICAL = red, HIGH = orange, MEDIUM = yellow
+- Response badge colours: `kill_process` = dark red, `block_ip` = purple, `—` = no action taken
 - New alerts appear at the top (newest first)
 - Last 100 alerts replayed on reconnect — safe to close and reopen the tab
 - Status dot turns red when the WebSocket disconnects; reconnects automatically
@@ -90,8 +91,17 @@ logName="projects/ebpfagent/logs/ebpf-edr-alerts" AND jsonPayload.node="sensor-v
 # GKE alerts only
 logName="projects/ebpfagent/logs/ebpf-edr-alerts" AND jsonPayload.runtime="k8s"
 
-# Sensitive file access rule
-logName="projects/ebpfagent/logs/ebpf-edr-alerts" AND jsonPayload.rule="sensitive_file_access"
+# Specific MITRE rule (example: OS credential dumping)
+logName="projects/ebpfagent/logs/ebpf-edr-alerts" AND jsonPayload.rule="T1003_008_os_credential_dumping"
+
+# Any credential access rule (prefix match)
+logName="projects/ebpfagent/logs/ebpf-edr-alerts" AND jsonPayload.rule=~"T155.*"
+
+# Block_ip response actions only
+logName="projects/ebpfagent/logs/ebpf-edr-alerts" AND jsonPayload.response_action="block_ip"
+
+# Kill actions only
+logName="projects/ebpfagent/logs/ebpf-edr-alerts" AND jsonPayload.response_action="kill_process"
 
 # Specific service (e.g. env-sensor after the normalizeServiceName fix)
 logName="projects/ebpfagent/logs/ebpf-edr-alerts" AND jsonPayload.service="env-sensor"
@@ -228,6 +238,21 @@ gcloud pubsub subscriptions pull edr-alerts-router-sub \
   - **Validated**: workload resolver populates `service=`, `pod=`, `namespace=` correctly (e.g. `service=operator pod=gmp-operator-599978c87f-x57lt namespace=gmp-system`)
 - [x] Phase 5 — GKE functional validation: all 5 tests pass (`./validate-gke.sh`)
 - [x] Phase 6 — Cloud Logging dual write: both Docker VM and GKE validated end-to-end
+- [x] Phase 7 — MITRE rule redesign + Response actions + LPMTrie IP blocking (2026-06-03)
+  - All rule names renamed to MITRE-prefixed format (`T1059_unix_shell_execution`, etc.)
+  - `sensitive_file_access` split into 4 specific MITRE rules: `T1552_004_private_keys`, `T1552_001_credentials_in_files`, `T1003_008_os_credential_dumping`, `T1611_escape_to_host_proc`
+  - `policy.go` restructured: file path data grouped by rule (not severity)
+  - `rule_names.go` — design spec for all rules organized by event source (process/file/network)
+  - 4 new rules implemented + validated: `T1036_masquerading`, `T1613_container_resource_discovery`, `T1053_003_scheduled_task_cron`, `T1070_003_clear_command_history`
+  - `response_policy.go` + `response.go` — `kill_process` for CRITICAL/HIGH file+process rules
+  - `Responder` struct — `kill_process` via `syscall.SIGKILL`, `block_ip` via LPMTrie BPF map
+  - `lsm-connect.bpf.c` — `blocked_ips` LPMTrie map; `lsm_socket_connect` returns `-EPERM` for blocked IPs before TCP handshake
+  - `loader.go` — `BlockedIPs *ebpf.Map` exposed from `lsmObjs.BlockedIps` (generated after `go generate`)
+  - `ResponseAction` field in `alertPayload` — flows to Cloud Logging, Pub/Sub, local log
+  - Dashboard — Response column with `kill_process` (dark red) and `block_ip` (purple) badges; Details column shows `comm` for process rules
+  - Microsecond timestamps: `log.Lmicroseconds` + `"2006-01-02 15:04:05.000000"` format
+  - `validate.sh` — 11 tests; T5 includes 3-step block verification (alert → EPERM → private IP not blocked)
+  - `MITRE-COVERAGE.md` — updated: 8→15 techniques covered, all new rule names, Response Actions table
   - `internal/alert/alert.go` — `alertPayload` struct (schema_version, ts, cluster, …), Cloud Logging client init, async `Log()`, `Close()` flushes SDK buffer
   - `pkg/workload/identity.go` — `Cluster string` added to `WorkloadMeta`; propagated through both resolvers; `CLUSTER_NAME` env var
   - `infra/` Pulumi stack — custom Cloud Logging bucket (365d), sink, cross-project IAM for OpenClaw VM compute SA
@@ -662,7 +687,7 @@ If revisited: reuse `net_event` struct, add a `direction` flag (0=outbound, 1=in
 # /etc/sudoers.d/ebpf-edr preserves GOOGLE_CLOUD_PROJECT through sudo
 # /etc/environment sets it on login — export needed for current session
 export GOOGLE_CLOUD_PROJECT=ebpfagent
-sudo ./ebpf-edr-demo --runtime=docker
+sudo ./ebpf-edr --runtime=docker
 ```
 
 Startup log confirms Cloud Logging state:
