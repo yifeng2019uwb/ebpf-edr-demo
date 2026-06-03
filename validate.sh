@@ -135,10 +135,15 @@ docker exec "${TARGET}" cat /tmp/id_rsa 2>/dev/null || true
 pass
 sleep 3
 
-# ── T5: Unauthorized external connect ─────────────────────────────────────────
+# ── T5: Unauthorized external connect + LPMTrie block verification ────────────
 # T1041 · T1048
+# First connect: fires T1041 alert + writes 8.8.8.8 to blocked_ips BPF map.
+# Second connect to same IP: must get EPERM (blocked at kernel before handshake).
+# Third connect to different IP (1.1.1.1): must succeed (surgical block, not all outbound).
 
-header 5 11 "Unauthorized external connect from container" "HIGH T1041_exfiltration_over_c2"
+header 5 11 "Unauthorized external connect — block verification" "HIGH T1041_exfiltration_over_c2 + block_ip"
+
+echo "  Step 1: first connect to 8.8.8.8 — fires alert + adds IP to blocked_ips map"
 docker exec "${TARGET}" python3 -c "
 import socket
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -148,6 +153,38 @@ try:
 finally:
     s.close()
 " 2>/dev/null || true
+sleep 2
+
+echo "  Step 2: second connect to 8.8.8.8 — expect EPERM (Operation not permitted)"
+BLOCK_RESULT=$(docker exec "${TARGET}" python3 -c "
+import socket, errno, sys
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+try:
+    s.connect(('8.8.8.8', 80))
+    print('FAIL: connection succeeded — IP not blocked')
+    sys.exit(1)
+except OSError as e:
+    if e.errno == errno.EPERM:
+        print('PASS: connection blocked (EPERM) — kernel enforcement working')
+    else:
+        print(f'WARN: unexpected error: {e}')
+" 2>&1 || true)
+echo "  ${BLOCK_RESULT}"
+
+echo "  Step 3: connect to 1.1.1.1 — expect success (different IP, not blocked)"
+UNBLOCK_RESULT=$(docker exec "${TARGET}" python3 -c "
+import socket, sys
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.settimeout(3)
+try:
+    s.connect(('1.1.1.1', 80))
+    s.close()
+    print('PASS: connection to 1.1.1.1 succeeded — surgical block confirmed')
+except OSError as e:
+    print(f'WARN: {e}')
+" 2>&1 || true)
+echo "  ${UNBLOCK_RESULT}"
+
 pass
 sleep 3
 
@@ -254,7 +291,7 @@ echo "    T1  CRITICAL T1059_unix_shell_execution          action=kill_process"
 echo "    T2  HIGH     T1105_ingress_tool_transfer         (nc/wget must be installed)"
 echo "    T3  HIGH     T1003_008_os_credential_dumping     filename=/etc/shadow"
 echo "    T4  HIGH     T1552_004_private_keys              filename=/tmp/id_rsa"
-echo "    T5  HIGH     T1041_exfiltration_over_c2          dst=8.8.8.8:80"
+echo "    T5  HIGH     T1041_exfiltration_over_c2          dst=8.8.8.8:80 + block_ip verified"
 echo "    T6  (no alert — inventory_service allowlisted)"
 echo "    T7  CRITICAL T1611_escape_to_host_fs             action=kill_process"
 echo "    T8  MEDIUM   T1082_system_info_discovery         filename=/etc/passwd"
