@@ -30,16 +30,16 @@ var whitelistComm = []string{
 // unknownNsCommsWhitelist — node-level GKE infrastructure processes that run outside
 // any pod namespace. These trip unknown_namespace_process but are not threats.
 var unknownNsCommsWhitelist = []string{
-	"iptables",                  // kube-proxy network rules
-	"iptables-legacy",           // older iptables variant on some nodes
-	"iptables-restore",          // bulk iptables rule restore
-	"ip6tables",                 // IPv6 iptables
-	"conntrack",                 // connection tracking tool
-	"ip",                        // iproute2 — route/addr management
-	"kube-proxy",                // Kubernetes network proxy
-	"pause",                     // GKE pod sandbox container
-	"systemd-sysctl",            // node sysctl configuration
-	"bridge-network-interface",  // udev network bridge setup
+	"iptables",                 // kube-proxy network rules
+	"iptables-legacy",          // older iptables variant on some nodes
+	"iptables-restore",         // bulk iptables rule restore
+	"ip6tables",                // IPv6 iptables
+	"conntrack",                // connection tracking tool
+	"ip",                       // iproute2 — route/addr management
+	"kube-proxy",               // Kubernetes network proxy
+	"pause",                    // GKE pod sandbox container
+	"systemd-sysctl",           // node sysctl configuration
+	"bridge-network-interface", // udev network bridge setup
 }
 
 // shellBinaries — binary path suffixes that indicate an interactive shell.
@@ -101,18 +101,18 @@ var t1070HistoryFileSuffixes = []string{
 // Matched by exact comm string — NOT basename — because entries like "runc:[2:INIT]"
 // contain colons that filepath.Base would mangle.
 var fileCommWhitelist = []string{
-	"runc:[2:INIT]",  // reads /etc/passwd to resolve user IDs during container init
+	"runc:[2:INIT]", // reads /etc/passwd to resolve user IDs during container init
 	"runc:[1:CHILD]",
 	"runc",
-	"curl",           // calls getpwuid() to find home directory before looking up ~/.curlrc
-	"id",             // reads /etc/passwd and /etc/group by design — that is its only purpose
-	"systemd-logind",   // session manager reads /etc/passwd, /proc/1/ during login events — runs in private mount ns
-	"bash",             // getpwuid() at startup reads /etc/passwd for prompt/PS1 — shell_spawn CRITICAL already fires
-	"containerd-shim",  // K8s container shim — manages container stdio and lifecycle files under /run/containerd/
-	"dockerd",          // Docker daemon reads overlay2 on every docker exec / container lifecycle event
+	"curl",            // calls getpwuid() to find home directory before looking up ~/.curlrc
+	"id",              // reads /etc/passwd and /etc/group by design — that is its only purpose
+	"systemd-logind",  // session manager reads /etc/passwd, /proc/1/ during login events — runs in private mount ns
+	"bash",            // getpwuid() at startup reads /etc/passwd for prompt/PS1 — shell_spawn CRITICAL already fires
+	"containerd-shim", // K8s container shim — manages container stdio and lifecycle files under /run/containerd/
+	"dockerd",         // Docker daemon reads overlay2 on every docker exec / container lifecycle event
 	// Oracle VM — Performance Co-Pilot (PCP) monitoring agents
-	"pmdaproc",         // Oracle PCP process daemon — polls /proc/*/stat, /proc/*/statm, /proc/*/wchan for every process every 30s
-	"pmdalinux",        // Oracle PCP Linux metrics daemon — polls /sys/class/net/*, /proc/net/*, /proc/self/mounts
+	"pmdaproc",  // Oracle PCP process daemon — polls /proc/*/stat, /proc/*/statm, /proc/*/wchan for every process every 30s
+	"pmdalinux", // Oracle PCP Linux metrics daemon — polls /sys/class/net/*, /proc/net/*, /proc/self/mounts
 }
 
 // containerFSPrefixes — host filesystem paths that hold container layer data.
@@ -180,6 +180,7 @@ var t1082SystemInfoPrefixes = []string{
 // on every DNS lookup and CoinGecko call, adding noise without actionable signal.
 var externalAllowedServices = []string{
 	"inventory-service", // calls CoinGecko for live market data
+	"inventory_service", // Docker version of same service — matches by normalized name, not exact
 }
 
 // ── Known startup noise — intentionally not suppressed ────────────────────────
@@ -205,9 +206,9 @@ var externalAllowedServices = []string{
 // These generate constant high-frequency noise (kube-proxy iptables, prometheus
 // /proc reads, kubelet polling) that has no actionable signal for this project.
 var systemNamespaces = map[string]bool{
-	"kube-system":      true,
-	"gmp-system":       true,
-	"gke-managed-cim":  true,
+	"kube-system":     true,
+	"gmp-system":      true,
+	"gke-managed-cim": true,
 }
 
 func isSystemNamespace(ns string) bool {

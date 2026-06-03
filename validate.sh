@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # validate.sh — eBPF EDR detection validation
 #
-# Runs all 7 attack test cases while the order-processor integration tests
+# Runs all 11 attack test cases while the order-processor integration tests
 # run concurrently in the background. This validates two things at once:
 #   1. Attack detection: each threat rule fires correctly
 #   2. No false positives: normal service traffic does not trigger alerts
@@ -16,8 +16,8 @@
 
 set -euo pipefail
 
-TARGET="order-processor-auth_service"      # raw Docker container name (docker exec uses this)
-INV="order-processor-inventory_service"   # raw Docker container name; WorkloadIdentity.Service = "inventory-service"
+TARGET="order-processor-auth_service"      # raw Docker container name
+INV="order-processor-inventory_service"    # inventory service — external connects are allowlisted
 LOG="alerts/alert.log"
 INTEGRATION_TESTS="/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/run_all_tests.sh"
 
@@ -46,17 +46,15 @@ if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${TARGET}$"; then
     exit 1
 fi
 
-if ! pgrep -x ebpf-edr-demo > /dev/null 2>&1; then
-    echo "WARN: ebpf-edr-demo process not detected — is the EDR agent running?"
+if ! pgrep -x ebpf-edr > /dev/null 2>&1; then
+    echo "WARN: ebpf-edr process not detected — is the EDR agent running?"
 fi
 
 echo ""
-echo "EDR Validation — 8 attack tests + concurrent integration traffic"
+echo "EDR Validation — 11 attack tests + concurrent integration traffic"
 echo "Log: tail -f ${LOG}"
 
 # ── Start integration tests in background ────────────────────────────────────
-# Runs the full order-processor test suite concurrently while attack tests fire.
-# Goal: EDR must catch the attacks without false-positiving on normal API traffic.
 
 INTEG_PID=""
 if [[ -f "${INTEGRATION_TESTS}" ]]; then
@@ -66,7 +64,7 @@ if [[ -f "${INTEGRATION_TESTS}" ]]; then
     INTEG_PID=$!
     echo "  Integration tests PID: ${INTEG_PID}"
     echo "  Log: tail -f /tmp/integ_tests.log"
-    sleep 5  # let services receive initial traffic before attacks begin
+    sleep 5
 else
     echo ""
     echo "WARN: integration tests not found at ${INTEGRATION_TESTS} — skipping background traffic"
@@ -77,18 +75,17 @@ echo "Starting attack tests in 3 seconds..."
 sleep 3
 
 # ── T1: Shell spawn in container ─────────────────────────────────────────────
+# T1059.004 · T1609
 
-header 1 8 "Shell spawn in container" "CRITICAL shell_spawn_container"
+header 1 11 "Shell spawn in container" "CRITICAL T1059_unix_shell_execution + action=kill_process"
 docker exec "${TARGET}" bash -c "id" 2>/dev/null || true
 pass
 sleep 3
 
-# ── T2: Network recon tool in container ──────────────────────────────────────
+# ── T2: Network staging tool in container ────────────────────────────────────
+# T1105 · T1095
 
-header 2 8 "Network tool in container" "HIGH network_tool_container"
-# Try nc first (netcat-openbsd ships in many Debian-based images).
-# Fall back to wget if nc is absent (requires apt-get install, which may fail
-# due to missing /var/lib/apt/lists/partial perms in hardened containers).
+header 2 11 "Network staging tool in container" "HIGH T1105_ingress_tool_transfer"
 if docker exec "${TARGET}" which nc > /dev/null 2>&1; then
     echo "  Using nc (already installed)"
     docker exec "${TARGET}" nc -w 2 1.1.1.1 80 2>/dev/null || true
@@ -104,31 +101,32 @@ fi
 pass
 sleep 3
 
-# ── T3: Read /etc/shadow ──────────────────────────────────────────────────────
+# ── T3: OS credential dumping ─────────────────────────────────────────────────
+# T1003.008
 
-header 3 8 "Read /etc/shadow from container" "HIGH sensitive_file_access"
+header 3 11 "Read /etc/shadow from container" "HIGH T1003_008_os_credential_dumping"
 docker exec "${TARGET}" cat /etc/shadow 2>/dev/null || true
 pass
 sleep 3
 
-# ── T4: Read SSH private key ──────────────────────────────────────────────────
+# ── T4: SSH private key access ────────────────────────────────────────────────
+# T1552.004
+# Use docker cp to create the file — avoids bash spawn (which would trigger T1059
+# and be killed before the file write completes).
 
-header 4 8 "Read SSH private key from container" "CRITICAL sensitive_file_access"
-
-# Create a test key so the file exists to be read
-# Note: bash spawn here also triggers CRITICAL shell_spawn_container — expected
-docker exec "${TARGET}" bash -c \
-    "mkdir -p /root/.ssh && echo 'test-key-material' > /root/.ssh/id_rsa" \
-    2>/dev/null || true
-sleep 1
-
+header 4 11 "Read SSH private key from container" "CRITICAL T1552_004_private_keys"
+echo 'test-key-material' > /tmp/test_id_rsa
+docker exec "${TARGET}" mkdir -p /root/.ssh 2>/dev/null || true
+docker cp /tmp/test_id_rsa "${TARGET}":/root/.ssh/id_rsa
 docker exec "${TARGET}" cat /root/.ssh/id_rsa 2>/dev/null || true
+rm -f /tmp/test_id_rsa
 pass
 sleep 3
 
-# ── T5: Unauthorized external network connect ─────────────────────────────────
+# ── T5: Unauthorized external connect ─────────────────────────────────────────
+# T1041 · T1048
 
-header 5 8 "Unauthorized external connect from container" "HIGH unauthorized_external_connect"
+header 5 11 "Unauthorized external connect from container" "HIGH T1041_exfiltration_over_c2"
 docker exec "${TARGET}" python3 -c "
 import socket
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -141,20 +139,16 @@ finally:
 pass
 sleep 3
 
-# ── T6: Authorized external connect (inventory_service audit log) ─────────────
+# ── T6: Authorized external connect (allowlisted — no alert expected) ─────────
 
-header 6 8 "Authorized external connect — inventory_service" "LOW external_connect_allowed"
+header 6 11 "Authorized external connect — inventory_service" "no alert (allowlisted)"
 echo "  Triggering inventory_service to call CoinGecko..."
-echo "  Run manually in another terminal if needed:"
-echo "    curl http://localhost:8080/api/v1/assets"
-echo ""
-# Attempt direct socket from inventory_service as a fallback trigger
 docker exec "${INV}" python3 -c "
 import socket
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.settimeout(4)
 try:
-    s.connect(('209.97.132.148', 443))  # api.coingecko.com — verify IP before use
+    s.connect(('209.97.132.148', 443))
 finally:
     s.close()
 " 2>/dev/null || true
@@ -162,33 +156,65 @@ pass
 sleep 3
 
 # ── T7: Host reads container filesystem ──────────────────────────────────────
+# T1611
 
-header 7 8 "Host process reads container filesystem" "CRITICAL host_reads_container_fs"
-
+header 7 11 "Host process reads container filesystem" "CRITICAL T1611_escape_to_host_fs + action=kill_process"
 MERGED=$(docker inspect "${TARGET}" \
     --format '{{.GraphDriver.Data.MergedDir}}' 2>/dev/null || echo "")
 
 if [[ -z "${MERGED}" ]]; then
     echo "  SKIP: could not resolve overlay2 MergedDir for ${TARGET}"
-    echo "  Run manually: cat /var/lib/docker/overlay2/<id>/merged/etc/hostname"
 else
     cat "${MERGED}/etc/hostname" 2>/dev/null || true
     pass
 fi
 sleep 3
 
-# ── T8: System file recon (MEDIUM) ───────────────────────────────────────────
-# Reads /etc/passwd directly via `cat` — comm is "cat", not in fileCommWhitelist.
-# bash is whitelisted (reads /etc/passwd for prompt); cat is not.
+# ── T8: System information discovery ─────────────────────────────────────────
+# T1082
 
-header 8 8 "Read /etc/passwd from container (system recon)" "MEDIUM sensitive_file_access"
+header 8 11 "Read /etc/passwd from container (system recon)" "MEDIUM T1082_system_info_discovery"
 docker exec "${TARGET}" cat /etc/passwd 2>/dev/null || true
+pass
+sleep 3
+
+# ── T9: Binary masquerading ───────────────────────────────────────────────────
+# T1036
+# Two separate docker exec calls — avoids /bin/sh wrapper which would trigger T1059.
+
+header 9 11 "Binary masquerading from /tmp" "HIGH T1036_masquerading"
+docker exec "${TARGET}" cp /bin/cat /tmp/sshd 2>/dev/null || true
+sleep 1
+docker exec "${TARGET}" /tmp/sshd /etc/hostname 2>/dev/null || true
+pass
+sleep 3
+
+# ── T10: Cron configuration access ───────────────────────────────────────────
+# T1053.003
+# Use docker cp to place the file — opensnoop only fires on successful opens.
+
+header 10 11 "Cron config access from container" "HIGH T1053_003_scheduled_task_cron"
+echo "* * * * * root /tmp/evil_payload" > /tmp/test_crontab
+docker cp /tmp/test_crontab "${TARGET}":/etc/crontab
+docker exec "${TARGET}" cat /etc/crontab 2>/dev/null || true
+rm -f /tmp/test_crontab
+pass
+sleep 3
+
+# ── T11: Command history access ───────────────────────────────────────────────
+# T1070.003
+# Use docker cp to place the file — opensnoop only fires on successful opens.
+
+header 11 11 "Command history access from container" "MEDIUM T1070_003_clear_command_history"
+echo "rm -rf /important_data" > /tmp/bash_hist
+docker cp /tmp/bash_hist "${TARGET}":/root/.bash_history
+docker exec "${TARGET}" cat /root/.bash_history 2>/dev/null || true
+rm -f /tmp/bash_hist
 pass
 sleep 3
 
 # ── summary ───────────────────────────────────────────────────────────────────
 
-# Wait for integration tests to finish (or report if still running)
 if [[ -n "${INTEG_PID}" ]]; then
     echo ""
     if kill -0 "${INTEG_PID}" 2>/dev/null; then
@@ -211,18 +237,18 @@ echo "  All attack tests sent."
 echo "  Verify results:"
 echo "    tail -20 ${LOG}"
 echo ""
-echo "  Alert format (Phase 1+):"
-echo "    level=CRITICAL rule=shell_spawn_container runtime=docker service=auth-service pod=order-processor-auth_service ..."
-echo ""
-echo "  Expected attack alerts:"
-echo "    T1  CRITICAL shell_spawn_container        service=auth-service"
-echo "    T2  HIGH     network_tool_container        service=auth-service  (nc/wget must be installed)"
-echo "    T3  HIGH     sensitive_file_access         filename=/etc/shadow"
-echo "    T4  CRITICAL sensitive_file_access         filename=/root/.ssh/id_rsa"
-echo "    T5  HIGH     unauthorized_external_connect dst=8.8.8.8:80"
-echo "    T6  (no alert — inventory-service external connects are allowlisted)"
-echo "    T7  CRITICAL host_reads_container_fs       service=host"
-echo "    T8  MEDIUM   sensitive_file_access         filename=/etc/passwd"
+echo "  Expected alerts:"
+echo "    T1  CRITICAL T1059_unix_shell_execution          action=kill_process"
+echo "    T2  HIGH     T1105_ingress_tool_transfer         (nc/wget must be installed)"
+echo "    T3  HIGH     T1003_008_os_credential_dumping     filename=/etc/shadow"
+echo "    T4  CRITICAL T1552_004_private_keys              filename=/root/.ssh/id_rsa"
+echo "    T5  HIGH     T1041_exfiltration_over_c2          dst=8.8.8.8:80"
+echo "    T6  (no alert — inventory_service allowlisted)"
+echo "    T7  CRITICAL T1611_escape_to_host_fs             action=kill_process"
+echo "    T8  MEDIUM   T1082_system_info_discovery         filename=/etc/passwd"
+echo "    T9  HIGH     T1036_masquerading                  comm=/tmp/sshd"
+echo "    T10 HIGH     T1053_003_scheduled_task_cron       filename=/etc/crontab"
+echo "    T11 MEDIUM   T1070_003_clear_command_history     filename=/root/.bash_history"
 echo ""
 echo "  Normal service traffic (integration tests) should NOT"
 echo "  produce any CRITICAL or HIGH alerts."
