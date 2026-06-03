@@ -8,9 +8,16 @@ import (
 	_ "embed"
 	"fmt"
 	"io"
+	"structs"
 
 	"github.com/cilium/ebpf"
 )
+
+type lsmLpmKey struct {
+	_         structs.HostLayout
+	Prefixlen uint32
+	Addr      uint32
+}
 
 // loadLsm returns the embedded CollectionSpec for lsm.
 func loadLsm() (*ebpf.CollectionSpec, error) {
@@ -61,7 +68,8 @@ type lsmProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type lsmMapSpecs struct {
-	Rb *ebpf.MapSpec `ebpf:"rb"`
+	BlockedIps *ebpf.MapSpec `ebpf:"blocked_ips"`
+	Rb         *ebpf.MapSpec `ebpf:"rb"`
 }
 
 // lsmVariableSpecs contains global variables before they are loaded into the kernel.
@@ -90,11 +98,13 @@ func (o *lsmObjects) Close() error {
 //
 // It can be passed to loadLsmObjects or ebpf.CollectionSpec.LoadAndAssign.
 type lsmMaps struct {
-	Rb *ebpf.Map `ebpf:"rb"`
+	BlockedIps *ebpf.Map `ebpf:"blocked_ips"`
+	Rb         *ebpf.Map `ebpf:"rb"`
 }
 
 func (m *lsmMaps) Close() error {
 	return _LsmClose(
+		m.BlockedIps,
 		m.Rb,
 	)
 }
