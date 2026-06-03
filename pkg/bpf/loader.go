@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/perf"
 	"github.com/cilium/ebpf/ringbuf"
@@ -16,9 +17,10 @@ import (
 // Call Close() to detach all probes and release kernel resources.
 type Loader struct {
 	// Exported readers — callers consume events from these.
-	ProcessRd *perf.Reader
-	FileRd    *ringbuf.Reader
-	NetRd     *ringbuf.Reader
+	ProcessRd  *perf.Reader
+	FileRd     *ringbuf.Reader
+	NetRd      *ringbuf.Reader
+	BlockedIPs *ebpf.Map // LPMTrie for kernel-level outbound IP blocking (T1041)
 
 	// kernel resources — closed by Close()
 	processObjs processObjects
@@ -50,6 +52,7 @@ func Load() (*Loader, error) {
 		l.fileObjs.Close()
 		return nil, fmt.Errorf("loading lsm objects: %w", err)
 	}
+	l.BlockedIPs = l.lsmObjs.BlockedIps
 
 	// ── Attach kernel hooks ────────────────────────────────────────────────────
 

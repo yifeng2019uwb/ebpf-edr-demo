@@ -2,9 +2,9 @@
 // Rewritten from scratch:
 //   - replaced hardcoded IP block with full ring buffer event pipeline
 //   - added struct net_event with mnt_ns_id, dst_ip, dst_port, pid, ppid, uid, comm
-//   - audit mode only — never blocks, always returns 0
 //   - skips loopback (127.x.x.x) in BPF to reduce ring buffer traffic
-//   - all policy decisions (private IP ranges, container allowlist) made in Go userspace
+//   - blocked_ips LPMTrie: kernel-enforced outbound IP blocking before TCP handshake
+//   - all other policy decisions (private IP ranges, container allowlist) made in Go userspace
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 
 #include "vmlinux.h"
@@ -15,7 +15,8 @@
 
 char LICENSE[] SEC("license") = "GPL";
 
-#define AF_INET 2  // IPv4 — we only track IPv4 connections
+#define AF_INET 2   // IPv4 — we only track IPv4 connections
+#define EPERM   1   // errno.h not available in BPF context — EPERM is always 1 in Linux
 
 // dst_ip is stored in network byte order (big-endian).
 // On x86 little-endian, the first octet (127 for loopback) sits in the lowest byte.
