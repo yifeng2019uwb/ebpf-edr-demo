@@ -124,6 +124,7 @@ func NewHandler() (*Handler, error) {
 // Send writes the alert to stdout, the local log file, and Cloud Logging (if enabled).
 func (h *Handler) Send(a Alert) {
 	now := time.Now()
+	ts := now.Format("2006-01-02 15:04:05.000000")
 
 	extra := ""
 	if a.Filename != "" {
@@ -141,7 +142,7 @@ func (h *Handler) Send(a Alert) {
 
 	line := fmt.Sprintf(
 		"[%s] ALERT level=%s rule=%s runtime=%s service=%s env=%s state=%s pod=%s namespace=%s pid=%d ppid=%d uid=%d comm=%s%s msg=%s\n",
-		now.Format("2006-01-02 15:04:05"),
+		ts,
 		a.Level,
 		a.Rule,
 		id.Runtime,

@@ -21,6 +21,10 @@ INV="order-processor-inventory_service"    # inventory service — external conn
 LOG="alerts/alert.log"
 INTEGRATION_TESTS="/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/run_all_tests.sh"
 
+# Unique temp directory — avoids name collisions with stale files from previous runs.
+TESTDIR=$(mktemp -d /tmp/edr_validate.XXXXXX)
+trap "rm -rf ${TESTDIR}" EXIT
+
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 header() {
@@ -100,7 +104,7 @@ elif docker exec "${TARGET}" which wget > /dev/null 2>&1; then
 elif which nc > /dev/null 2>&1; then
     echo "  Copying nc from host to container /usr/local/bin/nc..."
     docker cp "$(which nc)" "${TARGET}":/usr/local/bin/nc 2>/dev/null || true
-    docker exec "${TARGET}" nc -w 2 1.1.1.1 80 2>/dev/null || true
+    docker exec "${TARGET}" /usr/local/bin/nc -w 2 1.1.1.1 80 2>/dev/null || true
 else
     echo "  SKIP: nc/ncat/wget not available — install netcat-openbsd in the container to test T2"
 fi
@@ -125,10 +129,9 @@ sleep 3
 header 4 11 "Read SSH private key from container" "HIGH T1552_004_private_keys"
 # Use /tmp/id_rsa — container runs as uid=1000, /root/ is 700 (unreadable).
 # /tmp/id_rsa matches the id_rsa suffix → fires T1552_004 at HIGH.
-echo 'test-key-material' > /tmp/test_id_rsa
-docker cp /tmp/test_id_rsa "${TARGET}":/tmp/id_rsa 2>/dev/null || true
+echo 'test-key-material' > "${TESTDIR}/id_rsa"
+docker cp "${TESTDIR}/id_rsa" "${TARGET}":/tmp/id_rsa 2>/dev/null || true
 docker exec "${TARGET}" cat /tmp/id_rsa 2>/dev/null || true
-rm -f /tmp/test_id_rsa
 pass
 sleep 3
 
@@ -203,10 +206,9 @@ sleep 3
 # Use docker cp to place the file — opensnoop only fires on successful opens.
 
 header 10 11 "Cron config access from container" "HIGH T1053_003_scheduled_task_cron"
-echo "* * * * * root /tmp/evil_payload" > /tmp/test_crontab
-docker cp /tmp/test_crontab "${TARGET}":/etc/crontab
+echo "* * * * * root /tmp/evil_payload" > "${TESTDIR}/crontab"
+docker cp "${TESTDIR}/crontab" "${TARGET}":/etc/crontab
 docker exec "${TARGET}" cat /etc/crontab 2>/dev/null || true
-rm -f /tmp/test_crontab
 pass
 sleep 3
 
@@ -217,10 +219,9 @@ sleep 3
 header 11 11 "Command history access from container" "MEDIUM T1070_003_clear_command_history"
 # Use /tmp/.bash_history — container runs as uid=1000, /root/ is 700 (unreadable).
 # /tmp/.bash_history matches the .bash_history suffix → fires T1070 at MEDIUM.
-echo "rm -rf /important_data" > /tmp/bash_hist
-docker cp /tmp/bash_hist "${TARGET}":/tmp/.bash_history 2>/dev/null || true
+echo "rm -rf /important_data" > "${TESTDIR}/bash_history"
+docker cp "${TESTDIR}/bash_history" "${TARGET}":/tmp/.bash_history 2>/dev/null || true
 docker exec "${TARGET}" cat /tmp/.bash_history 2>/dev/null || true
-rm -f /tmp/bash_hist
 pass
 sleep 3
 

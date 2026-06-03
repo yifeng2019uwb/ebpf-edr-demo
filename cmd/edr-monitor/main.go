@@ -44,6 +44,8 @@ func main() {
 	// "auto"   → currently falls through to DockerResolver (default case in NewResolver).
 	// TODO: implement auto-detection — check if crictl or kubepods cgroup exists,
 	//       pick k8s or docker accordingly. Any unrecognized value also falls to docker.
+	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
+
 	runtime := flag.String("runtime", "auto", "docker | k8s")
 	flag.Parse()
 
