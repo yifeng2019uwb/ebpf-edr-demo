@@ -141,9 +141,11 @@ const indexHTML = `<!DOCTYPE html>
   td { padding: 7px 10px; border-bottom: 1px solid #222; vertical-align: top; white-space: nowrap; }
   td.detail { white-space: normal; }
   .badge { display: inline-block; padding: 1px 7px; border-radius: 3px; font-size: 11px; font-weight: bold; letter-spacing: 0.05em; }
-  .badge.CRITICAL { background: #FF2C2C; color: #fff; }
-  .badge.HIGH     { background: #FF7400; color: #fff; }
-  .badge.MEDIUM   { background: #FFC100; color: #111; }
+  .badge.CRITICAL      { background: #FF2C2C; color: #fff; }
+  .badge.HIGH          { background: #FF7400; color: #fff; }
+  .badge.MEDIUM        { background: #FFC100; color: #111; }
+  .badge.kill_process  { background: #8B0000; color: #fff; }
+  .badge.block_ip      { background: #7B00D4; color: #fff; }
   .rule   { color: #aaa; }
   .detail { color: #888; font-size: 12px; }
   .empty  { text-align: center; color: #444; padding: 40px; }
@@ -166,11 +168,12 @@ const indexHTML = `<!DOCTYPE html>
       <th>Pod</th>
       <th>Namespace</th>
       <th>Runtime</th>
+      <th>Response</th>
       <th>Details</th>
     </tr>
   </thead>
   <tbody id="tbody">
-    <tr><td colspan="8" class="empty">Waiting for alerts...</td></tr>
+    <tr><td colspan="9" class="empty">Waiting for alerts...</td></tr>
   </tbody>
 </table>
 <script>
@@ -183,8 +186,14 @@ const indexHTML = `<!DOCTYPE html>
   function buildRow(a) {
     const details = a.filename
       ? a.filename
-      : (a.dst_ip ? a.dst_ip + ':' + a.dst_port : '—');
+      : a.dst_ip ? a.dst_ip + ':' + a.dst_port
+      : a.comm   ? a.comm
+      : '—';
     const ts = a.ts ? a.ts.replace('T', ' ').replace('Z', '') : '—';
+    const action = a.response_action && a.response_action !== 'none' ? a.response_action : '';
+    const actionCell = action
+      ? '<span class="badge ' + esc(action) + '">' + esc(action) + '</span>'
+      : '—';
     const row = document.createElement('tr');
     row.innerHTML =
       '<td>' + esc(ts) + '</td>' +
@@ -194,6 +203,7 @@ const indexHTML = `<!DOCTYPE html>
       '<td>' + esc(a.pod       || '—') + '</td>' +
       '<td>' + esc(a.namespace || '—') + '</td>' +
       '<td>' + esc(a.runtime   || '—') + '</td>' +
+      '<td>' + actionCell + '</td>' +
       '<td class="detail">' + esc(details) + '</td>';
     return row;
   }
