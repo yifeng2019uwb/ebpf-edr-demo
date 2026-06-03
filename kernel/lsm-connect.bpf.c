@@ -68,8 +68,16 @@ int BPF_PROG(handle_connect, struct socket *sock, struct sockaddr *address, int 
 		return 0;
 
 	// blocked_ips enforcement: check before ringbuf write.
-	// Blocked IPs are denied here — no net_event emitted, no alert from Go.
-	// The block_ip response_action is already logged when the IP was first added to the map.
+	// Blocked IPs are denied silently — no net_event emitted, no alert from Go.
+	// The block_ip response_action was already logged on first detection.
+	//
+	// Visibility gap: repeat connection attempts to a blocked IP are invisible to Go userspace.
+	// Industry approach: keep the sensor silent (no per-attempt noise); delegate persistence
+	// detection to the SIEM/analytics layer which correlates events over time.
+	// If repeat-attempt visibility is needed:
+	//   Option A — add a block_counts BPF hash map, increment on each EPERM, poll from Go
+	//              and emit a LOW periodic summary alert (e.g. "8.8.8.8 blocked 127× in 60s")
+	//   Option B — Cloud Logging alert policy: fire when block_ip appears >N× for same IP in window
 	struct lpm_key lpm = { .prefixlen = 32, .addr = dst_ip };
 	if (bpf_map_lookup_elem(&blocked_ips, &lpm))
 		return -EPERM;  // deny before handshake — connection never starts

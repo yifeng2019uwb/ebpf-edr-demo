@@ -139,9 +139,21 @@ sleep 3
 # T1041 · T1048
 # First connect: fires T1041 alert + writes 8.8.8.8 to blocked_ips BPF map.
 # Second connect to same IP: must get EPERM (blocked at kernel before handshake).
-# Third connect to different IP (1.1.1.1): must succeed (surgical block, not all outbound).
+# Third connect to private IP: must NOT get EPERM (private IPs never blocked).
+# Map is flushed before the test so each validate.sh run is independent.
 
 header 5 11 "Unauthorized external connect — block verification" "HIGH T1041_exfiltration_over_c2 + block_ip"
+
+# Flush blocked_ips map so the test is repeatable across multiple validate.sh runs.
+# Without this, 8.8.8.8 stays blocked from the previous run and step 1 never fires.
+BLOCK_MAP_ID=$(sudo bpftool map show 2>/dev/null | awk '/blocked_ips/{print id} {id=$1}' | tr -d ':' | head -1)
+if [[ -n "${BLOCK_MAP_ID}" ]]; then
+    sudo bpftool map flush id "${BLOCK_MAP_ID}" 2>/dev/null && \
+        echo "  Flushed blocked_ips map (id=${BLOCK_MAP_ID}) — clean slate for this run" || \
+        echo "  WARN: could not flush blocked_ips map — step 1 may not fire if IP already blocked"
+else
+    echo "  WARN: blocked_ips map not found — is the agent running with LPMTrie support?"
+fi
 
 echo "  Step 1: first connect to 8.8.8.8 — fires alert + adds IP to blocked_ips map"
 docker exec "${TARGET}" python3 -c "

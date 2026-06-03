@@ -61,6 +61,11 @@ func killProcess(a *alert.Alert) {
 // Scope: outbound only — lsm/socket_connect fires on connect(), not accept().
 // Lifetime: IPs are blocked until the agent restarts (BPF map is cleared on program unload).
 //
+// Repeat-attempt visibility: once an IP is in the map, the LSM hook denies silently —
+// no net_event is emitted and no further alert fires. This is intentional (sensor stays quiet;
+// persistence detection belongs in the analytics/SIEM layer). If repeat-attempt counters
+// are needed, see the block_counts option comment in lsm-connect.bpf.c.
+//
 // Activation steps (kernel side not yet compiled):
 //  1. Uncomment blocked_ips map + lpm_key in kernel/lsm-connect.bpf.c and kernel/lsm-connect.h
 //  2. Run `go generate ./pkg/bpf/...` on GCP VM (Linux) — adds lsmObjs.BlockedIps to generated code

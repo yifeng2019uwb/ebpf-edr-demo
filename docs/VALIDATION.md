@@ -1,7 +1,9 @@
 # Validation Guide — eBPF EDR Detection Rules
 
 Manual test procedure to verify each detection rule fires correctly against real container behavior.
-Run on the GCP VM while the EDR agent is running.
+Run on the GCP Docker VM while the EDR agent is running.
+
+Automated: `sudo ./validate.sh` runs all 11 tests with concurrent integration traffic.
 
 ---
 
@@ -10,22 +12,25 @@ Run on the GCP VM while the EDR agent is running.
 Attack tests run while the full order-processor integration test suite runs concurrently in the
 background. This validates two things at once:
 
-1. **Attack detection** — each threat rule fires at the correct severity
+1. **Attack detection** — each threat rule fires at the correct severity with the correct response action
 2. **No false positives** — normal API traffic does not produce CRITICAL or HIGH alerts
-
-The integration tests simulate realistic service load: auth, orders, inventory, user balance calls.
-The EDR must discriminate between this normal traffic and the injected attack events.
 
 ---
 
 ## Prerequisites
 
-- EDR agent running: `sudo ./ebpf-edr-demo`
-- All 8 order-processor containers running: `docker ps`
-- Three terminals open:
-  - Terminal 1: `tail -f alerts/alert.log` — watch alerts in real time
-  - Terminal 2: `tail -f /tmp/integ_tests.log` — watch integration test output
-  - Terminal 3: run `sudo ./validate.sh` — execute test cases
+```bash
+# EDR agent running
+sudo ./ebpf-edr --runtime=docker
+
+# All order-processor containers running
+docker ps
+
+# Three terminals
+tail -f alerts/alert.log          # Terminal 1: watch alerts live
+tail -f /tmp/integ_tests.log      # Terminal 2: watch integration tests
+sudo ./validate.sh                # Terminal 3: run all 11 tests
+```
 
 ---
 
@@ -33,200 +38,214 @@ The EDR must discriminate between this normal traffic and the injected attack ev
 
 ### T1 — Shell Spawn in Container
 
-**Threat**: Attacker achieved RCE inside a container and spawned an interactive shell.
+**MITRE**: T1059.004 · T1609 — Command & Scripting: Unix Shell / Container Administration Command
 
-**Monitor**: execsnoop (`sys_enter_execve`)
+**Threat**: Attacker achieved RCE inside a container and spawned an interactive shell.
 
 **Command**:
 ```bash
 docker exec order-processor-auth_service bash -c "id"
 ```
 
-**Expected alert**:
+**Expected**:
 ```
-level=CRITICAL rule=shell_spawn_container container=order-processor-auth_service comm=bash
+level=CRITICAL rule=T1059_unix_shell_execution service=auth_service comm=/usr/bin/bash action=kill_process
 ```
 
-**Why it fires**: `bash` binary path matches `shellBinaries` suffix list. Any shell spawn inside a
-container is treated as RCE evidence regardless of the command run inside it.
+**Response**: process killed immediately via SIGKILL.
 
 ---
 
-### T2 — Network Recon Tool in Container
+### T2 — Network Staging Tool in Container
 
-**Threat**: Attacker inside a container runs `wget` or `nc` to probe external hosts or exfiltrate data.
+**MITRE**: T1105 · T1095 — Ingress Tool Transfer / Non-Application Layer Protocol
 
-**Monitor**: execsnoop (`sys_enter_execve`)
+**Threat**: Attacker runs `nc` or `wget` to stage tools or exfiltrate data.
 
 **Command**:
 ```bash
-docker exec order-processor-auth_service wget --timeout=2 -q http://1.1.1.1 2>/dev/null || true
+docker exec order-processor-auth_service nc -w 2 1.1.1.1 80
 ```
 
-**Expected alert**:
+**Expected**:
 ```
-level=HIGH rule=network_tool_container container=order-processor-auth_service comm=wget
+level=HIGH rule=T1105_ingress_tool_transfer service=auth_service comm=nc action=kill_process
 ```
 
-**Note**: Detection fires on binary execution, not network connection. `validate.sh` attempts `nc`, `ncat`, then falls back to `wget` — at least one is typically available in the container image.
+**Note**: validate.sh copies `nc` from host if not present in container.
 
 ---
 
-### T3 — Sensitive File: `/etc/shadow`
+### T3 — OS Credential Dumping
 
-**Threat**: Attacker inside a container reads the password hash file to crack credentials offline.
+**MITRE**: T1003.008 — OS Credential Dumping: /etc/shadow
 
-**Monitor**: opensnoop (`sys_enter_openat` + `sys_exit_openat`)
+**Threat**: Attacker reads password hashes to crack credentials offline.
 
 **Command**:
 ```bash
 docker exec order-processor-auth_service cat /etc/shadow
 ```
 
-**Expected alert**:
+**Expected**:
 ```
-level=HIGH rule=sensitive_file_access container=order-processor-auth_service comm=cat
-msg=Container accessed sensitive file: /etc/shadow
+level=HIGH rule=T1003_008_os_credential_dumping service=auth_service filename=/etc/shadow action=kill_process
 ```
 
-**Note**: `cat` gets `EACCES` (permission denied) but opensnoop still fires — the two-probe design
-emits on access-denied opens, not just successful ones. This is intentional: the *attempt* to read
-shadow is the signal, not the success.
+**Note**: `cat` gets `EACCES` but opensnoop fires on the attempt — the access attempt is the signal.
 
 ---
 
-### T4 — Sensitive File: SSH Private Key
+### T4 — Private Key Access
 
-**Threat**: Attacker reads an SSH private key from inside a container to move laterally.
+**MITRE**: T1552.004 — Unsecured Credentials: Private Keys
 
-**Monitor**: opensnoop
-
-**Setup** (run once to create a test key in the container):
-```bash
-docker exec order-processor-auth_service bash -c \
-  "mkdir -p /root/.ssh && echo 'test-key-material' > /root/.ssh/id_rsa"
-```
+**Threat**: Attacker reads an SSH private key from inside a container.
 
 **Command**:
 ```bash
-docker exec order-processor-auth_service cat /root/.ssh/id_rsa
+docker cp /tmp/test_id_rsa order-processor-auth_service:/tmp/id_rsa
+docker exec order-processor-auth_service cat /tmp/id_rsa
 ```
 
-**Expected alert**:
+**Expected**:
 ```
-level=CRITICAL rule=sensitive_file_access container=order-processor-auth_service comm=cat
-msg=Container accessed SSH credential file: /root/.ssh/id_rsa
+level=HIGH rule=T1552_004_private_keys service=auth_service filename=/tmp/id_rsa action=kill_process
 ```
-
-**Note**: The setup step also triggers `shell_spawn_container` CRITICAL — that is expected.
-The SSH key read itself is a separate CRITICAL event.
 
 ---
 
-### T5 — Unauthorized External Network Connection
+### T5 — Unauthorized External Connect + Block Verification
 
-**Threat**: Compromised container reaches out to an attacker-controlled external IP (C2, exfiltration).
+**MITRE**: T1041 · T1048 — Exfiltration Over C2 / Alternative Protocol
 
-**Monitor**: lsm-connect (`lsm/socket_connect`)
+**Threat**: Compromised container connects to attacker C2 or exfiltrates data.
 
-**Command**:
-```bash
-docker exec order-processor-auth_service python3 -c "
-import socket
-s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.settimeout(2)
-try:
-    s.connect(('8.8.8.8', 80))
-finally:
-    s.close()
-" 2>/dev/null || true
+**Test includes 3-step verification:**
+
+```
+Step 1: connect to 8.8.8.8 → T1041 alert fires + IP added to blocked_ips BPF map
+Step 2: connect to 8.8.8.8 again → EPERM (blocked at kernel before TCP handshake)
+Step 3: connect to private IP → no EPERM (private IPs never blocked)
 ```
 
-**Expected alert**:
+**Expected (Step 1)**:
 ```
-level=HIGH rule=unauthorized_external_connect container=order-processor-auth_service
-msg=Container made unauthorized external connection to 8.8.8.8:80
+level=HIGH rule=T1041_exfiltration_over_c2 service=auth_service dst=8.8.8.8:80 action=block_ip
 ```
 
-**Why it fires**: `auth_service` is not in `externalAllowedContainers`. Any external IP (non-RFC-1918)
-connection from an unauthorized container triggers HIGH.
+**Expected (Step 2)**: `[Errno 1] Operation not permitted` — no alert (blocked at kernel, no event emitted)
+
+**Expected (Step 3)**: connection refused or timeout — NOT EPERM
 
 ---
 
 ### T6 — Authorized External Connection (No Alert)
 
-**Threat model**: Verify the allowlist works — `inventory_service` is the only container permitted
-to call the external CoinGecko API. This test confirms no alert fires (not even LOW).
+**Threat model**: Verify the allowlist works — `inventory_service` is permitted to call CoinGecko.
 
-**Monitor**: lsm-connect
-
-**Command**: Trigger the inventory service to fetch live market data via the API gateway:
-```bash
-curl http://localhost:8080/api/v1/assets   # adjust endpoint to match your gateway route
-```
-
-**Expected**: No alert. `inventory_service` is in `externalAllowedServices` — the connection is
-silently allowed. A HIGH `unauthorized_external_connect` would indicate the allowlist is broken.
+**Expected**: No alert. HIGH alert would indicate the allowlist is broken.
 
 ---
 
-### T7 — Host Process Reads Container Filesystem
+### T7 — Host Reads Container Filesystem
 
-**Threat**: Attacker on the host (via container escape or stolen host credentials) reads secrets
-directly from a container's filesystem on disk — bypassing container isolation entirely.
+**MITRE**: T1611 — Escape to Host
 
-**Monitor**: opensnoop
+**Threat**: Attacker on the host reads secrets directly from container overlay — bypassing container isolation.
 
 **Command**:
 ```bash
-MERGED=$(docker inspect order-processor-auth_service \
-  --format '{{.GraphDriver.Data.MergedDir}}')
+MERGED=$(docker inspect order-processor-auth_service --format '{{.GraphDriver.Data.MergedDir}}')
 cat "${MERGED}/etc/hostname"
 ```
 
-**Expected alert**:
+**Expected**:
 ```
-level=CRITICAL rule=host_reads_container_fs container=host
-msg=Host process accessed Docker container filesystem: /var/lib/docker/overlay2/.../etc/hostname
+level=CRITICAL rule=T1611_escape_to_host_fs service=host filename=/var/lib/docker/overlay2/.../merged/etc/hostname action=kill_process
 ```
-
-**Why it fires**: Any host process (container == "host") opening a path under
-`/var/lib/docker/overlay2/` is treated as a container filesystem access from outside.
-No legitimate application reads container overlay mounts directly.
 
 ---
 
-### T8 — System File Recon: `/etc/passwd`
+### T8 — System Information Discovery
 
-**Threat**: Attacker reads the user account list to identify targets for privilege escalation or lateral movement.
+**MITRE**: T1082 — System Information Discovery
 
-**Monitor**: opensnoop
+**Threat**: Attacker enumerates user accounts for privilege escalation targets.
 
 **Command**:
 ```bash
 docker exec order-processor-auth_service cat /etc/passwd
 ```
 
-**Expected alert**:
+**Expected**:
 ```
-level=MEDIUM rule=sensitive_file_access container=order-processor-auth_service comm=cat
-msg=Container accessed system file: /etc/passwd
+level=MEDIUM rule=T1082_system_info_discovery service=auth_service filename=/etc/passwd
 ```
 
-**Why MEDIUM not HIGH**: `/etc/passwd` is world-readable and not a direct credential. Reading it
-is suspicious from application code but lower risk than `/etc/shadow` or private keys.
-`bash` is whitelisted (reads `/etc/passwd` at startup for prompt); `cat` is not.
+**Note**: MEDIUM because `/etc/passwd` is world-readable. `bash` is whitelisted (reads at startup); `cat` is not.
 
 ---
 
-## Out of Scope
+### T9 — Binary Masquerading
 
-| Scenario | Why excluded |
-|---|---|
-| SSH login detection | Host-level auth — outside container threat model |
-| `systemd-logind` session events | OS login handling — not a container threat |
-| Container escape via kernel exploit | Requires real CVE — impractical to simulate safely |
-| Host-level network monitoring | No host process allowlist — too noisy without full inventory |
+**MITRE**: T1036 — Masquerading
+
+**Threat**: Attacker drops a malicious binary named after a legitimate process and runs it from `/tmp`.
+
+**Command**:
+```bash
+docker exec order-processor-auth_service cp /bin/cat /tmp/sshd
+docker exec order-processor-auth_service /tmp/sshd /etc/hostname
+```
+
+**Expected**:
+```
+level=HIGH rule=T1036_masquerading service=auth_service comm=/tmp/sshd
+```
+
+**Note**: Two separate `docker exec` calls — avoids `/bin/sh` wrapper which would trigger T1059.
+Masquerading check runs before the process whitelist (`/tmp/sshd` fires even though `sshd` is whitelisted).
+
+---
+
+### T10 — Cron Modification
+
+**MITRE**: T1053.003 — Scheduled Task/Job: Cron
+
+**Threat**: Attacker modifies cron to establish persistence inside a container.
+
+**Command**:
+```bash
+echo "* * * * * root /tmp/evil" > /tmp/test_crontab
+docker cp /tmp/test_crontab order-processor-auth_service:/etc/crontab
+docker exec order-processor-auth_service cat /etc/crontab
+```
+
+**Expected**:
+```
+level=HIGH rule=T1053_003_scheduled_task_cron service=auth_service filename=/etc/crontab
+```
+
+---
+
+### T11 — Clear Command History
+
+**MITRE**: T1070.003 — Indicator Removal: Clear Command History
+
+**Threat**: Attacker covers tracks by accessing or clearing shell history.
+
+**Command**:
+```bash
+echo "rm -rf /important" > /tmp/bash_hist
+docker cp /tmp/bash_hist order-processor-auth_service:/tmp/.bash_history
+docker exec order-processor-auth_service cat /tmp/.bash_history
+```
+
+**Expected**:
+```
+level=MEDIUM rule=T1070_003_clear_command_history service=auth_service filename=/tmp/.bash_history
+```
 
 ---
 
@@ -234,17 +253,31 @@ is suspicious from application code but lower risk than `/etc/shadow` or private
 
 **Attack detection:**
 
-- [x] T1 — CRITICAL `shell_spawn_container`
-- [x] T2 — HIGH `network_tool_container`
-- [x] T3 — HIGH `sensitive_file_access` (`/etc/shadow`)
-- [x] T4 — CRITICAL `sensitive_file_access` (SSH key)
-- [x] T5 — HIGH `unauthorized_external_connect`
-- [x] T6 — No alert (inventory_service allowlisted — correct)
-- [x] T7 — CRITICAL `host_reads_container_fs`
-- [x] T8 — MEDIUM `sensitive_file_access` (`/etc/passwd`)
+- [x] T1  — CRITICAL `T1059_unix_shell_execution` + kill_process
+- [x] T2  — HIGH `T1105_ingress_tool_transfer` + kill_process
+- [x] T3  — HIGH `T1003_008_os_credential_dumping` + kill_process
+- [x] T4  — HIGH `T1552_004_private_keys` + kill_process
+- [x] T5  — HIGH `T1041_exfiltration_over_c2` + block_ip (EPERM on retry verified)
+- [x] T6  — No alert (inventory_service allowlisted — correct)
+- [x] T7  — CRITICAL `T1611_escape_to_host_fs` + kill_process
+- [x] T8  — MEDIUM `T1082_system_info_discovery`
+- [x] T9  — HIGH `T1036_masquerading`
+- [x] T10 — HIGH `T1053_003_scheduled_task_cron`
+- [x] T11 — MEDIUM `T1070_003_clear_command_history`
 
 **False positive check — confirmed clean:**
 
 - [x] No CRITICAL alerts from normal API traffic
 - [x] No HIGH alerts from normal API traffic
 - [x] Integration tests pass (services remain healthy under EDR observation)
+
+---
+
+## Out of Scope
+
+| Scenario | Why excluded |
+|----------|-------------|
+| SSH login detection | Host-level auth — outside container threat model |
+| Container escape via kernel exploit | Requires real CVE — impractical to simulate safely |
+| Scripting interpreter (python -c) | High FP risk — Python service processes are legitimate |
+| Network service scanning (burst) | Requires stateful detection — sliding window counter |

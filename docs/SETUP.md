@@ -217,18 +217,21 @@ Open **http://localhost:8888** — alerts from both Docker VM and GKE stream in 
 ./validate-gke.sh   # from cloud-native-order-processor/gcp_gke/
 ```
 
-### Expected alerts in the UI after Docker validation (T1–T8)
+### Expected alerts in the UI after Docker validation (T1–T11)
 
-| Test | Level    | Rule                            | Details               |
-|------|----------|---------------------------------|-----------------------|
-| T1   | CRITICAL | `shell_spawn_container`         | comm=bash             |
-| T2   | HIGH     | `network_tool_container`        | comm=nc or wget       |
-| T3   | HIGH     | `sensitive_file_access`         | /etc/shadow           |
-| T4   | CRITICAL | `sensitive_file_access`         | /root/.ssh/id_rsa     |
-| T5   | HIGH     | `unauthorized_external_connect` | 8.8.8.8:80            |
-| T6   | (no alert — inventory-service external connects are allowlisted) | |
-| T7   | CRITICAL | `host_reads_container_fs`       | service=host          |
-| T8   | MEDIUM   | `sensitive_file_access`         | /etc/passwd           |
+| Test | Level    | Rule                                   | Response     | Details               |
+|------|----------|----------------------------------------|--------------|-----------------------|
+| T1   | CRITICAL | `T1059_unix_shell_execution`           | kill_process | comm=/usr/bin/bash    |
+| T2   | HIGH     | `T1105_ingress_tool_transfer`          | kill_process | comm=nc or wget       |
+| T3   | HIGH     | `T1003_008_os_credential_dumping`      | kill_process | /etc/shadow           |
+| T4   | HIGH     | `T1552_004_private_keys`               | kill_process | /tmp/id_rsa           |
+| T5   | HIGH     | `T1041_exfiltration_over_c2`           | block_ip     | 8.8.8.8:80            |
+| T6   | (no alert — inventory_service allowlisted)                                       |
+| T7   | CRITICAL | `T1611_escape_to_host_fs`              | kill_process | service=host          |
+| T8   | MEDIUM   | `T1082_system_info_discovery`          | —            | /etc/passwd           |
+| T9   | HIGH     | `T1036_masquerading`                   | —            | comm=/tmp/sshd        |
+| T10  | HIGH     | `T1053_003_scheduled_task_cron`        | —            | /etc/crontab          |
+| T11  | MEDIUM   | `T1070_003_clear_command_history`      | —            | /tmp/.bash_history    |
 
 ---
 

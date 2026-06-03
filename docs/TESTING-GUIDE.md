@@ -402,7 +402,7 @@ See `docs/VALIDATION-GKE.md` for GKE test cases.
 
 ### Oracle VMs (manual)
 ```bash
-# Shell spawn — should fire CRITICAL shell_spawn_container
+# Shell spawn — should fire CRITICAL T1059_unix_shell_execution
 ssh -i ~/.ssh/oracle_vm opc@163.192.30.193 \
   "sudo docker exec healthcare-provider bash -c 'id'"
 
