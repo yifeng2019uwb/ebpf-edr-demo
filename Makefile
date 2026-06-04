@@ -7,7 +7,7 @@ COLLECTOR_IMAGE := $(DOCKER_REGISTRY)/collector:latest
 # Path to order-processor repo (override if needed)
 ORDER_PROCESSOR_DIR ?= $(HOME)/workspace/github_projects/order_processor/cloud-native-order-processor
 
-.PHONY: generate build rebuild test vet clean docker-build docker-push sensor-build sensor-push run-docker run-alert-router infra-up infra-down github-release test-env-up test-env-down
+.PHONY: generate build rebuild test vet clean docker-build docker-push docker-push-prebuilt run_ebpf sensor-build sensor-push run-docker run-alert-router infra-up infra-down github-release test-env-up test-env-down
 
 ## generate — compile .bpf.c → .o and regenerate Go wrappers in pkg/bpf/
 ## Requires: clang, llvm, libbpf-dev (run on GCP VM, not Mac)
@@ -49,6 +49,12 @@ docker-push-prebuilt:
 	@test -f $(BINARY) || (echo "ERROR: $(BINARY) not found — commit the binary from the GCP VM first"; exit 1)
 	docker buildx build --platform linux/amd64 --no-cache --push \
 		-t $(DOCKER_IMAGE) .
+
+## run_ebpf — detach any stale LSM links then run the agent (use on shared VMs to avoid BPF_MAX_TRAMP_LINKS)
+run_ebpf:
+	@sudo bpftool link list | awk '/^[0-9]+: tracing/{id=$$1; sub(":","",id)} /lsm_mac/{print id}' | \
+	  xargs -I{} sudo bpftool link detach id {} 2>/dev/null || true
+	sudo env GOOGLE_CLOUD_PROJECT=ebpfagent ./$(BINARY) --runtime=docker
 
 ## run-docker — run the EDR agent on the Docker VM (sets GOOGLE_CLOUD_PROJECT, must run as root)
 run-docker:
