@@ -78,7 +78,12 @@ int BPF_PROG(handle_connect, struct socket *sock, struct sockaddr *address, int 
 	//   Option A — add a block_counts BPF hash map, increment on each EPERM, poll from Go
 	//              and emit a LOW periodic summary alert (e.g. "8.8.8.8 blocked 127× in 60s")
 	//   Option B — Cloud Logging alert policy: fire when block_ip appears >N× for same IP in window
-	struct lpm_key lpm = { .prefixlen = 32, .addr = dst_ip };
+	// __builtin_memset required: BPF verifier tracks stack byte-by-byte and rejects
+	// bpf_map_lookup_elem if any key bytes are uninitialized, even with designated initializers.
+	struct lpm_key lpm;
+	__builtin_memset(&lpm, 0, sizeof(lpm));
+	lpm.prefixlen = 32;
+	lpm.addr      = dst_ip;
 	if (bpf_map_lookup_elem(&blocked_ips, &lpm))
 		return -EPERM;  // deny before handshake — connection never starts
 

@@ -7,24 +7,43 @@
 ### When you change eBPF EDR code (this repo)
 
 The image tag is always `latest`. Kubernetes won't pull the new image unless the pod restarts.
-`deploy.sh daemonset` handles everything: re-downloads the YAML from GitHub, applies it, and forces a rollout restart.
+`deploy.sh app` handles re-applying the DaemonSet: re-downloads the YAML from GitHub, applies it, and forces a rollout restart.
 
 ```bash
 # Step 1 — in ebpf-edr-demo/
-make docker-push          # cross-compile binary + build + push to Artifact Registry
+# If on GCP VM (go generate works):
+make docker-push          # rebuild binary + build image + push to Artifact Registry
+
+# If on Mac (BPF go generate requires Linux):
+make docker-push-prebuilt # uses committed binary — run 'make build' on GCP VM first, commit ebpf-edr
+
 git add -A && git commit -m "..." && git push   # publish YAML changes to GitHub
 
-# Step 2 — in cloud-native-order-processor/gcp_gke/
-./deploy.sh daemonset     # downloads YAML from GitHub, applies to all clusters, restarts DaemonSet
+# Step 2 — in health-ai/healthcare-ai-microservices/kubernetes/
+./deploy.sh app           # re-applies deployments + services + downloads YAML from GitHub + restarts DaemonSet
 ```
 
-`./deploy.sh daemonset` does internally:
+`./deploy.sh app` DaemonSet step does internally:
 1. Checks image exists in AR (`gcloud artifacts docker images describe`)
 2. Downloads `ebpf-edr-ds.yaml` from GitHub raw URL
-3. Substitutes `${REGION}` via `envsubst` per cluster
+3. Substitutes `${REGION}`, `${CLUSTER_NAME}`, `${GOOGLE_CLOUD_PROJECT}` via `envsubst`
 4. `kubectl apply` + `kubectl rollout restart` + waits for rollout
 
 If you only changed Go code (not the YAML), git push is still needed so GitHub has the latest — but the YAML won't change so only the image matters.
+
+### When you change BPF C code (kernel/*.bpf.c)
+
+Must run `go generate` on the GCP VM (needs clang + libbpf-dev) to regenerate Go bindings:
+
+```bash
+# On GCP VM in ebpf-edr-demo/
+make rebuild              # go generate + go build → updates pkg/bpf/*_bpfel.go + ebpf-edr binary
+git add pkg/bpf/ ebpf-edr && git commit -m "..." && git push
+
+# On Mac — pull, then push image
+git pull
+make docker-push-prebuilt
+```
 
 ### When you change the DaemonSet YAML (`k8s/ebpf-edr-ds.yaml`)
 

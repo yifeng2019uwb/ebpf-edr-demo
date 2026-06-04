@@ -44,6 +44,12 @@ docker-push: build
 	docker buildx build --platform linux/amd64 --no-cache --push \
 		-t $(DOCKER_IMAGE) .
 
+## docker-push-prebuilt — push image using the committed binary (use on Mac where go generate requires Linux)
+docker-push-prebuilt:
+	@test -f $(BINARY) || (echo "ERROR: $(BINARY) not found — commit the binary from the GCP VM first"; exit 1)
+	docker buildx build --platform linux/amd64 --no-cache --push \
+		-t $(DOCKER_IMAGE) .
+
 ## run-docker — run the EDR agent on the Docker VM (sets GOOGLE_CLOUD_PROJECT, must run as root)
 run-docker:
 	sudo env GOOGLE_CLOUD_PROJECT=ebpfagent ./$(BINARY) --runtime=docker

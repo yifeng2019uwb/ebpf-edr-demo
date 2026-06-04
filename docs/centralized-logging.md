@@ -271,4 +271,4 @@ If unset, Cloud Logging is disabled and the agent falls back to file+stdout only
 - [x] `infra/` — Pulumi stack: custom bucket (365d), sink, cross-project IAM bindings
 - [x] Docker VM — OpenClaw compute SA granted `logging.logWriter` on `ebpfagent` via Pulumi
 - [x] GKE — `order-processor-sa` granted `logging.logWriter` via Pulumi (`pulumi_registry.go`)
-- [ ] `pkg/detector` or `internal/alert` — rate limiter and burst aggregation
+- [ ] `pkg/detector` or `internal/alert` — rate limiter and burst aggregation (out of scope: whitelists already prevent MEDIUM floods in practice)

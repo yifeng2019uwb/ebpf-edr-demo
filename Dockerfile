@@ -6,5 +6,5 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
     apt-get remove -y curl && apt-get autoremove -y && \
     rm -rf /var/lib/apt/lists/*
 RUN mkdir -p /alerts
-COPY ebpf-edr-demo /usr/local/bin/ebpf-edr-demo
-ENTRYPOINT ["/usr/local/bin/ebpf-edr-demo", "-runtime=k8s"]
+COPY ebpf-edr /usr/local/bin/ebpf-edr
+ENTRYPOINT ["/usr/local/bin/ebpf-edr", "-runtime=k8s"]
