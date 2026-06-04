@@ -79,7 +79,7 @@ func main() {
 	pendingBuf := make(map[uint32][]pendingEntry)
 
 	det := detector.NewRuleDetector()
-	responder := detector.NewResponder(loader.BlockedIPs)
+	responder := detector.NewResponder(nil)
 
 	// Producers
 	go func() {
