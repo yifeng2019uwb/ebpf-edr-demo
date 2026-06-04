@@ -6,6 +6,7 @@ require (
 	cloud.google.com/go/logging v1.17.0
 	cloud.google.com/go/pubsub/v2 v2.6.0
 	github.com/cilium/ebpf v0.21.0
+	github.com/gorilla/websocket v1.5.3
 )
 
 require (
@@ -23,7 +24,6 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.14 // indirect
 	github.com/googleapis/gax-go/v2 v2.21.0 // indirect
-	github.com/gorilla/websocket v1.5.3 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.63.0 // indirect
