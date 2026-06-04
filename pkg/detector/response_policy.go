@@ -23,30 +23,25 @@ type responseRule struct {
 //
 // Process rules
 var responseRules = []responseRule{
-	// T1059 — shell or scripting interpreter in container: kill immediately (RCE)
-	{rule: RuleT1059UnixShellExecution, minLevel: alert.Critical, action: ActionKillProcess},
-
-	// T1105 — network staging tool in container: kill before data transfer completes
-	{rule: RuleT1105IngressToolTransfer, minLevel: alert.High, action: ActionKillProcess},
+	// T1059 — alert only: shells run constantly in builds, kubectl exec, health checks
+	// T1105 — alert only: wget/curl used by package managers and health checks
 
 	// T1611 — escape to host via unknown namespace: excluded — Podman health check false positive
 	//   Phase 2: fix containerIDFromDockerCgroup to parse Podman cgroup format, then enable kill
 	// {rule: RuleT1611EscapeToHostNs, minLevel: alert.Critical, action: ActionKillProcess},
 
 	// File rules
-	// T1611 — host reads container filesystem: kill the host-side process attempting escape
+	// T1611 — host reads container filesystem: kill — no legitimate app accesses host overlay
 	{rule: RuleT1611EscapeToHostFs, minLevel: alert.Critical, action: ActionKillProcess},
 
-	// T1611 — container reads /proc/1/: kill the container process probing host namespace
-	{rule: RuleT1611EscapeToHostProc, minLevel: alert.High, action: ActionKillProcess},
+	// T1611 — container reads /proc/1/: alert only — GKE monitoring sidecars hit this (known FP)
 
-	// T1552.004 — private key access: kill on both CRITICAL (SSH dirs) and HIGH (key files)
+	// T1552.004 — private key access: kill — no container should read SSH keys
 	{rule: RuleT1552PrivateKeys, minLevel: alert.High, action: ActionKillProcess},
 
-	// T1552.001 — credentials in files: kill on .env and /run/secrets/ access
-	{rule: RuleT1552CredentialsInFiles, minLevel: alert.High, action: ActionKillProcess},
+	// T1552.001 — alert only: apps legitimately read their own .env at startup
 
-	// T1003.008 — OS credential dumping (/etc/shadow): kill
+	// T1003.008 — OS credential dumping (/etc/shadow): kill — never legitimate inside a container
 	{rule: RuleT1003OsCredentialDumping, minLevel: alert.High, action: ActionKillProcess},
 
 	// T1082 — system info discovery (/etc/passwd, /etc/group): no action — MEDIUM, too noisy
