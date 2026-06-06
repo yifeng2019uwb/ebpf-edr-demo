@@ -1,3 +1,21 @@
+# Legacy
+
+## Oracle Cloud VM support (terminated 2026-06-06)
+
+Oracle Free Tier account was terminated after VM loop creation. All Oracle VMs deleted.
+Kept here for reference if Oracle Cloud is ever used again:
+
+- `docs/oracle-vm-deploy-design.md` — deployment design and environment facts for VM1 + VM2
+- `infra/oracle-agents.go` — GCP service account provisioning code for Oracle VMs (commented out)
+
+To re-enable Oracle support:
+1. Uncomment the code in `infra/oracle-agents.go` and merge back into `infra/agents.go`
+2. Add `pmdaproc` and `pmdalinux` back to `fileCommWhitelist` in `pkg/detector/policy.go`
+   (Oracle PCP monitoring agents that generate high-volume file events)
+3. Run `make infra-up` to provision the SA + key in GCP
+
+---
+
 # Legacy — bpftrace + Python EDR Demo
 
 A simple EDR pipeline using bpftrace for kernel-level process monitoring.

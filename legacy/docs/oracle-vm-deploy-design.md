@@ -1,5 +1,8 @@
 # eBPF EDR — Oracle Cloud VM Deployment Design
 
+> **LEGACY** — Oracle Cloud Free Tier account terminated 2026-06-06 due to VM loop creation.
+> All Oracle VMs deleted. Kept for reference if Oracle Cloud is used again in the future.
+
 > Status: **Planning — research complete, implementation not yet started**
 > Research date: 2026-05-29
 > Target: Oracle Cloud Free Tier VM2 (163.192.30.193) running provider-service + ai-service

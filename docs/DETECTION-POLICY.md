@@ -86,44 +86,12 @@ Constant high-frequency noise (kube-proxy iptables, prometheus /proc reads, kube
 
 ---
 
-### Oracle VM1 (`163.192.46.25`) — gateway + auth-service
-
-Runtime: `--runtime=docker` via systemd `ebpf-edr`
-Services: healthcare-gateway (8080), healthcare-auth (8082)
-Private IP: `10.0.1.160`
-
-**Oracle-specific noise:**
-
-| Process | Whitelist | Reason |
-|---------|-----------|--------|
-| `pmdaproc` | `fileCommWhitelist` | Oracle Performance Co-Pilot (PCP) process monitoring daemon. Reads `/proc/*/stat`, `/proc/*/statm`, `/proc/*/wchan` for every process every 30s. Generates hundreds of file events per second. |
-| `pmdalinux` | `fileCommWhitelist` | Oracle PCP Linux performance metrics agent. Reads `/sys/class/net/*/speed`, `/proc/net/if_inet6`, `/proc/self/mounts`. Normal Oracle Linux monitoring. |
-
-> **Status**: `pmdaproc` and `pmdalinux` are NOT yet added to `policy.go` — pending rebuild.
-> Until then, use `EBPF_DEBUG=0` (default) to suppress DBG output.
-
----
-
-### Oracle VM2 (`163.192.30.193`) — provider-service + ai-service
-
-Runtime: `--runtime=docker` via systemd `ebpf-edr`
-Services: healthcare-provider (8083), healthcare-ai (8085)
-Private IP: `10.0.1.55`
-Access: internal only — reachable from VM1 via `10.0.1.x`, not publicly accessible
-
-Same Oracle-specific noise as VM1 (`pmdaproc`, `pmdalinux`).
-eBPF agent not yet installed on VM2 — pending.
-
----
-
 ## Noise Pattern: `/proc` polling daemons
 
-A recurring pattern across environments: system monitoring daemons that poll `/proc` continuously.
+A recurring pattern: system monitoring daemons that poll `/proc` continuously.
 
 | Daemon | Environment | Files read | Events/sec (approx) |
 |--------|-------------|------------|---------------------|
-| `pmdaproc` | Oracle VM | `/proc/*/stat`, `/proc/*/statm`, `/proc/*/wchan` | 100–500 |
-| `pmdalinux` | Oracle VM | `/sys/class/net/*`, `/proc/net/*` | 10–50 |
 | `prometheus` | GKE | `/proc/1/stat`, `/proc/self/*` | 5–20 |
 | `kubelet` | GKE | `/proc/*/status` | 10–30 |
 
@@ -139,14 +107,3 @@ The agent logs only:
 - Startup messages (Cloud Logging enabled/disabled, Pub/Sub enabled/disabled)
 - Warnings (dropped events, channel full)
 - Alerts (written to stdout, `alerts/alert.log`, and Cloud Logging)
-
----
-
-## Pending Policy Changes
-
-| Change | Environment | Status | File |
-|--------|-------------|--------|------|
-| Add `pmdaproc` to `fileCommWhitelist` | Oracle VM1, VM2 | Done — pending rebuild | `policy.go` |
-| Add `pmdalinux` to `fileCommWhitelist` | Oracle VM1, VM2 | Done — pending rebuild | `policy.go` |
-| Remove DBG log lines entirely | All | Done — pending rebuild | `rules.go`, `main.go` |
-| Rebuild binary + redeploy Oracle VMs | Oracle VM1, VM2 | Pending | — |

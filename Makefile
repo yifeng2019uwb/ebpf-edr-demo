@@ -132,7 +132,7 @@ test-env-down:
 	@gcloud container clusters list --project=ebpfagent --format="table(name,location)" 2>/dev/null && echo "GKE clusters: none ✓" || true
 	@echo ""
 	@echo "=== Done — GCP charges now ~\$$1/month ==="
-	@echo "eBPF monitoring continues on GCP VM + Oracle VMs"
+	@echo "eBPF monitoring continues on GCP VM"
 
 ## github-release — build linux/amd64 binary and publish as a GitHub release
 ## Usage: make github-release VERSION=v0.1.0
@@ -141,4 +141,4 @@ VERSION ?= $(shell git describe --tags --always --dirty)
 github-release: build
 	gh release create $(VERSION) $(BINARY) \
 		--title "eBPF EDR $(VERSION)" \
-		--notes "linux/amd64 binary — deploy to any Linux env (GCP VM, Oracle Cloud, GKE, etc.)"
+		--notes "linux/amd64 binary — deploy to any Linux env (GCP VM, GKE, etc.)"

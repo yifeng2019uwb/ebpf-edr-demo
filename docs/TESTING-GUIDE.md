@@ -14,11 +14,11 @@ Each environment section has two checks:
 ```
 GCP Docker VM  ─── eBPF agent (Docker runtime) ──┐
 GKE cluster    ─── eBPF DaemonSet (K8s runtime) ──┼─→ Cloud Logging (ebpfagent)
-Oracle VM1     ─── eBPF agent (Docker runtime) ──┤      ↓
-Oracle VM2     ─── eBPF agent (Docker runtime) ──┘  Alert Router (WebSocket UI)
+                                                   ↓
+                                           Alert Router (WebSocket UI)
 ```
 
-**Cost note**: GCP VM + Oracle VMs run 24/7 at ~$0/month (always free).
+**Cost note**: GCP VM runs 24/7 at ~$0/month (always free).
 GKE costs ~$100/month — bring up only for testing, destroy after with `make test-env-down`.
 
 ---
@@ -110,145 +110,7 @@ tail -5 ~/workspace/ebpf-edr-demo/alerts/alert.log
 
 ---
 
-## Step 2 — Oracle VM1 (gateway + auth-service)
-
-Services: healthcare-gateway (8080), healthcare-auth (8082)
-eBPF runtime: `--runtime=docker` via systemd service `ebpf-edr`
-
-> **After VM reboot:** Services do NOT auto-start. Always start VM2 first (gateway depends on backend).
-> eBPF agent auto-starts via systemd.
-> `BACKEND_VM_IP` in VM1's `.env` must be VM2's **private IP** (`10.0.1.55`) — set by `deploy-vm.sh` automatically.
-
-### 2a. Service check
-
-```bash
-ssh -i ~/.ssh/oracle_vm opc@163.192.46.25 \
-  "sudo docker ps --format '{{.Names}}\t{{.Status}}'"
-```
-
-Expected:
-```
-healthcare-auth     Up X minutes
-healthcare-gateway  Up X minutes
-```
-
-If containers not running (start VM2 first — see Step 3a, then):
-```bash
-ssh -i ~/.ssh/oracle_vm opc@163.192.46.25 \
-  "cd ~/healthcare/docker && sudo docker compose -f compose-gateway.yml up -d"
-```
-
-Verify `BACKEND_VM_IP` is set to private IP (not public):
-```bash
-ssh -i ~/.ssh/oracle_vm opc@163.192.46.25 "grep BACKEND_VM_IP ~/healthcare/docker/.env"
-# Expected: BACKEND_VM_IP=10.0.1.55
-```
-
-Validate service health:
-```bash
-cd ~/workspace/github_projects/health-ai/healthcare-ai-microservices/integration_tests
-./run-it.sh auth
-```
-
-Expected: `✓ Auth endpoints passed`
-
-### 2b. eBPF agent check
-
-```bash
-ssh -i ~/.ssh/oracle_vm opc@163.192.46.25 \
-  "systemctl is-active ebpf-edr && sudo journalctl -u ebpf-edr -n 5 --no-pager"
-```
-
-Expected: `active` + recent log lines showing agent running
-
-If not active:
-```bash
-ssh -i ~/.ssh/oracle_vm opc@163.192.46.25 "sudo systemctl start ebpf-edr"
-```
-
-If not installed — deploy agent (requires SA key):
-```bash
-cd ~/workspace/github_projects/health-ai/healthcare-ai-microservices
-EBPF_SA_KEY_FILE=/tmp/oracle-agent.json ./docker/setup-vm.sh
-```
-
-Verify agent sees containers:
-```bash
-# Trigger CRITICAL alert — shell spawn inside container
-ssh -i ~/.ssh/oracle_vm opc@163.192.46.25 \
-  "sudo docker exec healthcare-gateway bash -c 'id'"
-
-# Check Cloud Logging for VM1 events
-gcloud logging read 'jsonPayload.env="oracle-vm1"' \
-  --project=ebpfagent --log-filter='logName="projects/ebpfagent/logs/ebpf-edr-alerts"' \
-  --limit=3 --format="table(timestamp,jsonPayload.service,jsonPayload.rule)"
-```
-
----
-
-## Step 3 — Oracle VM2 (provider-service + ai-service)
-
-Services: healthcare-provider (8083), healthcare-ai (8085)
-eBPF runtime: `--runtime=docker` via systemd service `ebpf-edr`
-
-> **After VM reboot:** Start VM2 BEFORE VM1. Services do NOT auto-start. eBPF agent auto-starts via systemd.
-> VM2 is backend-only — accessible only from VM1 via internal VCN (10.0.1.x). Not publicly reachable.
-
-### 3a. Service check
-
-```bash
-ssh -i ~/.ssh/oracle_vm opc@163.192.30.193 \
-  "sudo docker ps --format '{{.Names}}\t{{.Status}}'"
-```
-
-Expected:
-```
-healthcare-provider  Up X minutes
-healthcare-ai        Up X minutes
-```
-
-If containers not running (start VM2 FIRST, before VM1):
-```bash
-ssh -i ~/.ssh/oracle_vm opc@163.192.30.193 \
-  "cd ~/healthcare/docker && sudo docker compose -f compose-backend.yml up -d"
-```
-
-Check memory usage:
-```bash
-ssh -i ~/.ssh/oracle_vm opc@163.192.30.193 "sudo docker stats --no-stream"
-```
-
-Expected: provider ~200MB, ai ~250MB — both well within 522MB limit.
-
-### 3b. eBPF agent check
-
-```bash
-ssh -i ~/.ssh/oracle_vm opc@163.192.30.193 \
-  "systemctl is-active ebpf-edr && sudo journalctl -u ebpf-edr -n 5 --no-pager"
-```
-
-Expected: `active`
-
-If not active:
-```bash
-ssh -i ~/.ssh/oracle_vm opc@163.192.30.193 "sudo systemctl start ebpf-edr"
-```
-
-Verify agent sees containers:
-```bash
-# Trigger test event on VM2
-ssh -i ~/.ssh/oracle_vm opc@163.192.30.193 \
-  "sudo docker exec healthcare-provider ls /tmp"
-
-# Check Cloud Logging for VM2 events
-gcloud logging read 'jsonPayload.env="oracle-vm2"' \
-  --project=ebpfagent --log-filter='logName="projects/ebpfagent/logs/ebpf-edr-alerts"' \
-  --limit=3 --format="table(timestamp,jsonPayload.service,jsonPayload.rule)"
-```
-
----
-
-## Step 4 — GKE (on-demand — ~$100/month while running)
+## Step 2 — GKE (on-demand — ~$100/month while running)
 
 Services: order-processor (5 pods: user, inventory, order, auth, gateway)
 eBPF runtime: `--runtime=k8s` via DaemonSet in `kube-system`
@@ -300,7 +162,7 @@ gcloud logging read 'jsonPayload.runtime="k8s"' \
 
 ---
 
-## Step 5 — Sensor VM (optional — IoT workload, droppable)
+## Step 3 — Sensor VM (optional — IoT workload, droppable)
 
 Services: env-sensor, gps-tracker, device-health (3 Docker containers)
 eBPF runtime: `--runtime=docker` on the host VM
@@ -361,7 +223,7 @@ make infra-up   # removes sensor VM, keeps all other infra
 
 ---
 
-## Step 6 — Alert Router (laptop)
+## Step 4 — Alert Router (laptop)
 
 Real-time WebSocket UI showing alerts from all environments.
 
@@ -374,14 +236,12 @@ Open **http://localhost:8888**
 
 Alerts from all environments appear here tagged with `env` field:
 - `gcp-vm` — GCP Docker VM
-- `oracle-vm1` — Oracle VM1 (gateway + auth)
-- `oracle-vm2` — Oracle VM2 (provider + ai)
 - `sensor-vm` — Sensor VM (IoT, optional)
 - `k8s` runtime — GKE pods
 
 ---
 
-## Step 6 — Run attack simulations
+## Step 5 — Run attack simulations
 
 Once all environments are verified, run the full test suites:
 
@@ -400,26 +260,16 @@ See `docs/VALIDATION.md` for T1–T7 test cases.
 ```
 See `docs/VALIDATION-GKE.md` for GKE test cases.
 
-### Oracle VMs (manual)
-```bash
-# Shell spawn — should fire CRITICAL T1059_unix_shell_execution
-ssh -i ~/.ssh/oracle_vm opc@163.192.30.193 \
-  "sudo docker exec healthcare-provider bash -c 'id'"
-
-# Watch agent log in real time
-ssh -i ~/.ssh/oracle_vm opc@163.192.30.193 "sudo journalctl -u ebpf-edr -f"
-```
-
 ---
 
-## Step 7 — Tear down GKE when done
+## Step 6 — Tear down GKE when done
 
 ```bash
 cd ~/workspace/ebpf-edr-demo
 make test-env-down
 ```
 
-GCP VM and Oracle VMs keep running (always free / ~$0).
+GCP VM keeps running (always free / ~$0).
 eBPF Cloud Logging and Pub/Sub infra kept (near zero cost).
 
 ---
@@ -432,14 +282,6 @@ gcloud compute instances list --project=project-3f1d99fa-d525-4aff-a03 --format=
 
 echo "=== GKE ===" && \
 gcloud container clusters list --project=ebpfagent --format="table(name,status)" 2>/dev/null || echo "not running"
-
-echo "=== Oracle VM1 ===" && \
-ssh -i ~/.ssh/oracle_vm -o ConnectTimeout=5 opc@163.192.46.25 \
-  "systemctl is-active ebpf-edr; sudo docker ps --format '{{.Names}}'" 2>/dev/null || echo "unreachable"
-
-echo "=== Oracle VM2 ===" && \
-ssh -i ~/.ssh/oracle_vm -o ConnectTimeout=5 opc@163.192.30.193 \
-  "systemctl is-active ebpf-edr; sudo docker ps --format '{{.Names}}'" 2>/dev/null || echo "unreachable"
 
 echo "=== Recent eBPF Alerts ===" && \
 gcloud logging read 'logName="projects/ebpfagent/logs/ebpf-edr-alerts"' \

@@ -124,23 +124,6 @@ This provisions:
 - Cloud Logging custom bucket (`ebpf-edr-security-logs-us-west1`, 365-day retention)
 - Pub/Sub topic `edr-alerts` + subscription `edr-alerts-router-sub`
 - IAM bindings for all agent SAs (`logging.logWriter`, `pubsub.publisher`)
-- Oracle VM SA (`healthcare-oracle-agent`) + key (see below)
-
-### Oracle VM — get SA key after deploy
-
-Oracle VMs have no GCE metadata server, so they use an explicit SA key file.
-After `make infra-up`, retrieve the key:
-
-```bash
-cd infra && pulumi stack output oracleAgentKey --show-secrets | base64 -d > /tmp/oracle-agent.json
-```
-
-Deploy to both Oracle VMs (VM1 + VM2) via the health-ai setup script:
-
-```bash
-# In healthcare-ai-microservices repo:
-EBPF_SA_KEY_FILE=/tmp/oracle-agent.json ./docker/setup-vm.sh
-```
 
 ### Add a new monitored environment
 

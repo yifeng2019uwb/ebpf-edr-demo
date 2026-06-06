@@ -108,7 +108,9 @@ fi
 # ── V3: Sensitive file access (/etc/shadow) ───────────────────────────────────
 echo "=== V3: Sensitive file access ==="
 V3_SINCE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-$KUBECTL exec "$TARGET_POD" -n "$NAMESPACE" -- cat /etc/shadow >/dev/null 2>&1 || true
+# Alpine JRE image may not have /etc/shadow — create it first so opensnoop sees a real read (not ENOENT)
+$KUBECTL exec "$TARGET_POD" -n "$NAMESPACE" -- sh -c \
+    "echo 'root:!:19000:0:99999:7:::' > /etc/shadow && cat /etc/shadow" >/dev/null 2>&1 || true
 if expect_alert "HIGH.*${RULE_SHADOW}.*service=${TARGET_COMPONENT}.*shadow" 60 "$V3_SINCE"; then
     pass "V3: HIGH ${RULE_SHADOW} — /etc/shadow detected"
 else

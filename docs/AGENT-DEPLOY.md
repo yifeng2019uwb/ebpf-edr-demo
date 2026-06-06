@@ -32,7 +32,7 @@ cd ~/workspace/ebpf-edr-demo
 make infra-up
 ```
 
-Provisions: Cloud Logging bucket, Pub/Sub topic `edr-alerts`, IAM for all agent SAs, Oracle VM SA + key.
+Provisions: Cloud Logging bucket, Pub/Sub topic `edr-alerts`, IAM for all agent SAs.
 Run once after initial setup, and again when adding a new environment.
 
 ### 2. Build and publish binary (must run on GCP VM — Mac cannot build BPF)
@@ -71,65 +71,6 @@ make run-docker
 ```
 
 **Validate**: `sudo ./validate.sh` — see [VALIDATION.md](VALIDATION.md)
-
----
-
-### Oracle VM1 + VM2 (healthcare-ai-microservices)
-
-**Owner**: health-ai team runs deployment; eBPF team provides binary (GitHub release) + SA key (Pulumi)  
-**Auth**: SA key file `/etc/ebpf-creds.json`  
-**Runtime**: `--runtime=docker` via systemd `ebpf-edr` (auto-starts on reboot)
-
-| VM | Public IP | Private IP | Services | ENV tag |
-|----|-----------|------------|----------|---------|
-| VM1 | 163.192.46.25 | 10.0.1.160 | gateway + auth | `oracle-vm1` |
-| VM2 | 163.192.30.193 | 10.0.1.55 | provider + ai | `oracle-vm2` |
-
-**Step 1 — Get SA key** (eBPF team):
-```bash
-cd ~/workspace/ebpf-edr-demo/infra
-pulumi stack output oracleAgentKey --show-secrets | base64 -d > /tmp/oracle-agent.json
-```
-
-**Step 2 — Deploy to both VMs** (health-ai team, in healthcare-ai-microservices repo):
-```bash
-EBPF_SA_KEY_FILE=/tmp/oracle-agent.json ./docker/setup-vm.sh
-```
-
-> **Note**: `EBPF_SA_KEY_FILE` currently points to a local file exported from Pulumi.
-> The proper approach is to store the SA key in GCP Secret Manager so the health-ai team
-> can fetch it independently without sharing Pulumi access. Simplified here for now.
-
-Downloads binary from GitHub repo, installs systemd service with correct `ENV` tag on each VM.
-
-**After a new release — update both VMs:**
-```bash
-# VM1
-ssh -i ~/.ssh/oracle_vm opc@163.192.46.25 "
-  sudo curl -fsSL https://raw.githubusercontent.com/yifengzh/ebpf-edr-demo/main/ebpf-edr \
-    -o /usr/local/bin/ebpf-edr &&
-  sudo chmod +x /usr/local/bin/ebpf-edr &&
-  sudo restorecon -v /usr/local/bin/ebpf-edr 2>/dev/null || true &&
-  sudo systemctl restart ebpf-edr
-"
-
-# VM2
-ssh -i ~/.ssh/oracle_vm opc@163.192.30.193 "
-  sudo curl -fsSL https://raw.githubusercontent.com/yifengzh/ebpf-edr-demo/main/ebpf-edr \
-    -o /usr/local/bin/ebpf-edr &&
-  sudo chmod +x /usr/local/bin/ebpf-edr &&
-  sudo restorecon -v /usr/local/bin/ebpf-edr 2>/dev/null || true &&
-  sudo systemctl restart ebpf-edr
-"
-```
-
-**Check status:**
-```bash
-ssh -i ~/.ssh/oracle_vm opc@163.192.46.25 "systemctl is-active ebpf-edr"
-ssh -i ~/.ssh/oracle_vm opc@163.192.30.193 "systemctl is-active ebpf-edr"
-```
-
-**Validate**: see [TESTING-GUIDE.md](TESTING-GUIDE.md) Steps 2b and 3b
 
 ---
 
