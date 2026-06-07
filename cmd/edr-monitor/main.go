@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"flag"
 	"log"
 	"os"
@@ -86,7 +87,11 @@ func main() {
 		for {
 			rec, err := loader.ProcessRd.Read()
 			if err != nil {
-				return
+				if errors.Is(err, os.ErrClosed) {
+					return
+				}
+				log.Printf("process reader error (restarting): %v", err)
+				continue
 			}
 			select {
 			case rawCh <- pipeline.RawEvent{Source: "execsnoop", Data: append([]byte(nil), rec.RawSample...)}:
@@ -101,7 +106,12 @@ func main() {
 		for {
 			rec, err := loader.FileRd.Read()
 			if err != nil {
-				return
+				if errors.Is(err, os.ErrClosed) {
+					return
+				}
+				log.Printf("file reader error (restarting): %v", err)
+				time.Sleep(time.Second)
+				continue
 			}
 			select {
 			case rawCh <- pipeline.RawEvent{Source: "opensnoop", Data: append([]byte(nil), rec.RawSample...)}:
@@ -116,7 +126,12 @@ func main() {
 		for {
 			rec, err := loader.NetRd.Read()
 			if err != nil {
-				return
+				if errors.Is(err, os.ErrClosed) {
+					return
+				}
+				log.Printf("net reader error (restarting): %v", err)
+				time.Sleep(time.Second)
+				continue
 			}
 			select {
 			case rawCh <- pipeline.RawEvent{Source: "lsm-connect", Data: append([]byte(nil), rec.RawSample...)}:

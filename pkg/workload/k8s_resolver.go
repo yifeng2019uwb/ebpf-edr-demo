@@ -173,15 +173,21 @@ func containerIDFromK8sCgroup(pid string) string {
 		}
 
 		containerID := segments[len(segments)-1]
-		// cgroup v2 systemd format: "cri-containerd-<id>.scope"
-		// e.g. cri-containerd-a1b2c3d4e5f6...64chars.scope → strip prefix+suffix
-		if strings.HasPrefix(containerID, "cri-containerd-") && strings.HasSuffix(containerID, ".scope") {
-			containerID = strings.TrimSuffix(strings.TrimPrefix(containerID, "cri-containerd-"), ".scope")
+		// Strip runtime-specific cgroup v2 systemd scope prefixes/suffixes.
+		// Different runtimes use different prefixes — all end with the 64-char SHA256 container ID.
+		//   containerd (GKE, EKS, DOKS, k3s): "cri-containerd-<id>.scope"
+		//   CRI-O (some EKS, OpenShift):       "crio-<id>.scope"
+		//   Docker-as-CRI (K8s <1.24 legacy):  "docker-<id>.scope"
+		for _, prefix := range []string{"cri-containerd-", "crio-", "docker-"} {
+			if strings.HasPrefix(containerID, prefix) && strings.HasSuffix(containerID, ".scope") {
+				containerID = strings.TrimSuffix(strings.TrimPrefix(containerID, prefix), ".scope")
+				break
+			}
 		}
 		// container IDs are SHA256 → exactly 64 hex chars.
-		// K8s QoS tier names that appear in the path: burstable(9), guaranteed(10), besteffort(11).
+		// K8s QoS tier names: burstable(9), guaranteed(10), besteffort(11).
 		// pod-uid format: pod8e18d5ef-1234-5678-abcd-ef0123456789 (39 chars).
-		// both are shorter than a real container ID — 64 filters all of them out.
+		// Both are shorter than a real container ID — 64 chars filters them out.
 		if len(containerID) >= containerIDLen {
 			return containerID
 		}

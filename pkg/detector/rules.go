@@ -108,7 +108,14 @@ func newProcessAlert(event processor.ProcessEvent, res workload.ResolveResult, c
 func checkProcessRules(event processor.ProcessEvent, res workload.ResolveResult) *alert.Alert {
 	comm := processor.CString(event.Comm[:])
 
-	// T1036 — masquerading check BEFORE whitelist: attacker may name malware after a legit process (e.g. /tmp/sshd)
+	// Host processes are trusted — skip all rules.
+	if res.State == workload.StateHost {
+		return nil
+	}
+
+	// T1036 — masquerading: checked BEFORE whitelist so an attacker cannot hide
+	// malware named after a legit process (e.g. /tmp/sshd bypasses the "sshd" whitelist).
+	// Skipped for host processes above — only suspicious in container context.
 	for _, prefix := range t1036MasqueradingPaths {
 		if strings.HasPrefix(comm, prefix) {
 			return newProcessAlert(event, res, comm, alert.High, RuleT1036Masquerading, "Process running from suspicious path: "+comm)
@@ -127,10 +134,6 @@ func checkProcessRules(event processor.ProcessEvent, res workload.ResolveResult)
 			}
 		}
 		return newProcessAlert(event, res, comm, alert.Critical, RuleT1611EscapeToHostNs, "Process in unrecognized namespace — possible container escape")
-	}
-
-	if res.State == workload.StateHost {
-		return nil
 	}
 
 	if matchesSuffix(comm, shellBinaries) {
