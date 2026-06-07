@@ -1,87 +1,141 @@
-# Session Handoff — 2026-06-03
+# Session Handoff — 2026-06-07
 
 ## Current State
 
 **GCP Docker VM: ACTIVE** — eBPF agent running, all 11 validate.sh tests passing.
-**Health-AI GKE Cluster: ACTIVE** — `health-ai-cluster-us-west1` (us-west1-a), eBPF DaemonSet deploying.
-GCP credits expire 2026-06-17 (~14 days). Both resources run on project `ebpfagent`.
+**Health-AI GKE Cluster: DOWN** — kept off to save costs; deploy on demand for eBPF testing.
+**Health-AI DigitalOcean: PLANNED** — next deploy target for permanent always-on environment.
+GCP credits expire 2026-06-17 (~10 days). Resources on project `ebpfagent`.
 
 ---
 
-## IMMEDIATE NEXT STEP
+## IMMEDIATE NEXT STEP — Fix file sensor (Go-only, no BPF C changes)
 
-eBPF binary rebuild in progress on GCP VM (BPF generated files required Linux for `go generate`).
+### Root cause identified
 
-Once binary is rebuilt and committed:
-1. `git pull` on Mac
-2. `make docker-push-prebuilt` — push updated image to Artifact Registry
-3. `./deploy.sh app` (in `health-ai/kubernetes/`) — restarts DaemonSet with new image
-4. `./validate-gke.sh` — expect V2/V5/V6/V8 still pass; V3/V4/V7/V9/V10 should now pass too
+The file reader goroutine in `cmd/edr-monitor/main.go` exits silently on any error:
+
+```go
+go func() {
+    for {
+        rec, err := loader.FileRd.Read()
+        if err != nil {
+            return  // ← exits permanently, no restart, no log
+        }
+        // ...
+    }
+}()
+```
+
+On GKE, Java startup hammers the ring buffer with file opens. If this causes a
+transient ring buffer error, the goroutine dies — and file events stop forever.
+Process and network goroutines are unaffected (separate goroutines), which is
+exactly the V3/V7/V9 failure pattern we see.
+
+The same silent-exit pattern exists in all three reader goroutines (process, file, net).
+Process/network goroutines survive because perf buffer and LSM hook are more stable.
+
+### Fix (Go-only — no .bpf.c changes, no rebuild on GCP VM)
+
+Add restart loop to the file reader goroutine in `cmd/edr-monitor/main.go`:
+
+```go
+go func() {
+    for {
+        rec, err := loader.FileRd.Read()
+        if err != nil {
+            log.Printf("file reader error: %v — restarting", err)
+            time.Sleep(time.Second)
+            continue  // restart, don't exit
+        }
+        // ...
+    }
+}()
+```
+
+After fix:
+1. `make build` (can run on Mac — Go-only change)
+2. `make docker-push-prebuilt`
+3. Redeploy DaemonSet to GKE: `./kubernetes/deploy.sh app`
+4. `./validate-gke.sh` — expect V3/V7/V9 to pass
+
+### Diagnostic first (before fix) — confirm root cause
+
+If GKE is up, run before applying the fix to confirm:
+```bash
+EDR_POD=$(kubectl get pod -n kube-system -l app=ebpf-edr -o jsonpath='{.items[0].metadata.name}')
+# Check if ANY file events ever appeared (should see T1082 from Java startup if sensor works)
+kubectl logs $EDR_POD -n kube-system | grep -c "T1082\|T1552\|T1003"
+# If 0 → goroutine exited; if >0 → different issue
+```
 
 ---
 
-## What was completed this session (2026-06-03)
+## Key Rule — Do NOT change .bpf.c files
 
-### Phase 7 — MITRE Rule Redesign + Response Actions (GCP Docker VM)
-- ✅ All rule names renamed to MITRE ATT&CK format (`T1059_unix_shell_execution`, etc.)
-- ✅ `sensitive_file_access` split into 4 specific rules: `T1552_004_private_keys`, `T1552_001_credentials_in_files`, `T1003_008_os_credential_dumping`, `T1611_escape_to_host_proc`
-- ✅ 4 new rules: `T1036_masquerading`, `T1613_container_resource_discovery`, `T1053_003_scheduled_task_cron`, `T1070_003_clear_command_history`
-- ✅ `Responder` struct — `kill_process` (SIGKILL) and `block_ip` (LPMTrie BPF map)
-- ✅ `blocked_ips` LPMTrie in `lsm-connect.bpf.c` — pre-TCP EPERM for blocked IPs
-- ✅ `validate.sh` — 11 tests passing on Docker VM
+Recent sessions incorrectly changed `lsm-connect.bpf.c` to add kernel IP blocking,
+hit the BPF verifier complexity limit, then had to remove it — full cycle with two
+binary rebuilds and GKE redeployments, ending back at the same place.
 
-### Health-AI GKE Deployment (new this session)
-- ✅ `health-ai/kubernetes/pulumi/` — Pulumi Go stack (cluster + SA + Artifact Registry)
-- ✅ `health-ai/kubernetes/` — K8s manifests: namespace, configmap, deployment (4 services), service
-- ✅ `health-ai/kubernetes/deploy.sh` — build | infra | app | rls | status | all
-- ✅ `healthcare-infra/schema/enable-rls.sql` — RLS enabled on all 9 Supabase tables
-- ✅ Database: Supabase (external, persistent) — no in-cluster PostgreSQL needed
-- ✅ Integration tests passing: `GATEWAY_URL=http://8.229.162.35:8080 ./run-it.sh all`
-- ✅ eBPF DaemonSet deploying to health-ai cluster (pending binary rebuild)
+**All remaining fixes are Go-only:**
+- File sensor goroutine restart → `cmd/edr-monitor/main.go`
+- Any policy/rule changes → `pkg/detector/policy.go`, `pkg/detector/rules.go`
+- Workload resolver fixes → `pkg/workload/`
 
-### Tooling fixes
-- ✅ `Dockerfile` — fixed: was copying `ebpf-edr-demo` (old binary), now copies `ebpf-edr`
-- ✅ `Makefile` — added `docker-push-prebuilt` target (skips Go build, uses committed binary)
-- ✅ `docs/NOTES.md` — update workflow section: health-ai deploy steps + Mac BPF build caveat
-- ✅ `validate-gke.sh` — retargeted for health-ai: MITRE rule names, `health-ai` namespace, `auth-service` target, all values in variables block at top
+Changing `.bpf.c` requires: rebuild on GCP VM (Linux) → commit generated files →
+pull on Mac → `make docker-push-prebuilt` → redeploy. Avoid unless truly necessary.
 
-### validate-gke.sh partial results (old binary)
-| Test | Result | Note |
-|------|--------|------|
-| V2 Shell spawn | ✅ PASS | Process monitor working |
-| V3 Shadow read | ❌ FAIL | Old binary — file rules not updated |
-| V4 External connect | ❌ FAIL | Old binary — lsm-connect rules not updated |
+### lsm-connect.bpf.c history (for reference)
+- Was simple audit-only hook (no blocking)
+- `67abbea` added `blocked_ips` LPMTrie (kernel IP blocking)
+- Hit BPF verifier complexity limit on GKE
+- `d6cacd0` removed `blocked_ips` entirely — back to simple audit-only hook
+- Current state: simple audit hook, same as original. IP blocking disabled.
+
+---
+
+## validate-gke.sh — Current Results (2026-06-06)
+
+Gateway IP changes on each GKE redeploy — check `kubectl get svc gateway -n health-ai`.
+
+| Test | Result | Root cause |
+|------|--------|------------|
+| V2 Shell spawn | ✅ PASS | Process sensor working |
+| V3 Shadow read | ❌ FAIL | File reader goroutine exited silently |
+| V4 External connect | ✅ PASS | Network sensor working |
 | V5 ai-service allowlist | ✅ PASS | |
-| V6 No FP gateway | ✅ PASS | |
-| V7 SSH key | ❌ FAIL | Old binary |
-| V8 Network tool | ✅ PASS | Process monitor working |
-| V9 /etc/passwd | ❌ FAIL | Old binary |
-| V10 Reverse shell | ❌ FAIL | Old binary |
+| V6 No FP gateway traffic | ✅ PASS | |
+| V7 SSH private key | ❌ FAIL | File reader goroutine exited silently |
+| V8 Network recon tool | ✅ PASS | Process sensor working |
+| V9 /etc/passwd recon | ❌ FAIL | File reader goroutine exited silently |
+| V10 Reverse shell | ✅ PASS | Process + network sensors working |
+
+**6 passed · 3 failed · 0 skipped**
 
 ---
 
 ## Full Rule Coverage
 
-### Implemented (✅) and Validated on GCP Docker VM
+### Implemented (✅) — Validated on GCP Docker VM
 
 | Rule | MITRE | Level | Response | Source |
 |------|-------|-------|----------|--------|
-| `T1059_unix_shell_execution` | T1059.004 · T1609 | CRITICAL | kill_process | process |
-| `T1105_ingress_tool_transfer` | T1105 · T1095 | HIGH | kill_process | process |
+| `T1059_unix_shell_execution` | T1059.004 · T1609 | CRITICAL | none (alert only) | process |
+| `T1105_ingress_tool_transfer` | T1105 · T1095 | HIGH | none (alert only) | process |
 | `T1611_escape_to_host_ns` | T1611 | CRITICAL | none (Podman FP) | process |
 | `T1036_masquerading` | T1036 | HIGH | none | process |
 | `T1613_container_resource_discovery` | T1613 | HIGH | none | process |
 | `T1611_escape_to_host_fs` | T1611 | CRITICAL | kill_process | file |
-| `T1611_escape_to_host_proc` | T1611 | HIGH | kill_process | file |
+| `T1611_escape_to_host_proc` | T1611 | HIGH | none (GKE sidecar FP) | file |
 | `T1552_004_private_keys` | T1552.004 | CRITICAL/HIGH | kill_process | file |
-| `T1552_001_credentials_in_files` | T1552.001 | HIGH | kill_process | file |
+| `T1552_001_credentials_in_files` | T1552.001 | HIGH | none (alert only) | file |
 | `T1003_008_os_credential_dumping` | T1003.008 | HIGH | kill_process | file |
 | `T1082_system_info_discovery` | T1082 | MEDIUM | none | file |
 | `T1053_003_scheduled_task_cron` | T1053.003 | HIGH | none | file |
 | `T1070_003_clear_command_history` | T1070.003 | MEDIUM | none | file |
-| `T1041_exfiltration_over_c2` | T1041 · T1048 | HIGH | block_ip | network |
+| `T1041_exfiltration_over_c2` | T1041 · T1048 | HIGH | block_ip (disabled) | network |
 
-### Planned (🔲) — Require Stateful Detection
+### Planned (🔲)
 
 | Rule | MITRE | Blocker |
 |------|-------|---------|
@@ -90,43 +144,33 @@ Once binary is rebuilt and committed:
 
 ---
 
-## Phase 2 — IP Blocking Design Notes
+## IP Blocking — Disabled
 
-### Repeat-attempt visibility
-Once an IP is in `blocked_ips`, subsequent connect attempts are silently denied at the LSM hook — no event emitted, no alert. This is intentional (sensor stays quiet; persistence detection belongs at SIEM layer).
+`block_ip` response is disabled — `blocked_ips` LPMTrie removed from `lsm-connect.bpf.c`
+(BPF verifier complexity limit on GKE). Alert still fires; only enforcement is disabled.
 
-If repeat-attempt visibility is needed:
-- **Option A**: `block_counts` BPF hash map, increment on EPERM, poll from Go, emit LOW periodic summary
-- **Option B**: Cloud Logging alert policy when `block_ip` appears >N× for same IP in time window
-
-See comments in `kernel/lsm-connect.bpf.c` and `pkg/detector/response.go`.
-
-### Blocked IP lifetime
-IPs are blocked until the agent restarts (BPF map cleared on program unload).
-`validate.sh` flushes the map via `bpftool map flush` before T5 to ensure repeatability.
+Re-enable path requires C changes (see rule above — avoid for now).
 
 ---
 
-## Key Facts / Gotchas
+## Key Facts
 
 ### GCP Credits
-- Expire: 2026-06-17 (~14 days)
-- Resources on `ebpfagent`: Docker VM `instance-20260318-023006` (~$43/mo) + health-ai GKE cluster
-- After expiry: Cloud Logging free tier remains; setup docs in each project for redeployment
+- Expire: 2026-06-17 (~10 days)
+- Resources on `ebpfagent`: Docker VM `instance-20260318-023006` (~$43/mo)
+- Health-AI GKE kept OFF — bring up only for eBPF testing
+- After expiry: Cloud Logging free tier remains
 
 ### eBPF Agent Binary
-- `make docker-push` — requires Linux (BPF `go generate` needs clang/libbpf); run on GCP VM
+- `make docker-push` — requires Linux; run on GCP VM
 - `make docker-push-prebuilt` — uses committed binary; safe to run on Mac
-- After editing `.bpf.c`: run `make rebuild` on GCP VM → commit `pkg/bpf/*_bpfel.go` + `ebpf-edr` → pull on Mac → `make docker-push-prebuilt`
+- Go-only changes: `make build` on Mac → `make docker-push-prebuilt` → redeploy
 
-### Health-AI GKE
+### Health-AI GKE (on-demand)
 - Cluster: `health-ai-cluster-us-west1`, namespace: `health-ai`, project: `ebpfagent`
-- Gateway: `http://8.229.162.35:8080`
 - Pulumi: `health-ai/kubernetes/pulumi/` stack `gke-dev`
-- Deploy: `health-ai/kubernetes/deploy.sh [all|build|infra|app|rls|status]`
-- Integration tests: `GATEWAY_URL=http://8.229.162.35:8080 ./integration_tests/run-it.sh all`
-- Validate eBPF: `./validate-gke.sh` (from ebpf-edr-demo/)
-- DB: Supabase (external) — credentials in `health-ai/docker/.env`
+- Deploy: `./kubernetes/deploy.sh [all|build|infra|app|rls|status|destroy]`
+- DB: Supabase (external, always on) — credentials in `health-ai/docker/.env`
 
 ### Alert Router (Mac)
 - `make run-alert-router` — requires `gcloud auth application-default set-quota-project ebpfagent`
@@ -134,6 +178,6 @@ IPs are blocked until the agent restarts (BPF map cleared on program unload).
 
 ### Known False Positives
 - `T1611_escape_to_host_ns` from Podman health checks — excluded from kill response
-- `inventory_service` fires `T1041` on Docker VM — allowlist uses hyphen (`inventory-service`); Docker uses underscore. Accepted environment difference.
-- `docker cp` during validate.sh creates `state=unknown / comm=exe` alerts for T4/T10/T11 — test-setup artifact, not real threats.
-- `ai-service` makes external Gemini API calls — add to `externalAllowedServices` in `policy.go` if HIGH alerts appear for it on GKE
+- `T1611_escape_to_host_proc` on GKE — monitoring sidecars read `/proc/1/`; response set to none
+- `docker cp` during validate.sh creates `state=unknown / comm=exe` alerts — test-setup artifact
+- `ai-service` external Gemini calls — add to `externalAllowedServices` in `policy.go` if HIGH alerts appear
