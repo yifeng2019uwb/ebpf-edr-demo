@@ -170,6 +170,12 @@ var t1082SystemInfoPrefixes = []string{
 
 // ── Network policy ────────────────────────────────────────────────────────────
 
+// externalAllowedDstPorts — destination ports always allowed for all services.
+// Used for shared backend infrastructure that every service legitimately connects to.
+var externalAllowedDstPorts = []uint16{
+	6543, // Supabase pgbouncer — all health-ai services use Supabase as their database
+}
+
 // externalAllowedServices — services permitted to make external network connections.
 // Uses normalized service names (matching WorkloadIdentity.Service) so the same
 // policy works for both Docker ("inventory-service") and K8s ("inventory-service").

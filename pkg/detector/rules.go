@@ -258,6 +258,12 @@ func checkNetworkRules(event processor.NetEvent, res workload.ResolveResult, ip 
 	ipStr := ip.String()
 	id := res.Identity
 
+	for _, p := range externalAllowedDstPorts {
+		if port == p {
+			return nil
+		}
+	}
+
 	for _, allowed := range externalAllowedServices {
 		if id.Service == allowed {
 			return nil

@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -345,7 +346,13 @@ func enrich(raw pipeline.RawEvent, r workload.WorkloadResolver) *pipeline.Enrich
 			log.Printf("enrich: bad opensnoop event: %v", err)
 			return nil
 		}
+		comm := processor.CString(ev.Comm[:])
+		filename := processor.CString(ev.Filename[:])
 		res := r.Resolve(uint32(ev.MntNsId), uint32(ev.Pid))
+		if strings.Contains(filename, "shadow") || strings.Contains(filename, "id_rsa") || filename == "/etc/passwd" {
+			log.Printf("DEBUG file-target: comm=%q filename=%q state=%s svc=%s ns=%d pid=%d",
+				comm, filename, res.State, res.Identity.Service, ev.MntNsId, ev.Pid)
+		}
 		return &pipeline.EnrichedEvent{
 			Type:      pipeline.FileEventType,
 			File:      &ev,
