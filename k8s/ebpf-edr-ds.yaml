@@ -20,7 +20,7 @@ spec:
       - operator: Exists  # run on all nodes regardless of taints
       containers:
       - name: ebpf-edr
-        image: us-west1-docker.pkg.dev/ebpfagent/ebpf-edr/ebpf-edr:latest
+        image: ghcr.io/yifeng2019uwb/ebpf-edr:latest
         imagePullPolicy: Always
         args: ["--runtime", "k8s"]
         env:

@@ -41,43 +41,66 @@ cmd/edr-monitor/ — main entry point
 
 ### When you change BPF C code (kernel/*.bpf.c or kernel/*.h)
 
-`go generate` must run on Linux (requires clang + bpf2go).
-It is called automatically inside the Docker builder via `make docker-push`.
+`go generate` must run on Linux (requires clang + bpf2go). Run on GCP VM.
 
 ```bash
-# Step 1 — rebuild BPF objects + Go binary + push image to Artifact Registry
-make docker-push
+# Step 1 — on GCP VM: rebuild BPF objects + Go binary
+make rebuild              # go generate + go build
 
-# Step 2 — commit and push source to GitHub
-git add -A && git commit -m "..." && git push
+# Step 2 — commit generated files and binary
+git add pkg/bpf/ ebpf-edr && git commit -m "..." && git push
 
-# Step 3 — redeploy DaemonSet to GKE (from cloud-native-order-processor/gcp_gke/)
-./deploy.sh daemonset
+# Step 3 — on Mac: push image to ghcr.io
+git pull
+make docker-push-ghcr-prebuilt
 
-# Step 4 — validate
+# Step 4 — redeploy DaemonSet to GKE (from health-ai/kubernetes/)
+./deploy.sh app
+
+# Step 5 — validate
 ./validate-gke.sh
 ```
 
 ### When you change only Go code (pkg/ or cmd/)
 
-`go generate` is not needed — BPF objects are unchanged.
+`go generate` is not needed — BPF objects are unchanged. Safe to build on Mac.
 
 ```bash
-make docker-push          # rebuilds Go binary only, pushes image
+make build                       # cross-compile linux/amd64 binary
+make docker-push-ghcr-prebuilt   # push image to ghcr.io
 git add -A && git commit -m "..." && git push
-# in cloud-native-order-processor/gcp_gke/
-./deploy.sh daemonset
+# in health-ai/kubernetes/
+./deploy.sh app
 ./validate-gke.sh
 ```
 
 ### When you change only the DaemonSet YAML (k8s/ebpf-edr-ds.yaml)
 
-No rebuild needed — `deploy.sh daemonset` downloads YAML fresh from GitHub.
+No rebuild needed. The YAML is read from local repo by deploy.sh.
 
 ```bash
 git add k8s/ebpf-edr-ds.yaml && git commit -m "..." && git push
-# in cloud-native-order-processor/gcp_gke/
-./deploy.sh daemonset
+# in health-ai/kubernetes/
+./deploy.sh app
+```
+
+### Deploying health-ai + eBPF to GKE (full stack)
+
+```bash
+# Step 1 — bring up GKE cluster (if not running)
+cd health-ai/kubernetes/pulumi
+pulumi up
+
+# Step 2 — deploy everything (builds images, deploys services, deploys eBPF DaemonSet)
+cd ..
+./deploy.sh all
+
+# Step 3 — validate eBPF sensor
+cd ~/workspace/ebpf-edr-demo
+./validate-gke.sh
+
+# Tear down when done (saves ~$100+/month)
+./deploy.sh destroy
 ```
 
 ## go:generate — what it does

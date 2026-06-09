@@ -4,7 +4,7 @@
 //   - added struct file_event with pid, ppid, uid, mnt_ns_id, comm, filename
 //   - added mnt_ns_id via BPF_CORE_READ for container correlation
 //   - changed from perf buffer to ring buffer (BPF_MAP_TYPE_RINGBUF) — lower overhead
-//   - filtered to process-level opens only (tgid == tid)
+//   - thread-level dedup moved to Go (fileDedupSeen cache in main.go)
 //   - split into enter+exit probes: only emit on successful open (ret >= 0)
 //     eliminates false positives from config file probing (curl ~/.curlrc, etc.)
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
@@ -67,10 +67,6 @@ int handle_enter(struct trace_event_raw_sys_enter *ctx)
 	u64 id   = bpf_get_current_pid_tgid();
 	u32 tgid = id >> 32;
 	u32 tid  = (u32)id;
-
-	// ignore thread-level calls — only track process-level opens
-	if (tgid != tid)
-		return 0;
 
 	struct file_event ev = {};
 	struct task_struct *task = (struct task_struct *)bpf_get_current_task();

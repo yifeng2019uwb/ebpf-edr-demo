@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -29,6 +30,16 @@ const (
 	rawChCap      = 4096 // kernel event burst buffer
 	enrichedChCap = 4096 // post-enrichment buffer
 	alertChCap    = 64   // alerts are rare; small buffer is fine
+
+	// fileDedupWindow deduplicates file events from the same process within this window.
+	// Replaces the tgid==tid C filter — multi-threaded containers emit one event per
+	// thread for the same file open; we keep only the first within the window.
+	fileDedupWindow = time.Second
+)
+
+var (
+	fileDedupMu   sync.Mutex
+	fileDedupSeen = map[string]time.Time{}
 )
 
 type pendingEntry struct {
@@ -157,6 +168,18 @@ func main() {
 				}
 			}
 
+			if ev.Type == pipeline.FileEventType {
+				key := fmt.Sprintf("%d:%s", ev.File.Pid, processor.CString(ev.File.Filename[:]))
+				fileDedupMu.Lock()
+				last, seen := fileDedupSeen[key]
+				if seen && time.Since(last) < fileDedupWindow {
+					fileDedupMu.Unlock()
+					continue
+				}
+				fileDedupSeen[key] = time.Now()
+				fileDedupMu.Unlock()
+			}
+
 			// pending-ns logic → NOW uses State
 			if ev.Workload.State == workload.StatePending {
 				nsID := mntNsIDOf(*ev)
@@ -240,6 +263,22 @@ func main() {
 			}
 
 			pendingMu.Unlock()
+		}
+	}()
+
+	// File dedup cache cleanup — evict entries older than 2× the dedup window
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			cutoff := time.Now().Add(-fileDedupWindow * 2)
+			fileDedupMu.Lock()
+			for k, t := range fileDedupSeen {
+				if t.Before(cutoff) {
+					delete(fileDedupSeen, k)
+				}
+			}
+			fileDedupMu.Unlock()
 		}
 	}()
 
