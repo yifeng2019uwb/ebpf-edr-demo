@@ -16,6 +16,9 @@ APP_SERVICES="gateway|auth-service|provider-service|ai-service"
 # Service expected to make external connects without firing HIGH (V5)
 ALLOWED_EXT_SERVICE="ai-service"     # order-processor: inventory-service
 
+# ── Cloud Logging project (where ebpf-edr-alerts are published) ──────────────
+GCLOUD_PROJECT="ebpfagent"
+
 # ── MITRE rule names (update if rules are renamed) ────────────────────────────
 RULE_SHELL="T1059_unix_shell_execution"
 RULE_SHADOW="T1003_008_os_credential_dumping"
@@ -67,29 +70,45 @@ echo ""
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
-# Poll EDR logs for a pattern anchored to $3 (RFC3339 timestamp), return 0 if found within timeout.
-# Pass the timestamp captured BEFORE the trigger so slow-firing alerts are never missed.
+# Fetch alerts from Cloud Logging after $1 (RFC3339 timestamp) and format each
+# entry as a single grep-able line: "level=X rule=Y service=Z namespace=W filename=F dst_ip=I"
+_fetch_alerts() {
+    local since=$1
+    gcloud logging read \
+        "logName=\"projects/${GCLOUD_PROJECT}/logs/ebpf-edr-alerts\" AND timestamp>=\"${since}\"" \
+        --project="$GCLOUD_PROJECT" --limit=100 --format=json 2>/dev/null \
+    | python3 -c "
+import json, sys
+for e in json.load(sys.stdin):
+    p = e.get('jsonPayload', {})
+    print('level={} rule={} service={} namespace={} filename={} dst_ip={}'.format(
+        p.get('level',''), p.get('rule',''), p.get('service',''),
+        p.get('namespace',''), p.get('filename',''), p.get('dst_ip','')))
+"
+}
+
+# Poll Cloud Logging for a pattern anchored to $3 (RFC3339 timestamp), return 0 if found within timeout.
 expect_alert() {
     local pattern=$1
     local timeout=${2:-60}
     local since=${3:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}
-    for ((elapsed=0; elapsed<timeout; elapsed+=2)); do
-        if $KUBECTL logs "$EDR_POD" -n kube-system --since-time="$since" 2>/dev/null \
-                | grep -qE "$pattern"; then
+    for ((elapsed=0; elapsed<timeout; elapsed+=5)); do
+        if _fetch_alerts "$since" | grep -qE "$pattern"; then
             return 0
         fi
-        sleep 2
+        sleep 5
     done
     return 1
 }
 
-# Check that a pattern does NOT appear in EDR logs over a wait window.
+# Check that a pattern does NOT appear in Cloud Logging over a wait window.
 no_alert() {
     local pattern=$1
     local window=${2:-20}
+    local since
+    since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
     sleep "$window"
-    if $KUBECTL logs "$EDR_POD" -n kube-system --since="${window}s" 2>/dev/null \
-            | grep -qE "$pattern"; then
+    if _fetch_alerts "$since" | grep -qE "$pattern"; then
         return 1
     fi
     return 0

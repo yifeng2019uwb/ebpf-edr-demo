@@ -31,8 +31,9 @@ var responseRules = []responseRule{
 	// {rule: RuleT1611EscapeToHostNs, minLevel: alert.Critical, action: ActionKillProcess},
 
 	// File rules
-	// T1611 — host reads container filesystem: kill — no legitimate app accesses host overlay
-	{rule: RuleT1611EscapeToHostFs, minLevel: alert.Critical, action: ActionKillProcess},
+	// T1611 — host reads container filesystem: alert only — GKE system processes (containerd, installable)
+	// legitimately access /run/containerd/ paths; kill_process disabled until whitelist is complete.
+	// {rule: RuleT1611EscapeToHostFs, minLevel: alert.Critical, action: ActionKillProcess},
 
 	// T1611 — container reads /proc/1/: alert only — GKE monitoring sidecars hit this (known FP)
 

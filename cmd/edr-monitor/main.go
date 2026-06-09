@@ -113,6 +113,7 @@ func main() {
 			}
 		}
 	}()
+	var fileRingbufTotal atomic.Int64
 	go func() {
 		for {
 			rec, err := loader.FileRd.Read()
@@ -123,6 +124,10 @@ func main() {
 				log.Printf("file reader error (restarting): %v", err)
 				time.Sleep(time.Second)
 				continue
+			}
+			n := fileRingbufTotal.Add(1)
+			if n == 1 || n%1000 == 0 {
+				log.Printf("DEBUG opensnoop ringbuf: %d total events read", n)
 			}
 			select {
 			case rawCh <- pipeline.RawEvent{Source: "opensnoop", Data: append([]byte(nil), rec.RawSample...)}:
