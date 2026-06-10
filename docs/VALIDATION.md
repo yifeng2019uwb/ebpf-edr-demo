@@ -44,12 +44,12 @@ sudo ./validate.sh                # Terminal 3: run all 11 tests
 
 **Command**:
 ```bash
-docker exec order-processor-auth_service bash -c "id"
+docker exec order-processor-user_service bash -c "id"
 ```
 
 **Expected**:
 ```
-level=CRITICAL rule=T1059_unix_shell_execution service=auth_service comm=/usr/bin/bash action=kill_process
+level=CRITICAL rule=T1059_unix_shell_execution service=user_service comm=/usr/bin/bash action=kill_process
 ```
 
 **Response**: process killed immediately via SIGKILL.
@@ -84,15 +84,13 @@ level=HIGH rule=T1105_ingress_tool_transfer service=auth_service comm=nc action=
 
 **Command**:
 ```bash
-docker exec order-processor-auth_service cat /etc/shadow
+docker exec order-processor-order_service cat /etc/shadow
 ```
 
 **Expected**:
 ```
-level=HIGH rule=T1003_008_os_credential_dumping service=auth_service filename=/etc/shadow action=kill_process
+level=HIGH rule=T1003_008_os_credential_dumping service=order_service filename=/etc/shadow action=kill_process
 ```
-
-**Note**: `cat` gets `EACCES` but opensnoop fires on the attempt — the access attempt is the signal.
 
 ---
 
@@ -104,13 +102,13 @@ level=HIGH rule=T1003_008_os_credential_dumping service=auth_service filename=/e
 
 **Command**:
 ```bash
-docker cp /tmp/test_id_rsa order-processor-auth_service:/tmp/id_rsa
-docker exec order-processor-auth_service cat /tmp/id_rsa
+docker cp /tmp/test_id_rsa order-processor-user_service:/tmp/id_rsa
+docker exec order-processor-user_service cat /tmp/id_rsa
 ```
 
 **Expected**:
 ```
-level=HIGH rule=T1552_004_private_keys service=auth_service filename=/tmp/id_rsa action=kill_process
+level=HIGH rule=T1552_004_private_keys service=user_service filename=/tmp/id_rsa action=kill_process
 ```
 
 ---
@@ -156,7 +154,7 @@ level=HIGH rule=T1041_exfiltration_over_c2 service=auth_service dst=8.8.8.8:80 a
 
 **Command**:
 ```bash
-MERGED=$(docker inspect order-processor-auth_service --format '{{.GraphDriver.Data.MergedDir}}')
+MERGED=$(docker inspect order-processor-order_service --format '{{.GraphDriver.Data.MergedDir}}')
 cat "${MERGED}/etc/hostname"
 ```
 
@@ -175,12 +173,12 @@ level=CRITICAL rule=T1611_escape_to_host_fs service=host filename=/var/lib/docke
 
 **Command**:
 ```bash
-docker exec order-processor-auth_service cat /etc/passwd
+docker exec order-processor-insights_service cat /etc/passwd
 ```
 
 **Expected**:
 ```
-level=MEDIUM rule=T1082_system_info_discovery service=auth_service filename=/etc/passwd
+level=MEDIUM rule=T1082_system_info_discovery service=insights_service filename=/etc/passwd
 ```
 
 **Note**: MEDIUM because `/etc/passwd` is world-readable. `bash` is whitelisted (reads at startup); `cat` is not.
@@ -195,13 +193,13 @@ level=MEDIUM rule=T1082_system_info_discovery service=auth_service filename=/etc
 
 **Command**:
 ```bash
-docker exec order-processor-auth_service cp /bin/cat /tmp/sshd
-docker exec order-processor-auth_service /tmp/sshd /etc/hostname
+docker exec order-processor-order_service cp /bin/cat /tmp/sshd
+docker exec order-processor-order_service /tmp/sshd /etc/hostname
 ```
 
 **Expected**:
 ```
-level=HIGH rule=T1036_masquerading service=auth_service comm=/tmp/sshd
+level=HIGH rule=T1036_masquerading service=order_service comm=/tmp/sshd
 ```
 
 **Note**: Two separate `docker exec` calls — avoids `/bin/sh` wrapper which would trigger T1059.
@@ -218,13 +216,13 @@ Masquerading check runs before the process whitelist (`/tmp/sshd` fires even tho
 **Command**:
 ```bash
 echo "* * * * * root /tmp/evil" > /tmp/test_crontab
-docker cp /tmp/test_crontab order-processor-auth_service:/etc/crontab
-docker exec order-processor-auth_service cat /etc/crontab
+docker cp /tmp/test_crontab order-processor-user_service:/etc/crontab
+docker exec order-processor-user_service cat /etc/crontab
 ```
 
 **Expected**:
 ```
-level=HIGH rule=T1053_003_scheduled_task_cron service=auth_service filename=/etc/crontab
+level=HIGH rule=T1053_003_scheduled_task_cron service=user_service filename=/etc/crontab
 ```
 
 ---
@@ -238,13 +236,13 @@ level=HIGH rule=T1053_003_scheduled_task_cron service=auth_service filename=/etc
 **Command**:
 ```bash
 echo "rm -rf /important" > /tmp/bash_hist
-docker cp /tmp/bash_hist order-processor-auth_service:/tmp/.bash_history
-docker exec order-processor-auth_service cat /tmp/.bash_history
+docker cp /tmp/bash_hist order-processor-insights_service:/tmp/.bash_history
+docker exec order-processor-insights_service cat /tmp/.bash_history
 ```
 
 **Expected**:
 ```
-level=MEDIUM rule=T1070_003_clear_command_history service=auth_service filename=/tmp/.bash_history
+level=MEDIUM rule=T1070_003_clear_command_history service=insights_service filename=/tmp/.bash_history
 ```
 
 ---

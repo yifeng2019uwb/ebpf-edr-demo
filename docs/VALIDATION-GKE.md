@@ -1,21 +1,28 @@
 # Validation Guide — eBPF EDR on GKE
 
 Attack simulation test procedure for the GKE DaemonSet deployment.
-Run from a laptop with `kubectl` configured for the order-processor cluster.
+Run from a laptop with `kubectl` configured for the health-ai cluster.
 
 ---
 
 ## Test Strategy
 
-Tests run against a live `user-service` pod in the `order-processor` namespace.
-The EDR agent runs as a DaemonSet (`kube-system/ebpf-edr`) and watches all pods on the node.
+Tests are distributed across all 4 health-ai services to confirm the eBPF resolver
+maps mount-namespace IDs to service identities for every pod, not just one.
+
+| Service | Tests |
+|---------|-------|
+| auth-service | V3 (shadow), V8 (net-tool), V10 (reverse-shell) |
+| provider-service | V2 (shell-spawn), V7 (ssh-key) |
+| gateway | V4 (ext-connect), V9 (passwd) |
+| ai-service | V5 (allowlist passive check) |
 
 Two goals verified together:
 
 1. **Attack detection** — each threat rule fires at the correct severity with full workload identity
 2. **No false positives** — normal gateway traffic does not produce CRITICAL or HIGH alerts
 
-Automated with `validate-gke.sh` — each test polls EDR logs and reports PASS/FAIL.
+Automated with `validate-gke.sh` — each test polls Cloud Logging and reports PASS/FAIL.
 
 ---
 
@@ -23,83 +30,83 @@ Automated with `validate-gke.sh` — each test polls EDR logs and reports PASS/F
 
 - GKE cluster running: `kubectl get nodes`
 - EDR DaemonSet deployed: `kubectl get pods -n kube-system -l app=ebpf-edr`
-- `user-service` pod running: `kubectl get pods -n order-processor -l component=user-service`
+- health-ai pods running: `kubectl get pods -n health-ai`
 - Run from laptop: `./validate-gke.sh`
 
 ---
 
 ## Test Cases
 
-### V2 — Shell Spawn in Container
+### V2 — Shell Spawn in Container (provider-service)
 
 **Threat**: Attacker achieved RCE inside a pod and spawned an interactive shell.
 
 **Trigger**:
 ```bash
-kubectl exec <user-service-pod> -n order-processor -- bash -c "exit 0"
+kubectl exec <provider-service-pod> -n health-ai -- sh -c "exit 0"
 ```
 
 **Expected alert**:
 ```
-level=CRITICAL rule=shell_spawn_container service=user-service namespace=order-processor
+level=CRITICAL rule=T1059_unix_shell_execution service=provider-service namespace=health-ai
 ```
 
-**Why it fires**: `bash` matches `shellBinaries` suffix list. Any shell spawn inside a
+**Why it fires**: `sh` matches `shellBinaries` suffix list. Any shell spawn inside a
 container is treated as RCE evidence regardless of the command run inside it.
 
 ---
 
-### V3 — Sensitive File: `/etc/shadow`
+### V3 — Sensitive File: `/etc/shadow` (auth-service)
 
 **Threat**: Attacker reads the password hash file to crack credentials offline.
 
 **Trigger**:
 ```bash
-kubectl exec <user-service-pod> -n order-processor -- cat /etc/shadow
+kubectl exec <auth-service-pod> -n health-ai -- sh -c \
+  "echo 'root:!:19000:0:99999:7:::' > /etc/shadow && cat /etc/shadow"
 ```
 
 **Expected alert**:
 ```
-level=HIGH rule=sensitive_file_access service=user-service namespace=order-processor
-msg=Container accessed sensitive file: /etc/shadow
+level=HIGH rule=T1003_008_os_credential_dumping service=auth-service namespace=health-ai
+filename=/etc/shadow
 ```
 
-**Note**: `cat` gets `EACCES` (permission denied) but opensnoop still fires — the two-probe
-design emits on access-denied opens, not just successful ones. The *attempt* to read shadow is
-the signal, not the success.
+**Note**: The file is created first because Alpine JRE images don't ship `/etc/shadow`.
+`lsm/file_open` fires on the successful open — unlike the old opensnoop design, ENOENT
+events are naturally absent (LSM hook fires only after the kernel validates the open).
 
 ---
 
-### V4 — Unauthorized External Network Connection
+### V4 — Unauthorized External Network Connection (gateway)
 
 **Threat**: Compromised pod reaches out to an external IP (C2, exfiltration).
 
 **Trigger**:
 ```bash
-kubectl exec <user-service-pod> -n order-processor -- \
-  python3 -c "import socket; s=socket.socket(); s.settimeout(3); s.connect(('8.8.8.8',80)); s.close()"
+kubectl exec <gateway-pod> -n health-ai -- wget --timeout=3 -q http://8.8.8.8/ -O /dev/null
 ```
 
 **Expected alert**:
 ```
-level=HIGH rule=unauthorized_external_connect service=user-service namespace=order-processor
-msg=Container made unauthorized external connection to 8.8.8.8:80
+level=HIGH rule=T1041_exfiltration_over_c2 service=gateway namespace=health-ai
+dst_ip=8.8.8.8
 ```
 
-**Why it fires**: `user-service` is not in `externalAllowedServices`. Any external (non-RFC-1918)
+**Why it fires**: `gateway` is not in `externalAllowedServices`. Any external (non-RFC-1918)
 connection from an unauthorized container triggers HIGH.
 
 ---
 
-### V5 — Inventory Allowlist (No Alert)
+### V5 — ai-service Allowlist (No Alert)
 
-**Threat model**: Verify the allowlist works — `inventory-service` is the only container
-permitted to call external APIs. This test confirms no HIGH alert fires.
+**Threat model**: Verify the allowlist works — `ai-service` calls Gemini (external AI API).
+This test confirms no HIGH `T1041_exfiltration_over_c2` fires for `ai-service` traffic.
 
-**Trigger**: Observe passively — inventory syncs automatically, or hit the gateway endpoint.
+**Trigger**: Observe passively for 20s — ai-service sends periodic Gemini requests.
 
-**Expected**: No `HIGH unauthorized_external_connect` for `inventory-service`.
-`inventory-service` is in `externalAllowedServices` — external connections are silently allowed.
+**Expected**: No `HIGH T1041_exfiltration_over_c2` for `ai-service`.
+`ai-service` is in `externalAllowedServices` — external connections are silently allowed.
 
 ---
 
@@ -107,70 +114,67 @@ permitted to call external APIs. This test confirms no HIGH alert fires.
 
 **Trigger**:
 ```bash
-curl -sf "http://<gateway-ip>:8080/health"
+curl -sf "http://<gateway-ip>:8080/actuator/health"
 ```
 
-**Expected**: No CRITICAL alerts for `gateway`, `user-service`, `auth-service`, or
-`order-service` in the `order-processor` namespace from a normal health check.
+**Expected**: No CRITICAL alerts for `gateway`, `auth-service`, `provider-service`, or
+`ai-service` in the `health-ai` namespace from a normal health check.
 
 ---
 
-### V7 — SSH Private Key Read
+### V7 — SSH Private Key Read (provider-service)
 
 **Threat**: Attacker reads an SSH private key from inside a pod to move laterally.
 
 **Trigger**:
 ```bash
-kubectl exec <user-service-pod> -n order-processor -- bash -c \
+kubectl exec <provider-service-pod> -n health-ai -- sh -c \
   "mkdir -p /root/.ssh && echo 'test-key' > /root/.ssh/id_rsa && cat /root/.ssh/id_rsa"
 ```
 
 **Expected alert**:
 ```
-level=CRITICAL rule=sensitive_file_access service=user-service namespace=order-processor
-msg=Container accessed SSH credential file: /root/.ssh/id_rsa
+level=CRITICAL rule=T1552_004_private_keys service=provider-service namespace=health-ai
+filename=/root/.ssh/id_rsa
 ```
 
-**Note**: The `bash -c` also triggers `shell_spawn_container` CRITICAL — that is expected.
-The SSH key access fires as a separate CRITICAL event for the `/root/.ssh/` path prefix.
+**Note**: The `/root/.ssh/` directory prefix triggers CRITICAL (SSH dir prefix rule).
+The `sh -c` also triggers `T1059_unix_shell_execution` CRITICAL — that is expected.
 
 ---
 
-### V8 — Network Recon Tool in Container
+### V8 — Network Recon Tool in Container (auth-service)
 
-**Threat**: Attacker inside a pod runs `nc` or `wget` to probe external hosts or exfiltrate data.
-
-**Trigger** (`nc` preferred, falls back to `wget`):
-```bash
-kubectl exec <user-service-pod> -n order-processor -- nc -w 2 1.1.1.1 80
-# or
-kubectl exec <user-service-pod> -n order-processor -- wget --timeout=2 -q http://1.1.1.1
-```
-
-**Expected alert**:
-```
-level=HIGH rule=network_tool_container service=user-service namespace=order-processor
-```
-
-**Note**: Detection fires on binary execution, not the network connection.
-`validate-gke.sh` attempts `nc` first, falls back to `wget`. Skipped if neither is available.
-
----
-
-### V9 — System File Recon: `/etc/passwd`
-
-**Threat**: Attacker reads the user account list to identify targets for privilege escalation
-or lateral movement.
+**Threat**: Attacker inside a pod runs `wget` to probe external hosts or stage tools.
 
 **Trigger**:
 ```bash
-kubectl exec <user-service-pod> -n order-processor -- cat /etc/passwd
+kubectl exec <auth-service-pod> -n health-ai -- wget --timeout=2 -q http://1.1.1.1 -O /dev/null
 ```
 
 **Expected alert**:
 ```
-level=MEDIUM rule=sensitive_file_access service=user-service namespace=order-processor
-msg=Container accessed system file: /etc/passwd
+level=HIGH rule=T1105_ingress_tool_transfer service=auth-service namespace=health-ai
+```
+
+**Note**: Detection fires on binary execution (`/usr/bin/wget` matches `networkBinaries`),
+not on the network connection. `validate-gke.sh` attempts `wget` first, falls back to `nc`.
+
+---
+
+### V9 — System File Recon: `/etc/passwd` (gateway)
+
+**Threat**: Attacker reads the user account list to identify targets for privilege escalation.
+
+**Trigger**:
+```bash
+kubectl exec <gateway-pod> -n health-ai -- cat /etc/passwd
+```
+
+**Expected alert**:
+```
+level=MEDIUM rule=T1082_system_info_discovery service=gateway namespace=health-ai
+filename=/etc/passwd
 ```
 
 **Why MEDIUM not HIGH**: `/etc/passwd` is world-readable and not a direct credential.
@@ -178,33 +182,25 @@ Reading it from application code is suspicious but lower risk than `/etc/shadow`
 
 ---
 
-### V10 — Reverse Shell Simulation
+### V10 — Reverse Shell Simulation (auth-service)
 
 **Threat**: Attacker establishes a reverse shell — combines external C2 connection with
 spawning a shell process, the classic RCE-to-persistence attack chain.
 
 **Trigger**:
 ```bash
-kubectl exec <user-service-pod> -n order-processor -- bash -c "
-  python3 -c \"
-import socket, subprocess
-s = socket.socket()
-s.settimeout(2)
-try: s.connect(('8.8.8.8', 4444))
-except: pass
-subprocess.call(['/bin/sh'])
-\""
+kubectl exec <auth-service-pod> -n health-ai -- sh -c \
+  "wget --timeout=2 -q http://8.8.8.8:4444 -O /dev/null || true; sh -c 'exit 0'"
 ```
 
 **Expected alerts** (both must fire):
 ```
-level=CRITICAL rule=shell_spawn_container service=user-service namespace=order-processor
-level=HIGH rule=unauthorized_external_connect service=user-service namespace=order-processor
-msg=Container made unauthorized external connection to 8.8.8.8:4444
+level=CRITICAL rule=T1059_unix_shell_execution service=auth-service namespace=health-ai
+level=HIGH rule=T1041_exfiltration_over_c2 service=auth-service namespace=health-ai dst_ip=8.8.8.8
 ```
 
-**Why two alerts**: `subprocess.call(['/bin/sh'])` triggers `shell_spawn_container` CRITICAL;
-the `s.connect(('8.8.8.8', 4444))` attempt triggers `unauthorized_external_connect` HIGH.
+**Why two alerts**: the inner `sh -c 'exit 0'` triggers `T1059_unix_shell_execution` CRITICAL;
+the `wget http://8.8.8.8:4444` attempt triggers `T1041_exfiltration_over_c2` HIGH.
 Both together signal a reverse shell pattern.
 
 ---
@@ -213,21 +209,19 @@ Both together signal a reverse shell pattern.
 
 **Attack detection:**
 
-- [x] V2 — CRITICAL `shell_spawn_container` (`kubectl exec bash`)
-- [x] V3 — HIGH `sensitive_file_access` (`/etc/shadow`)
-- [x] V4 — HIGH `unauthorized_external_connect` (8.8.8.8:80)
-- [x] V5 — No alert (inventory-service allowlisted — correct)
+- [x] V2 — CRITICAL `T1059_unix_shell_execution` (provider-service)
+- [x] V3 — HIGH `T1003_008_os_credential_dumping` `/etc/shadow` (auth-service)
+- [x] V4 — HIGH `T1041_exfiltration_over_c2` 8.8.8.8 (gateway)
+- [x] V5 — No alert (ai-service allowlisted — correct)
 - [x] V6 — No CRITICAL from normal gateway traffic
-- [x] V7 — CRITICAL `sensitive_file_access` (SSH key `/root/.ssh/id_rsa`)
-- [x] V8 — HIGH `network_tool_container` (`nc` / `wget`)
-- [x] V9 — MEDIUM `sensitive_file_access` (`/etc/passwd`)
-- [x] V10 — CRITICAL `shell_spawn_container` + HIGH `unauthorized_external_connect` (reverse shell)
+- [x] V7 — CRITICAL `T1552_004_private_keys` `/root/.ssh/id_rsa` (provider-service)
+- [x] V8 — HIGH `T1105_ingress_tool_transfer` wget (auth-service)
+- [x] V9 — MEDIUM `T1082_system_info_discovery` `/etc/passwd` (gateway)
+- [x] V10 — CRITICAL `T1059_unix_shell_execution` + HIGH `T1041_exfiltration_over_c2` (auth-service)
 
 **Workload identity verified on all alerts:**
 
-- [x] `service` field populated (`user-service`)
-- [x] `pod` field populated (pod name)
-- [x] `namespace` field populated (`order-processor`)
-- [x] `cluster` field populated (`order-processor-cluster-us-west1`)
-- [x] `region` field populated (`us-west1`)
+- [x] `service` field populated (e.g. `auth-service`, `provider-service`, `gateway`)
+- [x] `namespace` field populated (`health-ai`)
 - [x] `runtime` = `k8s`
+- [x] All 4 services confirmed: resolver maps mnt_ns_id correctly for every pod

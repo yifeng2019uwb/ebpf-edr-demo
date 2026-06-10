@@ -1,139 +1,159 @@
-# cnop-ebpf-monitor — Project Report
+# eBPF EDR Demo — Project Report
 
 ## What This Project Is
 
-A working EDR (Endpoint Detection and Response) agent built with Go + eBPF, monitoring containerized services running on a Linux host. The agent captures security-relevant events from the kernel and emits structured alerts.
+A working EDR (Endpoint Detection and Response) agent built with Go + eBPF, monitoring containerized services at the kernel level. The agent detects and responds to threats in real time — no agent inside containers, no application changes required.
 
-Target workload: [cloud-native-order-processor](https://github.com/yifeng2019uwb/cloud-native-order-processor) — 8 Docker containers on GCP VM (Debian 12, kernel 6.1).
+Two target workloads:
+- **order-processor** — cloud-native microservices running on a GCP Docker VM (Debian 12, kernel 6.1)
+- **health-ai** — healthcare AI microservices running on GKE (Ubuntu 24.04, kernel 6.8)
 
 ---
 
-## What Was Built
+## Architecture
 
 ### eBPF Kernel Programs
 
 | Program | Hook | Captures |
 |---------|------|----------|
 | `execsnoop.bpf.c` | `tracepoint/syscalls/sys_enter_execve` | Process execution — pid, ppid, uid, mnt_ns_id, executable path |
-| `opensnoop.bpf.c` | `sys_enter_openat` + `sys_exit_openat` | File access — pid, comm, filename, return code |
+| `lsm-file.bpf.c` | `lsm.s/file_open` + `bpf_d_path()` | File access — pid, comm, full resolved path, mnt_ns_id |
 | `lsm-connect.bpf.c` | `lsm/socket_connect` | Outbound connections — pid, comm, dst_ip, dst_port, mnt_ns_id |
 
-All compiled via `bpf2go` → Go wrappers auto-generated.
+All compiled via `bpf2go` — Go wrappers auto-generated and committed to `pkg/bpf/`.
 
-**opensnoop uses a two-probe pattern**: entry captures filename and process context into a BPF hash map; exit checks the return value and emits only if `ret >= 0` (success) or `ret == -EACCES/-EPERM` (access denied to existing file). Files that do not exist (`-ENOENT`) are dropped — this eliminates probe noise from curl checking `~/.curlrc` while still catching `cat /etc/shadow` from a non-root user.
+**Why `lsm/file_open` instead of tracepoint openat:**
+Alpine Linux's busybox (`sh`, `cat`) calls `SYS_open` (syscall 2) directly; the old opensnoop tracepoint only hooked `SYS_openat` (syscall 257) — a completely different syscall, so busybox was never captured. `lsm/file_open` fires for every file open regardless of syscall variant (open, openat, openat2, io_uring), catching busybox, glibc, musl, and all runtimes uniformly. `bpf_d_path()` extracts the full resolved path from the kernel `struct file *` in a single call — no two-probe enter/exit hash map needed. The `.s` (sleepable) designation is required for `bpf_d_path()` and supported on GKE kernel 6.8 (requires 5.11+).
 
-**lsm-connect is audit-only**: always returns `0` — never blocks. The `lsm/socket_connect` hook fires before every `connect()` syscall with no TOCTOU gap. Loopback (127.x.x.x) is filtered in BPF to reduce ring buffer traffic. All other private IP range checks (RFC 1918) are done in Go so policy can change without recompiling BPF.
+**lsm-connect is audit-only**: always returns `0` — never blocks at kernel level (BPF verifier complexity limit on GKE removed the LPMTrie enforcement). The `lsm/socket_connect` hook fires before every `connect()` syscall. Loopback is filtered in BPF; all RFC 1918 checks are in Go so policy changes without recompiling BPF.
 
-### Go Userspace Agent — Package Layout
+### Go Userspace Pipeline
 
 ```
-cmd/edr-monitor/main.go     entry point — wires packages, runs goroutines
-pkg/bpf/loader.go           BPF loading, kernel attachment, event readers
-pkg/detector/rules.go       detection logic — CheckProcessRules/CheckFileRules/CheckNetworkRules
-pkg/detector/policy.go      policy data — whitelists, file prefixes, network allowlists
-pkg/container/container.go  namespace → container name resolution via /proc + docker ps
-internal/alert/alert.go     Alert struct + Handler (stdout + alert.log)
-internal/processor/         event structs (ProcessEvent/FileEvent/NetEvent) + byte converters
-kernel/                     eBPF kernel programs (.bpf.c) — compiled by bpf2go
+cmd/edr-monitor/main.go   — entry point, pipeline wiring, goroutines
+pkg/bpf/loader.go         — BPF loading, kernel attachment, ring buffer readers
+pkg/workload/             — WorkloadResolver: DockerResolver + K8sResolver
+pkg/detector/rules.go     — MITRE-mapped detection logic
+pkg/detector/policy.go    — whitelists, file prefixes, network allowlists (data only)
+pkg/pipeline/             — EnrichedEvent types, channel plumbing
+internal/alert/           — AlertHandler: local file + Cloud Logging + Pub/Sub
+internal/processor/       — event structs (ProcessEvent/FileEvent/NetEvent)
 ```
 
-- Loads and attaches all eBPF programs via `pkg/bpf.Load()`
-- Reads process events via **perf buffer** (`execsnoop`)
-- Reads file and network events via **ring buffer** (`opensnoop`, `lsm-connect`)
-- Three concurrent goroutines, one per monitor
-- Network byte order conversion for lsm-connect IP/port: IP extracted byte-by-byte, port byte-swapped
-- Graceful shutdown on `Ctrl+C`
+**Pipeline stages:**
+1. Three goroutines read ring buffers (process / file / network) → `rawCh`
+2. Enricher: `mnt_ns_id` → `WorkloadIdentity` (service / pod / namespace / cluster) → `enrichedCh`
+3. File dedup: `comm:pid:filename` key, 1-second window — collapses duplicate LSM hook fires
+4. Detector: applies all MITRE rules → `alertCh`
+5. Responder: `kill_process` (SIGKILL) or `block_ip`
+6. AlertHandler: stdout + `alerts/alert.log` + Cloud Logging + Pub/Sub
 
-### Detection Rules (`pkg/detector`)
+**Workload resolution:**
+- `mnt_ns_id` captured in kernel via `BPF_CORE_READ(task, nsproxy, mnt_ns, ns.inum)`
+- Docker: `docker ps` at startup + every 30s → container ID → service name map
+- K8s: `crictl ps` → pod metadata → service/namespace/cluster from pod labels
+- StatePending retry loop (3s interval, 60s max) handles slow-starting pods
 
-**Process rules:**
+### Alert Output
 
-| Rule | Trigger | Severity |
-|------|---------|----------|
-| `unknown_namespace_process` | Process in namespace that is neither host nor any known container | CRITICAL |
-| `shell_spawn_container` | `bash`, `sh`, `zsh`, `dash` inside any container | CRITICAL |
-| `network_tool_container` | `nc`, `ncat`, `wget` inside any container | HIGH |
+Structured JSON to three destinations simultaneously:
+```json
+{
+  "schema_version": 1,
+  "ts": "2026-06-10T17:59:06.000000Z",
+  "level": "HIGH",
+  "rule": "T1041_exfiltration_over_c2",
+  "service": "gateway",
+  "namespace": "health-ai",
+  "runtime": "k8s",
+  "dst_ip": "8.8.8.8",
+  "dst_port": 80,
+  "response_action": "none"
+}
+```
 
-curl intentionally excluded from process rules — health checks, smoke tests, and integrations all use `curl localhost`. Real curl exfiltration detection is in lsm-connect (destination-aware).
-
-**File access rules:**
-
-| Tier | Files / Suffixes | Severity |
-|------|-----------------|----------|
-| HOST | `/var/lib/docker/overlay2/` (host process only) | CRITICAL |
-| CRITICAL | `/root/.ssh/`, `/home/.ssh/` | CRITICAL |
-| HIGH | `/etc/shadow`, `/run/secrets/`, `/proc/1/`, `.key`, `id_rsa`, `id_ed25519`, `.env` | HIGH |
-| MEDIUM | `/etc/passwd`, `/etc/group` | MEDIUM |
-
-`host_reads_container_fs` — fires when a host process reads the Docker overlay filesystem directly. This bypasses container isolation and requires no whitelist — dockerd itself does not read overlay2 files at runtime.
-
-**Network rules:**
-
-| Rule | Trigger | Severity |
-|------|---------|----------|
-| `external_connect_allowed` | Container in `externalAllowedContainers` connects to external IP | LOW (audit) |
-| `unauthorized_external_connect` | Any other container connects to external IP | HIGH |
-
-Private IPs (RFC 1918: 10.x, 172.16.x, 192.168.x, 169.254.x) are always allowed — Docker bridge, service mesh, internal traffic. Only `inventory_service` is permitted external access (CoinGecko market data).
-
-**Whitelists:**
-- Process: `sshd`, `runc`, `dockerd`, `containerd` — never alert
-- Host processes filtered via `mnt_ns` — no host-level false positives
-- File: `runc:[2:INIT]`, `runc:[1:CHILD]`, `runc`, `curl`, `id`, `bash`, `systemd-logind` — expected system file reads during init/startup
-
-### Container Correlation (`pkg/container`)
-
-- `mnt_ns_id` captured in kernel via `BPF_CORE_READ(task, nsproxy, mnt_ns, ns.inum)` — `__u32`
-- `docker ps --no-trunc` at startup + every 30s builds container ID → name map
-- `/proc/<pid>/cgroup` maps process → container ID → container name
-- Handles both cgroupv1 (`/docker/<id>`) and cgroupv2 (`docker-<id>.scope`) formats
-**Namespace resolution logic (three-tier):**
-
-| Result | Meaning | Source |
-|---|---|---|
-| `host` | PID 1 mount namespace | nsCache |
-| `order-processor-xxx` | Known Docker container | nsCache via docker ps |
-| `unknown-ns` | Not host, not any container after fresh /proc rescan | escape indicator |
-
-On cache miss, `resolveContainer` immediately rescans `/proc` before declaring `unknown-ns` — handles new containers starting within the 30s refresh window.
-
-### Alert Output (`internal/alert`)
-
-- Structured format: `timestamp, level, rule, container, pid, ppid, uid, comm, message`
-- Writes to stdout (live monitoring) and `alerts/alert.log` (persistent record)
+- `stdout` + `alerts/alert.log` — always-on, no external dependency
+- **Google Cloud Logging** — structured JSON, 365-day retention, queryable
+- **Pub/Sub `edr-alerts`** → Alert Router → WebSocket → browser dashboard (<1s latency)
 
 ---
 
-## Validation
+## Detection Rules
 
-All 7 test cases in `VALIDATION.md` were executed via `validate.sh` against live containers on the GCP VM. The full CNOP integration test suite ran concurrently to verify no false positives under real service load.
+### Process Rules (14 total across 3 categories)
 
-### Attack detections — all confirmed
+| Rule | MITRE | Severity | Response |
+|------|-------|----------|----------|
+| `T1059_unix_shell_execution` | T1059.004 · T1609 | CRITICAL | kill_process |
+| `T1105_ingress_tool_transfer` | T1105 · T1095 | HIGH | kill_process |
+| `T1611_escape_to_host_ns` | T1611 | CRITICAL | — |
+| `T1036_masquerading` | T1036 | HIGH | — |
+| `T1613_container_resource_discovery` | T1613 | HIGH | — |
+| `T1611_escape_to_host_fs` | T1611 | CRITICAL | kill_process |
+| `T1611_escape_to_host_proc` | T1611 | HIGH | — |
+| `T1552_004_private_keys` | T1552.004 | CRITICAL/HIGH | kill_process |
+| `T1552_001_credentials_in_files` | T1552.001 | HIGH | kill_process |
+| `T1003_008_os_credential_dumping` | T1003.008 | HIGH | kill_process |
+| `T1082_system_info_discovery` | T1082 | MEDIUM | — |
+| `T1053_003_scheduled_task_cron` | T1053.003 | HIGH | — |
+| `T1070_003_clear_command_history` | T1070.003 | MEDIUM | — |
+| `T1041_exfiltration_over_c2` | T1041 · T1048 | HIGH | block_ip (alert-only on GKE) |
 
-| Test | Attack | Alert | Result |
-|------|--------|-------|--------|
-| T1 | Shell spawn in container | CRITICAL `shell_spawn_container` | ✅ |
-| T2 | `wget`/`nc` executed in container | HIGH `network_tool_container` | ⚠️ infra* |
-| T3 | `cat /etc/shadow` (EACCES) | HIGH `sensitive_file_access` | ✅ |
-| T4 | Read `/root/.ssh/id_rsa` | CRITICAL `sensitive_file_access` | ✅ |
-| T5 | Unauthorized external connect (8.8.8.8) | HIGH `unauthorized_external_connect` | ✅ |
-| T6 | inventory_service → CoinGecko | LOW `external_connect_allowed` | ✅ |
-| T7 | Host reads Docker overlay2 filesystem | CRITICAL `host_reads_container_fs` | ✅ |
+All single-event-detectable MITRE techniques for containerized workloads are covered.
 
-*T2: `nc`/`ncat`/`wget` not pre-installed in Python uvicorn container; `apt-get` fails with permission denied. Detection rule is correct — firing confirmed in code review.
+### Policy Design
 
-### No false positives from normal service traffic
+- **fileCommWhitelist** — processes that legitimately read system files at startup (`runc`, `bash`, `containerd`, `curl`). Suppresses file rules only; process events still monitored.
+- **whitelistComm** — infrastructure daemons suppressed entirely (`sshd`, `dockerd`, `containerd`).
+- **unknownNsCommsWhitelist** — GKE node-level infrastructure in host namespace (`kube-proxy`, `iptables`, `pause`).
+- **System namespace suppression** — `kube-system`, `gmp-system`, `gke-managed-cim` filtered entirely (constant high-frequency noise, no actionable signal).
+- **externalAllowedDstPorts** — port 6543 (Supabase pgbouncer) allowed for all health-ai services.
+- **externalAllowedServices** — `inventory_service` (CoinGecko), `ai-service` (Gemini API).
 
-- Health checks (`curl localhost`) — no alert
-- Python `certifi` CA bundle reads — no alert (`.pem` path exception for `/site-packages/`, `/certifi/`)
-- Container startup (`runc`, `bash`, `id` reading `/etc/passwd`) — no alert (whitelisted)
-- inventory_service → CoinGecko during background load — LOW audit log only (not HIGH)
-- Zero `short_lived_failure` alerts — rule removed, not whitelisted
+---
 
-### Evidence
+## Validation Results
 
-- `snapshots/validateTest200950.png` — full validate.sh run output
-- `alerts/alert.log` — 6/7 alerts confirmed (T2 blocked by container infra)
+### Docker VM — 11/11 pass
+
+Tests distributed across 4 services: `auth_service` (T2/T5), `user_service` (T1/T4/T10), `order_service` (T3/T7/T9), `insights_service` (T8/T11).
+
+| Test | Service | Rule | Result |
+|------|---------|------|--------|
+| T1 Shell spawn | user_service | `T1059_unix_shell_execution` CRITICAL | ✅ |
+| T2 Network tool | auth_service | `T1105_ingress_tool_transfer` HIGH | ✅ |
+| T3 `/etc/shadow` | order_service | `T1003_008_os_credential_dumping` HIGH | ✅ |
+| T4 SSH private key | user_service | `T1552_004_private_keys` HIGH | ✅ |
+| T5 External connect + block | auth_service | `T1041_exfiltration_over_c2` HIGH | ✅ |
+| T6 Allowlisted connect | inventory_service | — no alert | ✅ |
+| T7 Host reads container FS | order_service | `T1611_escape_to_host_fs` CRITICAL | ✅ |
+| T8 `/etc/passwd` | insights_service | `T1082_system_info_discovery` MEDIUM | ✅ |
+| T9 Masquerading `/tmp/sshd` | order_service | `T1036_masquerading` HIGH | ✅ |
+| T10 Cron config | user_service | `T1053_003_scheduled_task_cron` HIGH | ✅ |
+| T11 Shell history | insights_service | `T1070_003_clear_command_history` MEDIUM | ✅ |
+
+Block verification (T5): second connect to blocked IP returns `EPERM`; private IPs remain unaffected.
+
+### GKE — 9/9 pass
+
+Tests distributed across all 4 health-ai services — confirms eBPF resolver maps mount-namespace IDs correctly for every pod, not just one.
+
+| Test | Service | Rule | Result |
+|------|---------|------|--------|
+| V2 Shell spawn | provider-service | `T1059_unix_shell_execution` CRITICAL | ✅ |
+| V3 `/etc/shadow` | auth-service | `T1003_008_os_credential_dumping` HIGH | ✅ |
+| V4 External connect | gateway | `T1041_exfiltration_over_c2` HIGH | ✅ |
+| V5 Allowlist check | ai-service | — no alert | ✅ |
+| V6 No FP normal traffic | all services | — no alert | ✅ |
+| V7 SSH private key | provider-service | `T1552_004_private_keys` CRITICAL | ✅ |
+| V8 Network tool | auth-service | `T1105_ingress_tool_transfer` HIGH | ✅ |
+| V9 `/etc/passwd` | gateway | `T1082_system_info_discovery` MEDIUM | ✅ |
+| V10 Reverse shell | auth-service | `T1059` CRITICAL + `T1041` HIGH | ✅ |
+
+### False Positive Policy
+
+- No CRITICAL or HIGH alerts from normal service traffic (confirmed with concurrent integration test suite)
+- Known suppressed noise: Supabase port 6543, GKE monitoring sidecars reading `/proc/1/stat`
 
 ---
 
@@ -141,32 +161,24 @@ All 7 test cases in `VALIDATION.md` were executed via `validate.sh` against live
 
 | Decision | Reason |
 |----------|--------|
-| `cilium/ebpf` + `bpf2go` | Production Go eBPF library, type-safe generated wrappers |
-| Ring buffer for all new programs | Modern pattern — lower overhead, no per-CPU waste |
-| Two-probe pattern for opensnoop | Suppress ENOENT probe noise while keeping EACCES/EPERM detection |
-| Emit on EACCES/EPERM not just success | Access attempt against existing file is the signal, even if OS blocked it |
-| curl excluded from process rules | Cannot see destination at execve level — health checks indistinguishable from attacks |
-| Tiered file severity | `/etc/shadow` ≠ `/etc/passwd` risk — different responses needed |
-| Hybrid namespace strategy | No host whitelist needed — only alert on truly unrecognized namespaces |
-| Immediate /proc rescan on cache miss | Handles containers starting within the 30s refresh window |
-| Audit mode only | Safe for personal project — no risk of killing legitimate processes |
-| Rules in separate `rules.go` | Easy to add/remove rules without touching event pipeline |
+| `lsm/file_open` over tracepoint openat | Catches busybox `SYS_open` which tracepoint `SYS_openat` misses — confirmed root cause of 3 always-failing tests |
+| `bpf_d_path()` for path extraction | Single call replaces two-probe enter/exit pattern + hash map; returns full resolved path from `struct file *` |
+| `comm:pid:filename` dedup key | `runc:[2:INIT]` and `cat` share the same PID during exec — plain `pid:filename` caused dedup collision dropping valid alerts |
+| `cilium/ebpf` + `bpf2go` | Production Go eBPF library, type-safe generated wrappers, CO-RE support |
+| Ring buffer for all programs | Lower overhead than perf buffer, no per-CPU waste |
+| All policy in Go, not C | BPF C files are sensors only — policy changes (whitelists, thresholds) require no kernel rebuild |
+| `mnt_ns_id` for workload identity | Unique per container, visible from kernel, no container runtime API needed in BPF |
+| StatePending retry with 60s max | K8s pods can take 30–60s to appear in `crictl ps` after exec — naive immediate lookup drops real alerts |
+| System namespace suppression | `kube-system` etc. generate constant noise (kube-proxy iptables, prometheus /proc reads) with no actionable signal for application threat detection |
 
 ---
 
-## Build & CI
+## Container Registry
 
-| Command | What it does |
-|---------|-------------|
-| `make generate` | Recompile `.bpf.c` → generate Go wrappers in `pkg/bpf/` (requires clang on Linux) |
-| `make build` | Build the `ebpf-edr-demo` binary from `cmd/edr-monitor/` |
-| `make test` | Run unit tests for `internal/` and `pkg/detector/` (no kernel required) |
-| `make vet` | Run `go vet` on non-BPF packages |
+All images at `ghcr.io/yifeng2019uwb/` (public, free, no expiry):
+- `ebpf-edr:latest` — EDR agent
+- `auth-service`, `provider-service`, `ai-service`, `gateway` — health-ai services
 
-GitHub Actions CI (`.github/workflows/ci.yml`) runs on every push/PR: vet → test → build. Vet and test always pass. Build requires generated BPF wrappers committed to `pkg/bpf/` — run `make generate` on the GCP VM and commit the output.
-
----
-
-## Key Decision: Exit Monitor Removed
-
-`exitsnoop` and `short_lived_failure` were built and validated, then removed. The rule fired on any process exiting non-zero in < 100ms — normal behavior for any utility that fails (which, mkdir, apt-get, cat denied). The workload runs long-lived Python services where short exits are routine, not suspicious. Rather than grow an indefinite whitelist, the rule was dropped. All real threats are covered by the remaining three monitors.
+Build workflow:
+- Go-only changes: `make build` on Mac → `make docker-push-ghcr-prebuilt` → redeploy
+- BPF C changes: `make generate && make rebuild` on Linux VM → commit generated files → pull to Mac → push image

@@ -107,30 +107,30 @@ For GKE: use `kubectl exec` equivalents.
 ### T1059.004 / T1609 — Unix Shell (`T1059_unix_shell_execution`)
 
 ```bash
-docker exec order-processor-auth_service bash -c "id"
-# Expected: CRITICAL T1059_unix_shell_execution action=kill_process
+docker exec order-processor-user_service bash -c "id"
+# Expected: CRITICAL T1059_unix_shell_execution service=user_service action=kill_process
 ```
 
 ### T1105 / T1095 — Ingress Tool Transfer (`T1105_ingress_tool_transfer`)
 
 ```bash
 docker exec order-processor-auth_service nc -w 2 1.1.1.1 80
-# Expected: HIGH T1105_ingress_tool_transfer
+# Expected: HIGH T1105_ingress_tool_transfer service=auth_service
 ```
 
 ### T1003.008 — OS Credential Dumping (`T1003_008_os_credential_dumping`)
 
 ```bash
-docker exec order-processor-auth_service cat /etc/shadow
-# Expected: HIGH T1003_008_os_credential_dumping action=kill_process
+docker exec order-processor-order_service cat /etc/shadow
+# Expected: HIGH T1003_008_os_credential_dumping service=order_service action=kill_process
 ```
 
 ### T1552.004 — Private Keys (`T1552_004_private_keys`)
 
 ```bash
-docker cp /tmp/id_rsa order-processor-auth_service:/tmp/id_rsa
-docker exec order-processor-auth_service cat /tmp/id_rsa
-# Expected: HIGH T1552_004_private_keys action=kill_process
+docker cp /tmp/id_rsa order-processor-user_service:/tmp/id_rsa
+docker exec order-processor-user_service cat /tmp/id_rsa
+# Expected: HIGH T1552_004_private_keys service=user_service action=kill_process
 ```
 
 ### T1041 / T1048 — Exfiltration Over C2 (`T1041_exfiltration_over_c2`)
@@ -138,13 +138,13 @@ docker exec order-processor-auth_service cat /tmp/id_rsa
 ```bash
 docker exec order-processor-auth_service python3 -c \
   "import socket; s=socket.socket(); s.settimeout(2); s.connect(('8.8.8.8',80)); s.close()"
-# Expected: HIGH T1041_exfiltration_over_c2
+# Expected: HIGH T1041_exfiltration_over_c2 service=auth_service
 ```
 
 ### T1611 — Escape to Host / overlay2 (`T1611_escape_to_host_fs`)
 
 ```bash
-MERGED=$(docker inspect order-processor-auth_service --format '{{.GraphDriver.Data.MergedDir}}')
+MERGED=$(docker inspect order-processor-order_service --format '{{.GraphDriver.Data.MergedDir}}')
 cat "${MERGED}/etc/hostname"
 # Expected: CRITICAL T1611_escape_to_host_fs action=kill_process
 ```
@@ -152,34 +152,34 @@ cat "${MERGED}/etc/hostname"
 ### T1082 — System Info Discovery (`T1082_system_info_discovery`)
 
 ```bash
-docker exec order-processor-auth_service cat /etc/passwd
-# Expected: MEDIUM T1082_system_info_discovery
+docker exec order-processor-insights_service cat /etc/passwd
+# Expected: MEDIUM T1082_system_info_discovery service=insights_service
 ```
 
 ### T1036 — Masquerading (`T1036_masquerading`)
 
 ```bash
-docker exec order-processor-auth_service cp /bin/cat /tmp/sshd
-docker exec order-processor-auth_service /tmp/sshd /etc/hostname
-# Expected: HIGH T1036_masquerading comm=/tmp/sshd
+docker exec order-processor-order_service cp /bin/cat /tmp/sshd
+docker exec order-processor-order_service /tmp/sshd /etc/hostname
+# Expected: HIGH T1036_masquerading service=order_service comm=/tmp/sshd
 ```
 
 ### T1053.003 — Cron (`T1053_003_scheduled_task_cron`)
 
 ```bash
 echo "* * * * * root /tmp/evil" > /tmp/test_crontab
-docker cp /tmp/test_crontab order-processor-auth_service:/etc/crontab
-docker exec order-processor-auth_service cat /etc/crontab
-# Expected: HIGH T1053_003_scheduled_task_cron
+docker cp /tmp/test_crontab order-processor-user_service:/etc/crontab
+docker exec order-processor-user_service cat /etc/crontab
+# Expected: HIGH T1053_003_scheduled_task_cron service=user_service
 ```
 
 ### T1070.003 — Clear Command History (`T1070_003_clear_command_history`)
 
 ```bash
 echo "rm -rf /important" > /tmp/hist
-docker cp /tmp/hist order-processor-auth_service:/tmp/.bash_history
-docker exec order-processor-auth_service cat /tmp/.bash_history
-# Expected: MEDIUM T1070_003_clear_command_history
+docker cp /tmp/hist order-processor-insights_service:/tmp/.bash_history
+docker exec order-processor-insights_service cat /tmp/.bash_history
+# Expected: MEDIUM T1070_003_clear_command_history service=insights_service
 ```
 
 ---
@@ -187,7 +187,9 @@ docker exec order-processor-auth_service cat /tmp/.bash_history
 ## Validation Script
 
 ```bash
-sudo ./validate.sh   # runs all 11 tests on Docker VM
+sudo ./validate.sh       # runs all 11 tests on Docker VM (distributed across services)
+./validate-gke.sh        # runs all 9 tests on GKE (distributed across services)
 ```
 
-All 11 tests validated on GCP Docker VM (`instance-20260318-023006`) as of 2026-06-03.
+All 11 Docker tests validated on GCP Docker VM (`instance-20260318-023006`) as of 2026-06-10.
+All 9 GKE tests validated on health-ai cluster as of 2026-06-10.

@@ -15,6 +15,14 @@ GCP credits expire 2026-06-17 (~7 days). Resources on project `ebpfagent`.
 
 Added port 6543 (Supabase pgbouncer) to `externalAllowedDstPorts` in `pkg/detector/policy.go` and `checkNetworkRules` in `pkg/detector/rules.go`. All health-ai services connect to Supabase — the HIGH T1041 alerts were false positives. Confirmed working.
 
+### Debug log cleanup ✅
+
+Removed `DEBUG file-enrich` and `DEBUG file-detect` log lines from `cmd/edr-monitor/main.go`. Also removed the now-unused `comm` and `filename` locals from the `opensnoop` enrich case. Build verified clean (`GOOS=linux GOARCH=amd64 go build ./cmd/edr-monitor/`).
+
+### Image rebuilt and pushed to ghcr.io ✅
+
+Full rebuild on GCP VM (`make generate && make rebuild`) regenerated `pkg/bpf/file_bpfel.go` from `lsm-file.bpf.c` — `HandleFileOpen` is now the live BPF program (replacing the old `HandleEnter`/`HandleExit` from opensnoop). Pulled generated files back to Mac, pushed `ghcr.io/yifeng2019uwb/ebpf-edr:latest`. Image reflects all changes this session: lsm/file_open hook, dedup fix, Redis T1611 exclusion, debug log removal.
+
 ### Test distribution across services ✅
 
 Both `validate.sh` (Docker) and `validate-gke.sh` (GKE) now spread tests across all available services instead of targeting a single container. This confirms the eBPF resolver correctly maps mount-namespace IDs to service identities for every service, not just auth-service.
@@ -127,9 +135,10 @@ filename="/410/task/410/attr/..."   ← should be /proc/410/task/...
 ```
 `bpf_d_path` does not fully resolve paths under certain virtual filesystems (procfs, sysfs). These truncated paths do not match any detection rules so cause no false positives. If `/proc/<pid>/` monitoring is ever needed, this will require a different path-extraction approach (manual dentry walk).
 
-**Also needed (Go only, no rebuild)**:
-- Remove `DEBUG file-enrich` and `DEBUG file-detect` log lines from `cmd/edr-monitor/main.go` once committed
-- Delete `kernel/opensnoop.bpf.c` — replaced by `lsm-file.bpf.c`, no longer compiled
+**Cleanup status**:
+- ✅ `DEBUG file-enrich` and `DEBUG file-detect` log lines removed from `cmd/edr-monitor/main.go`
+- ✅ `pkg/bpf/file_bpfel.go` regenerated — `HandleFileOpen` is live, old `HandleEnter`/`HandleExit` gone
+- 🔲 `kernel/opensnoop.bpf.c` — still present, kept for reference; safe to delete when convenient
 
 ---
 

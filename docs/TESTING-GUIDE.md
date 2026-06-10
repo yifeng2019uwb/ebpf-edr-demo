@@ -101,19 +101,20 @@ Cloud Logging enabled: project=ebpfagent
 Pub/Sub enabled: topic=edr-alerts
 ```
 
-Verify agent sees containers (trigger a test event):
+Verify agent sees containers (trigger a shell spawn — simplest observable event):
 ```bash
-docker exec order-processor-auth_service ls /tmp
-# Should produce an opensnoop event — check alert log:
+docker exec order-processor-auth_service bash -c "id"
+# Should produce a CRITICAL T1059_unix_shell_execution alert — check alert log:
 tail -5 ~/workspace/ebpf-edr-demo/alerts/alert.log
 ```
 
 ---
 
-## Step 2 — GKE (on-demand — ~$100/month while running)
+## Step 2 — GKE (on-demand — bring up only for testing)
 
-Services: order-processor (5 pods: user, inventory, order, auth, gateway)
+Services: health-ai (4 pods: auth-service, provider-service, gateway, ai-service)
 eBPF runtime: `--runtime=k8s` via DaemonSet in `kube-system`
+Cluster: `health-ai-cluster-us-west1`, namespace: `health-ai`, project: `ebpfagent`
 
 ### 4a. Service check
 
@@ -121,16 +122,16 @@ eBPF runtime: `--runtime=k8s` via DaemonSet in `kube-system`
 gcloud container clusters list --project=ebpfagent --format="table(name,location,status)"
 ```
 
-If no cluster — deploy everything:
+If no cluster — bring it up:
 ```bash
-cd ~/workspace/ebpf-edr-demo
-make test-env-up   # ~10 min
+cd kubernetes/pulumi && pulumi up
+cd kubernetes && ./deploy.sh all
 ```
 
 Check pods:
 ```bash
-kubectl get pods -n order-processor
-kubectl get svc gateway-service -n order-processor   # get EXTERNAL-IP
+kubectl get pods -n health-ai
+kubectl get svc gateway -n health-ai   # get EXTERNAL-IP
 ```
 
 Expected: all pods `Running`, gateway has an EXTERNAL-IP.
@@ -145,14 +146,12 @@ kubectl logs -n kube-system -l app=ebpf-edr --tail=5
 Expected: DaemonSet pod `Running` with:
 ```
 Cloud Logging enabled: project=ebpfagent
-Pub/Sub enabled: topic=edr-alerts
 ```
 
-Verify agent sees pods:
+Verify agent sees pods (trigger a shell spawn — simplest observable event):
 ```bash
-# Trigger test event in a pod
-POD=$(kubectl get pods -n order-processor -l component=user-service -o jsonpath='{.items[0].metadata.name}')
-kubectl exec $POD -n order-processor -- ls /tmp
+POD=$(kubectl get pods -n health-ai -l component=auth-service -o jsonpath='{.items[0].metadata.name}')
+kubectl exec $POD -n health-ai -- sh -c "exit 0"
 
 # Check Cloud Logging for GKE events
 gcloud logging read 'jsonPayload.runtime="k8s"' \

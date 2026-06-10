@@ -18,7 +18,7 @@ For implementation details and technical notes, see [NOTES.md](NOTES.md).
 
 ## How to Add a Whitelist Entry
 
-1. Identify the `comm` name from `DBG file-detect` or `DBG file-enrich` logs
+1. Identify the `comm` name from the alert log (`comm` field in the alert JSON)
 2. Confirm it is a known legitimate OS/platform daemon (not user code)
 3. Add to the appropriate list in `pkg/detector/policy.go`:
    - `whitelistComm` — suppress ALL rules for this process (process + file + network)
@@ -53,10 +53,10 @@ Services: order-processor (8 containers)
 
 ---
 
-### GKE (on-demand — `make test-env-up`)
+### GKE (on-demand — `pulumi up` + `deploy.sh all`)
 
 Runtime: `--runtime=k8s`
-Services: order-processor (5 pods)
+Services: health-ai (4 pods: auth-service, provider-service, gateway, ai-service)
 
 **System namespace suppression** — `kube-system`, `gmp-system`, `gke-managed-cim` suppressed entirely.
 Constant high-frequency noise (kube-proxy iptables, prometheus /proc reads, kubelet polling) with no actionable signal.

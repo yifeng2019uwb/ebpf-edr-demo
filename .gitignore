@@ -1,6 +1,9 @@
 # --- Binaries & Compiled Artifacts ---
 # The main executable
 ebpf-edr-demo
+ebpf-edr
+edr-monitor
+
 # Any other built binaries
 bin/
 *.exe
@@ -31,9 +34,11 @@ vendor/
 # Ignore runtime log files — snapshots/ is tracked as validation evidence
 alerts/*.log
 output/
+logs/
 
 # --- Temporary Files ---
 *.tmp
 *.bak
 
 venv
+
