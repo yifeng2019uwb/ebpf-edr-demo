@@ -3,7 +3,7 @@
 ## Current State
 
 **GCP Docker VM: ACTIVE** — eBPF agent running, all 11 validate.sh tests passing.
-**Health-AI GKE Cluster: ACTIVE** — deployed, V2/V4/V5/V6/V8/V10 passing; V3/V7/V9 pending lsm-file fix.
+**Health-AI GKE Cluster: ACTIVE** — deployed, all 9 validate-gke.sh tests passing ✅.
 **Health-AI DigitalOcean: PLANNED** — next permanent always-on deploy target. Migrate before GCP expiry.
 GCP credits expire 2026-06-17 (~7 days). Resources on project `ebpfagent`.
 
@@ -15,9 +15,17 @@ GCP credits expire 2026-06-17 (~7 days). Resources on project `ebpfagent`.
 
 Added port 6543 (Supabase pgbouncer) to `externalAllowedDstPorts` in `pkg/detector/policy.go` and `checkNetworkRules` in `pkg/detector/rules.go`. All health-ai services connect to Supabase — the HIGH T1041 alerts were false positives. Confirmed working.
 
-### V3/V7/V9 root cause confirmed — fix planned
+### Test distribution across services ✅
 
-Confirmed via debug logs that `sh`/`cat` (busybox on Alpine) never appear in the opensnoop ring buffer for any filename. Root cause: busybox uses `SYS_open` (syscall 2), our probe covers only `SYS_openat` (syscall 257). Fix decided: replace `opensnoop.bpf.c` with `lsm-file.bpf.c` using `lsm.s/file_open` hook. Rebuild required on GCP VM — not yet done.
+Both `validate.sh` (Docker) and `validate-gke.sh` (GKE) now spread tests across all available services instead of targeting a single container. This confirms the eBPF resolver correctly maps mount-namespace IDs to service identities for every service, not just auth-service.
+
+**validate-gke.sh** — auth-service (V3/V8/V10), provider-service (V2/V7), gateway (V4/V9), ai-service (V5).
+
+**validate.sh** — auth_service (T2/T5), user_service (T1/T4/T10), order_service (T3/T7/T9), insights_service (T8/T11), inventory_service (T6).
+
+### V3/V7/V9 root cause confirmed and fixed ✅
+
+Root cause: busybox (`sh`/`cat` on Alpine) uses `SYS_open` (syscall 2); our probe covered only `SYS_openat` (syscall 257). Fix: replaced `opensnoop.bpf.c` with `lsm-file.bpf.c` using `SEC("lsm.s/file_open")` + `bpf_d_path()`. Single LSM hook fires for all file-open syscall variants. Also fixed V9 dedup collision: changed key from `pid:filename` to `comm:pid:filename` to handle the runc→cat exec pattern (both share the same PID). All 9 GKE tests now pass.
 
 ### Container Registry — migrated from GCP AR to ghcr.io
 
@@ -99,8 +107,29 @@ Why not Tetragon's exact approach (kprobe/security_file_open + manual dentry wal
 6. Add V9 dedup fix in Go: change key from `pid:filename` to `comm:pid:filename` to handle runc→cat exec pattern
 7. Rebuild on GCP VM (`make rebuild`), push, redeploy
 
+**Confirmed working — log analysis (2026-06-10)**:
+
+Detection pipeline for V9 (`cat /etc/passwd`) as seen in EDR logs:
+```
+file-enrich: comm="cat" filename="/etc/passwd" svc=auth-service  ← lsm captures busybox
+file-enrich: comm="cat" filename="/etc/passwd" svc=auth-service  ← duplicate (lsm fires twice per open)
+file-detect: comm="cat" filename="/etc/passwd" svc=auth-service  ← dedup collapses to one
+→ Alert: MEDIUM T1082_system_info_discovery /etc/passwd ✅
+```
+
+`comm="sh"` and `comm="cat"` both appear — busybox fully captured. `comm:pid:filename` dedup key correctly separates runc:[2:INIT]'s `/etc/passwd` from cat's.
+
+**Known bpf_d_path quirk — truncated procfs paths**:
+Some `/proc/<pid>/...` virtual filesystem paths are returned without the `/proc` prefix:
+```
+filename="/410/setgroups"           ← should be /proc/410/setgroups
+filename="/410/task/410/attr/..."   ← should be /proc/410/task/...
+```
+`bpf_d_path` does not fully resolve paths under certain virtual filesystems (procfs, sysfs). These truncated paths do not match any detection rules so cause no false positives. If `/proc/<pid>/` monitoring is ever needed, this will require a different path-extraction approach (manual dentry walk).
+
 **Also needed (Go only, no rebuild)**:
-- Remove existing debug logs (`DEBUG file-target`, `DEBUG opensnoop ringbuf`) once V3/V7/V9 pass
+- Remove `DEBUG file-enrich` and `DEBUG file-detect` log lines from `cmd/edr-monitor/main.go` once committed
+- Delete `kernel/opensnoop.bpf.c` — replaced by `lsm-file.bpf.c`, no longer compiled
 
 ---
 
@@ -141,23 +170,23 @@ Deferred — implement after opensnoop issue resolved.
 
 > **GKE is currently DOWN** — bring up with `pulumi up` + `deploy.sh all` before running. Results below are from the last run before teardown.
 
-| Test | Result | Root cause |
-|------|--------|------------|
-| V2 Shell spawn | ✅ PASS | Process sensor (execsnoop) working |
-| V3 Shadow read | ❌ FAIL | **Root cause confirmed**: busybox uses SYS_open, probe covers SYS_openat only |
-| V4 External connect | ✅ PASS | Network sensor (lsm-connect) working |
-| V5 ai-service allowlist | ✅ PASS | |
-| V6 No FP gateway traffic | ✅ PASS | |
-| V7 SSH private key | ❌ FAIL | Same root cause as V3 |
-| V8 Network recon tool | ✅ PASS | Process sensor working |
-| V9 /etc/passwd recon | ❌ FAIL | Same root cause as V3 + dedup collision (runc→cat same PID) |
-| V10 Reverse shell | ✅ PASS | Process + network sensors working |
+Tests are distributed across all 4 services to confirm the K8s resolver maps mnt_ns_id correctly for each:
 
-**6 passed · 3 failed · 0 skipped**
+| Test | Service | Result | Notes |
+|------|---------|--------|-------|
+| V2 Shell spawn | provider-service | ✅ PASS | Process sensor (execsnoop) working |
+| V3 Shadow read | auth-service | ✅ PASS | Fixed: lsm/file_open captures busybox cat |
+| V4 External connect | gateway | ✅ PASS | Network sensor (lsm-connect) working |
+| V5 ai-service allowlist | ai-service | ✅ PASS | |
+| V6 No FP gateway traffic | all services | ✅ PASS | |
+| V7 SSH private key | provider-service | ✅ PASS | Fixed: lsm/file_open captures busybox cat |
+| V8 Network recon tool | auth-service | ✅ PASS | Process sensor working |
+| V9 /etc/passwd recon | gateway | ✅ PASS | Fixed: comm:pid:filename dedup key separates runc→cat exec pattern |
+| V10 Reverse shell | auth-service | ✅ PASS | Process + network sensors working |
 
-Fix in progress: replacing `opensnoop.bpf.c` (SYS_openat tracepoint) with `lsm-file.bpf.c` (`lsm.s/file_open` + `bpf_d_path`). See BPF C Files section above.
+**9 passed · 0 failed · 0 skipped** ✅ (2026-06-10)
 
-Note: validate-gke.sh targets `auth-service`. Consider switching GKE target to `provider-service` in a future session to verify resolver correctness across services.
+Service coverage: auth-service (V3/V8/V10), provider-service (V2/V7), gateway (V4/V9), ai-service (V5).
 
 ---
 

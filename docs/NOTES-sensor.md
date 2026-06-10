@@ -128,7 +128,7 @@ docker exec env-sensor cat /etc/sensor/tls/device.key
 
 ---
 
-### OPEN ISSUE — `sensitive_file_access` never fires for `cat` via `docker exec`
+### RESOLVED (2026-06-10) — `sensitive_file_access` never fires for `cat` via `docker exec`
 
 **Symptom:** T1 (shell spawn) and T2/T6 (network tool) alerts fire correctly. T3 (`cat /etc/sensor/tls/device.key`) and T5 (`cat /etc/passwd`) produce no alert.
 
@@ -179,8 +179,9 @@ grep cat /sys/kernel/debug/tracing/trace | head -5
 sudo bpftool prog show id 146   # handle_enter — look for run_cnt if kernel supports it
 ```
 
-**Recommended next steps:**
-1. Re-run `make generate` to sync the BPF source, compiled binary, and Go bindings — the rename to `handle_valid_open` has never been compiled and deployed.
-2. After regenerating, rebuild with `make build` and redeploy (`make docker-push` + restart service on VM).
-3. If still broken after regenerating: add a `bpf_printk` debug log inside `handle_enter` to confirm the BPF hook IS running for docker exec'd PIDs, then check `sudo cat /sys/kernel/debug/tracing/trace_pipe`.
-4. `make generate` requires clang 14+ on a Linux host — the sensor VM has `clang 14` installed (`sudo apt-get install -y clang llvm libbpf-dev`).
+**Resolution (2026-06-10)**:
+The ftrace hypothesis (busybox uses openat) turned out to be wrong for the GKE environment. The actual root cause was confirmed via debug logs: `sh`/`cat` (busybox on Alpine `eclipse-temurin:21-jre-alpine`) never appeared in the ring buffer for any filename. busybox calls `SYS_open` (syscall 2) directly; the openat tracepoint (syscall 257) never fires for those processes.
+
+Fix: replaced `opensnoop.bpf.c` (tracepoint `sys_enter_openat`) with `lsm-file.bpf.c` (`SEC("lsm.s/file_open")` + `bpf_d_path()`). The LSM hook fires for every file open regardless of syscall variant — open, openat, openat2, io_uring. All 9 validate-gke.sh tests now pass including V3 (`/etc/shadow`), V7 (`/root/.ssh/id_rsa`), and V9 (`/etc/passwd`).
+
+Side effect discovered: `bpf_d_path` returns truncated paths for some procfs virtual filesystem entries (e.g. `/proc/410/setgroups` → `/410/setgroups`). Does not affect detection rules.

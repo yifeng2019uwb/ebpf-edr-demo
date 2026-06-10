@@ -1,20 +1,23 @@
 #!/bin/bash
 # validate-gke.sh — GKE functional validation
+# Tests are distributed across all 4 services to confirm eBPF monitors the full cluster.
 # Usage: ./validate-gke.sh [--context <kubectl-context>]
-# Runs against the current kubectl context unless --context is specified.
 #
-# To retarget a different deployment, update the variables block below.
+# Test-to-service mapping (confirms resolver correctness for each service):
+#   auth-service     — V3 (shadow), V8 (net-tool), V10 (reverse-shell)
+#   provider-service — V2 (shell-spawn), V7 (ssh-key)
+#   gateway          — V4 (ext-connect), V9 (passwd)
+#   ai-service       — V5 (allowlist passive check)
 
 set -euo pipefail
 
 # ── deployment target ─────────────────────────────────────────────────────────
 NAMESPACE="health-ai"
-TARGET_COMPONENT="auth-service"      # pod label: component=<TARGET_COMPONENT>
 GATEWAY_HEALTH_PATH="/actuator/health"
 # Services to check for false positives in V6 (pipe-separated for grep -E)
 APP_SERVICES="gateway|auth-service|provider-service|ai-service"
 # Service expected to make external connects without firing HIGH (V5)
-ALLOWED_EXT_SERVICE="ai-service"     # order-processor: inventory-service
+ALLOWED_EXT_SERVICE="ai-service"
 
 # ── Cloud Logging project (where ebpf-edr-alerts are published) ──────────────
 GCLOUD_PROJECT="ebpfagent"
@@ -55,17 +58,25 @@ echo "Discovering resources..."
 
 EDR_POD=$($KUBECTL get pod -n kube-system -l app=ebpf-edr \
     -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
-TARGET_POD=$($KUBECTL get pod -n "$NAMESPACE" -l component="$TARGET_COMPONENT" \
+AUTH_POD=$($KUBECTL get pod -n "$NAMESPACE" -l component=auth-service \
+    -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+PROVIDER_POD=$($KUBECTL get pod -n "$NAMESPACE" -l component=provider-service \
+    -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+GW_POD=$($KUBECTL get pod -n "$NAMESPACE" -l component=gateway \
     -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
 GATEWAY_IP=$($KUBECTL get svc gateway -n "$NAMESPACE" \
     -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
 
-[[ -z "$EDR_POD" ]]    && { echo "ERROR: ebpf-edr pod not found in kube-system"; exit 1; }
-[[ -z "$TARGET_POD" ]] && { echo "ERROR: $TARGET_COMPONENT pod not found in $NAMESPACE"; exit 1; }
+[[ -z "$EDR_POD" ]]      && { echo "ERROR: ebpf-edr pod not found in kube-system"; exit 1; }
+[[ -z "$AUTH_POD" ]]     && { echo "ERROR: auth-service pod not found in $NAMESPACE"; exit 1; }
+[[ -z "$PROVIDER_POD" ]] && { echo "ERROR: provider-service pod not found in $NAMESPACE"; exit 1; }
+[[ -z "$GW_POD" ]]       && { echo "ERROR: gateway pod not found in $NAMESPACE"; exit 1; }
 
-echo "  EDR pod:    $EDR_POD"
-echo "  Target pod: $TARGET_POD  ($TARGET_COMPONENT in $NAMESPACE)"
-echo "  Gateway IP: ${GATEWAY_IP:-<not available>}"
+echo "  EDR pod:          $EDR_POD"
+echo "  auth-service:     $AUTH_POD"
+echo "  provider-service: $PROVIDER_POD"
+echo "  gateway:          $GW_POD"
+echo "  Gateway IP:       ${GATEWAY_IP:-<not available>}"
 echo ""
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -114,34 +125,34 @@ no_alert() {
     return 0
 }
 
-# ── V2: Shell spawn ───────────────────────────────────────────────────────────
-echo "=== V2: Shell spawn detection ==="
+# ── V2: Shell spawn — provider-service ───────────────────────────────────────
+echo "=== V2: Shell spawn detection (provider-service) ==="
 V2_SINCE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-$KUBECTL exec "$TARGET_POD" -n "$NAMESPACE" -- sh -c "exit 0" >/dev/null 2>&1 || true
-if expect_alert "CRITICAL.*${RULE_SHELL}.*service=${TARGET_COMPONENT}.*namespace=${NAMESPACE}" 60 "$V2_SINCE"; then
-    pass "V2: CRITICAL ${RULE_SHELL} — service=${TARGET_COMPONENT} namespace=${NAMESPACE}"
+$KUBECTL exec "$PROVIDER_POD" -n "$NAMESPACE" -- sh -c "exit 0" >/dev/null 2>&1 || true
+if expect_alert "CRITICAL.*${RULE_SHELL}.*service=provider-service.*namespace=${NAMESPACE}" 60 "$V2_SINCE"; then
+    pass "V2: CRITICAL ${RULE_SHELL} — service=provider-service namespace=${NAMESPACE}"
 else
     fail "V2: no CRITICAL ${RULE_SHELL} within timeout"
 fi
 
-# ── V3: Sensitive file access (/etc/shadow) ───────────────────────────────────
-echo "=== V3: Sensitive file access ==="
+# ── V3: Sensitive file access (/etc/shadow) — auth-service ───────────────────
+echo "=== V3: Sensitive file access (auth-service) ==="
 V3_SINCE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-# Alpine JRE image may not have /etc/shadow — create it first so opensnoop sees a real read (not ENOENT)
-$KUBECTL exec "$TARGET_POD" -n "$NAMESPACE" -- sh -c \
+# Alpine JRE image may not have /etc/shadow — create it first so lsm/file_open sees a real read (not ENOENT)
+$KUBECTL exec "$AUTH_POD" -n "$NAMESPACE" -- sh -c \
     "echo 'root:!:19000:0:99999:7:::' > /etc/shadow && cat /etc/shadow" >/dev/null 2>&1 || true
-if expect_alert "HIGH.*${RULE_SHADOW}.*service=${TARGET_COMPONENT}.*shadow" 60 "$V3_SINCE"; then
+if expect_alert "HIGH.*${RULE_SHADOW}.*service=auth-service.*shadow" 60 "$V3_SINCE"; then
     pass "V3: HIGH ${RULE_SHADOW} — /etc/shadow detected"
 else
     fail "V3: no HIGH ${RULE_SHADOW} alert within timeout"
 fi
 
-# ── V4: Unauthorized external connect ────────────────────────────────────────
-echo "=== V4: Unauthorized external connect ==="
+# ── V4: Unauthorized external connect — gateway ───────────────────────────────
+echo "=== V4: Unauthorized external connect (gateway) ==="
 V4_SINCE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-$KUBECTL exec "$TARGET_POD" -n "$NAMESPACE" -- \
+$KUBECTL exec "$GW_POD" -n "$NAMESPACE" -- \
     wget --timeout=3 -q http://8.8.8.8/ -O /dev/null >/dev/null 2>&1 || true
-if expect_alert "HIGH.*${RULE_EXT_CONNECT}.*service=${TARGET_COMPONENT}.*8\.8\.8\.8" 60 "$V4_SINCE"; then
+if expect_alert "HIGH.*${RULE_EXT_CONNECT}.*service=gateway.*8\.8\.8\.8" 60 "$V4_SINCE"; then
     pass "V4: HIGH ${RULE_EXT_CONNECT} — 8.8.8.8 detected"
 else
     fail "V4: no HIGH ${RULE_EXT_CONNECT} alert within timeout"
@@ -170,31 +181,31 @@ else
     skip "V6: gateway IP not available — skipping"
 fi
 
-# ── V7: SSH private key read ──────────────────────────────────────────────────
-echo "=== V7: SSH private key read ==="
+# ── V7: SSH private key read — provider-service ───────────────────────────────
+echo "=== V7: SSH private key read (provider-service) ==="
 V7_SINCE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-$KUBECTL exec "$TARGET_POD" -n "$NAMESPACE" -- sh -c \
+$KUBECTL exec "$PROVIDER_POD" -n "$NAMESPACE" -- sh -c \
     "mkdir -p /root/.ssh && echo 'test-key' > /root/.ssh/id_rsa && cat /root/.ssh/id_rsa" \
     >/dev/null 2>&1 || true
-if expect_alert "CRITICAL.*${RULE_PRIV_KEY}.*service=${TARGET_COMPONENT}.*id_rsa" 60 "$V7_SINCE"; then
+if expect_alert "CRITICAL.*${RULE_PRIV_KEY}.*service=provider-service.*id_rsa" 60 "$V7_SINCE"; then
     pass "V7: CRITICAL ${RULE_PRIV_KEY} — /root/.ssh/id_rsa detected"
 else
     fail "V7: no CRITICAL ${RULE_PRIV_KEY} alert within timeout"
 fi
 
-# ── V8: Network recon tool ────────────────────────────────────────────────────
-echo "=== V8: Network recon tool ==="
+# ── V8: Network recon tool — auth-service ─────────────────────────────────────
+echo "=== V8: Network recon tool (auth-service) ==="
 V8_SINCE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 V8_TRIGGERED=false
-if $KUBECTL exec "$TARGET_POD" -n "$NAMESPACE" -- which wget >/dev/null 2>&1; then
-    $KUBECTL exec "$TARGET_POD" -n "$NAMESPACE" -- wget --timeout=2 -q http://1.1.1.1 -O /dev/null >/dev/null 2>&1 || true
+if $KUBECTL exec "$AUTH_POD" -n "$NAMESPACE" -- which wget >/dev/null 2>&1; then
+    $KUBECTL exec "$AUTH_POD" -n "$NAMESPACE" -- wget --timeout=2 -q http://1.1.1.1 -O /dev/null >/dev/null 2>&1 || true
     V8_TRIGGERED=true
-elif $KUBECTL exec "$TARGET_POD" -n "$NAMESPACE" -- which nc >/dev/null 2>&1; then
-    $KUBECTL exec "$TARGET_POD" -n "$NAMESPACE" -- nc -w 2 1.1.1.1 80 >/dev/null 2>&1 || true
+elif $KUBECTL exec "$AUTH_POD" -n "$NAMESPACE" -- which nc >/dev/null 2>&1; then
+    $KUBECTL exec "$AUTH_POD" -n "$NAMESPACE" -- nc -w 2 1.1.1.1 80 >/dev/null 2>&1 || true
     V8_TRIGGERED=true
 fi
 if [[ "$V8_TRIGGERED" == true ]]; then
-    if expect_alert "HIGH.*${RULE_NET_TOOL}.*service=${TARGET_COMPONENT}" 60 "$V8_SINCE"; then
+    if expect_alert "HIGH.*${RULE_NET_TOOL}.*service=auth-service" 60 "$V8_SINCE"; then
         pass "V8: HIGH ${RULE_NET_TOOL} detected"
     else
         fail "V8: no HIGH ${RULE_NET_TOOL} alert within timeout"
@@ -203,24 +214,24 @@ else
     skip "V8: wget/nc not available in container image"
 fi
 
-# ── V9: /etc/passwd recon ─────────────────────────────────────────────────────
-echo "=== V9: /etc/passwd recon ==="
+# ── V9: /etc/passwd recon — gateway ───────────────────────────────────────────
+echo "=== V9: /etc/passwd recon (gateway) ==="
 V9_SINCE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-$KUBECTL exec "$TARGET_POD" -n "$NAMESPACE" -- cat /etc/passwd >/dev/null 2>&1 || true
-if expect_alert "MEDIUM.*${RULE_SYSINFO}.*service=${TARGET_COMPONENT}.*passwd" 60 "$V9_SINCE"; then
+$KUBECTL exec "$GW_POD" -n "$NAMESPACE" -- cat /etc/passwd >/dev/null 2>&1 || true
+if expect_alert "MEDIUM.*${RULE_SYSINFO}.*service=gateway.*passwd" 60 "$V9_SINCE"; then
     pass "V9: MEDIUM ${RULE_SYSINFO} — /etc/passwd detected"
 else
     fail "V9: no MEDIUM ${RULE_SYSINFO} alert within timeout"
 fi
 
-# ── V10: Reverse shell simulation ─────────────────────────────────────────────
-echo "=== V10: Reverse shell simulation ==="
+# ── V10: Reverse shell simulation — auth-service ──────────────────────────────
+echo "=== V10: Reverse shell simulation (auth-service) ==="
 V10_SINCE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-$KUBECTL exec "$TARGET_POD" -n "$NAMESPACE" -- sh -c \
+$KUBECTL exec "$AUTH_POD" -n "$NAMESPACE" -- sh -c \
     "wget --timeout=2 -q http://8.8.8.8:4444 -O /dev/null || true; sh -c 'exit 0'" \
     >/dev/null 2>&1 || true
-if expect_alert "CRITICAL.*${RULE_SHELL}.*service=${TARGET_COMPONENT}" 60 "$V10_SINCE" && \
-   expect_alert "HIGH.*${RULE_EXT_CONNECT}.*service=${TARGET_COMPONENT}.*8\.8\.8\.8" 60 "$V10_SINCE"; then
+if expect_alert "CRITICAL.*${RULE_SHELL}.*service=auth-service" 60 "$V10_SINCE" && \
+   expect_alert "HIGH.*${RULE_EXT_CONNECT}.*service=auth-service.*8\.8\.8\.8" 60 "$V10_SINCE"; then
     pass "V10: reverse shell — CRITICAL ${RULE_SHELL} + HIGH ${RULE_EXT_CONNECT} both detected"
 else
     fail "V10: reverse shell — one or both alerts missing within timeout"

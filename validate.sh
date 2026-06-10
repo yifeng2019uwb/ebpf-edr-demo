@@ -6,6 +6,13 @@
 #   1. Attack detection: each threat rule fires correctly
 #   2. No false positives: normal service traffic does not trigger alerts
 #
+# Tests are distributed across 4 services to confirm eBPF monitors the full stack:
+#   auth_service     — T2 (net-tool), T5 (ext-connect + block)
+#   user_service     — T1 (shell-spawn), T4 (ssh-key), T10 (cron)
+#   order_service    — T3 (shadow), T7 (host-fs), T9 (masquerade)
+#   insights_service — T8 (passwd), T11 (history)
+#   inventory_service — T6 (allowlist passive check, no change)
+#
 # Run on the GCP VM as root while the EDR agent is running.
 #
 # Usage:
@@ -16,8 +23,11 @@
 
 set -euo pipefail
 
-TARGET="order-processor-auth_service"      # raw Docker container name
-INV="order-processor-inventory_service"    # inventory service — external connects are allowlisted
+AUTH_SVC="order-processor-auth_service"        # T2, T5
+USER_SVC="order-processor-user_service"        # T1, T4, T10
+ORDER_SVC="order-processor-order_service"      # T3, T7, T9
+INSIGHTS_SVC="order-processor-insights_service" # T8, T11
+INV="order-processor-inventory_service"        # T6: external connects are allowlisted
 LOG="alerts/alert.log"
 INTEGRATION_TESTS="/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/run_all_tests.sh"
 
@@ -45,10 +55,12 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
-if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${TARGET}$"; then
-    echo "ERROR: container ${TARGET} is not running"
-    exit 1
-fi
+for svc in "$AUTH_SVC" "$USER_SVC" "$ORDER_SVC" "$INSIGHTS_SVC"; do
+    if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${svc}$"; then
+        echo "ERROR: container ${svc} is not running"
+        exit 1
+    fi
+done
 
 if ! pgrep -x ebpf-edr > /dev/null 2>&1; then
     echo "WARN: ebpf-edr process not detected — is the EDR agent running?"
@@ -78,74 +90,70 @@ echo ""
 echo "Starting attack tests in 3 seconds..."
 sleep 3
 
-# ── T1: Shell spawn in container ─────────────────────────────────────────────
+# ── T1: Shell spawn in container — user_service ───────────────────────────────
 # T1059.004 · T1609
 
-header 1 11 "Shell spawn in container" "CRITICAL T1059_unix_shell_execution + action=kill_process"
-docker exec "${TARGET}" bash -c "id" 2>/dev/null || true
+header 1 11 "Shell spawn in container (user_service)" "CRITICAL T1059_unix_shell_execution + action=kill_process"
+docker exec "${USER_SVC}" bash -c "id" 2>/dev/null || true
 pass
 sleep 3
 
-# ── T2: Network staging tool in container ────────────────────────────────────
+# ── T2: Network staging tool in container — auth_service ─────────────────────
 # T1105 · T1095
 # Detection fires on binary name — nc/ncat/wget must be executed inside the container.
 # If not installed, copy nc from the host into /usr/local/bin (not /tmp — avoids T1036).
 
-header 2 11 "Network staging tool in container" "HIGH T1105_ingress_tool_transfer"
-if docker exec "${TARGET}" which nc > /dev/null 2>&1; then
+header 2 11 "Network staging tool in container (auth_service)" "HIGH T1105_ingress_tool_transfer"
+if docker exec "${AUTH_SVC}" which nc > /dev/null 2>&1; then
     echo "  Using nc (already installed)"
-    docker exec "${TARGET}" nc -w 2 1.1.1.1 80 2>/dev/null || true
-elif docker exec "${TARGET}" which ncat > /dev/null 2>&1; then
+    docker exec "${AUTH_SVC}" nc -w 2 1.1.1.1 80 2>/dev/null || true
+elif docker exec "${AUTH_SVC}" which ncat > /dev/null 2>&1; then
     echo "  Using ncat (already installed)"
-    docker exec "${TARGET}" ncat -w 2 1.1.1.1 80 2>/dev/null || true
-elif docker exec "${TARGET}" which wget > /dev/null 2>&1; then
+    docker exec "${AUTH_SVC}" ncat -w 2 1.1.1.1 80 2>/dev/null || true
+elif docker exec "${AUTH_SVC}" which wget > /dev/null 2>&1; then
     echo "  Using wget (already installed)"
-    docker exec "${TARGET}" wget --timeout=2 -q http://1.1.1.1 2>/dev/null || true
+    docker exec "${AUTH_SVC}" wget --timeout=2 -q http://1.1.1.1 2>/dev/null || true
 elif which nc > /dev/null 2>&1; then
     echo "  Copying nc from host to container /usr/local/bin/nc..."
-    docker cp "$(which nc)" "${TARGET}":/usr/local/bin/nc 2>/dev/null || true
-    docker exec "${TARGET}" /usr/local/bin/nc -w 2 1.1.1.1 80 2>/dev/null || true
+    docker cp "$(which nc)" "${AUTH_SVC}":/usr/local/bin/nc 2>/dev/null || true
+    docker exec "${AUTH_SVC}" /usr/local/bin/nc -w 2 1.1.1.1 80 2>/dev/null || true
 else
     echo "  SKIP: nc/ncat/wget not available — install netcat-openbsd in the container to test T2"
 fi
 pass
 sleep 3
 
-# ── T3: OS credential dumping ─────────────────────────────────────────────────
+# ── T3: OS credential dumping — order_service ────────────────────────────────
 # T1003.008
 
-header 3 11 "Read /etc/shadow from container" "HIGH T1003_008_os_credential_dumping"
-docker exec "${TARGET}" cat /etc/shadow 2>/dev/null || true
+header 3 11 "Read /etc/shadow from container (order_service)" "HIGH T1003_008_os_credential_dumping"
+docker exec "${ORDER_SVC}" cat /etc/shadow 2>/dev/null || true
 pass
 sleep 3
 
-# ── T4: SSH private key access ────────────────────────────────────────────────
+# ── T4: SSH private key access — user_service ────────────────────────────────
 # T1552.004
 # Use docker cp to create the file — avoids bash spawn (which would trigger T1059
 # and be killed before the file write completes).
-# Try /root/.ssh/id_rsa (CRITICAL — SSH dir prefix) first;
-# fall back to /root/id_rsa (HIGH — key file suffix) if the dir doesn't exist.
-
-header 4 11 "Read SSH private key from container" "HIGH T1552_004_private_keys"
-# Use /tmp/id_rsa — container runs as uid=1000, /root/ is 700 (unreadable).
 # /tmp/id_rsa matches the id_rsa suffix → fires T1552_004 at HIGH.
+
+header 4 11 "Read SSH private key from container (user_service)" "HIGH T1552_004_private_keys"
 echo 'test-key-material' > "${TESTDIR}/id_rsa"
-docker cp "${TESTDIR}/id_rsa" "${TARGET}":/tmp/id_rsa 2>/dev/null || true
-docker exec "${TARGET}" cat /tmp/id_rsa 2>/dev/null || true
+docker cp "${TESTDIR}/id_rsa" "${USER_SVC}":/tmp/id_rsa 2>/dev/null || true
+docker exec "${USER_SVC}" cat /tmp/id_rsa 2>/dev/null || true
 pass
 sleep 3
 
-# ── T5: Unauthorized external connect + LPMTrie block verification ────────────
+# ── T5: Unauthorized external connect + LPMTrie block verification — auth_service
 # T1041 · T1048
 # First connect: fires T1041 alert + writes 8.8.8.8 to blocked_ips BPF map.
 # Second connect to same IP: must get EPERM (blocked at kernel before handshake).
 # Third connect to private IP: must NOT get EPERM (private IPs never blocked).
 # Map is flushed before the test so each validate.sh run is independent.
 
-header 5 11 "Unauthorized external connect — block verification" "HIGH T1041_exfiltration_over_c2 + block_ip"
+header 5 11 "Unauthorized external connect — block verification (auth_service)" "HIGH T1041_exfiltration_over_c2 + block_ip"
 
 # Flush blocked_ips map so the test is repeatable across multiple validate.sh runs.
-# Without this, 8.8.8.8 stays blocked from the previous run and step 1 never fires.
 BLOCK_MAP_ID=$(sudo bpftool map show 2>/dev/null | awk '/blocked_ips/{print id} {id=$1}' | tr -d ':' | head -1)
 if [[ -n "${BLOCK_MAP_ID}" ]]; then
     sudo bpftool map flush id "${BLOCK_MAP_ID}" 2>/dev/null && \
@@ -156,7 +164,7 @@ else
 fi
 
 echo "  Step 1: first connect to 8.8.8.8 — fires alert + adds IP to blocked_ips map"
-docker exec "${TARGET}" python3 -c "
+docker exec "${AUTH_SVC}" python3 -c "
 import socket
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.settimeout(2)
@@ -168,7 +176,7 @@ finally:
 sleep 2
 
 echo "  Step 2: second connect to 8.8.8.8 — expect EPERM (Operation not permitted)"
-BLOCK_RESULT=$(docker exec "${TARGET}" python3 -c "
+BLOCK_RESULT=$(docker exec "${AUTH_SVC}" python3 -c "
 import socket, errno, sys
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 try:
@@ -184,7 +192,7 @@ except OSError as e:
 echo "  ${BLOCK_RESULT}"
 
 echo "  Step 3: connect to private IP (10.0.0.1) — expect no EPERM (private IPs never blocked)"
-UNBLOCK_RESULT=$(docker exec "${TARGET}" python3 -c "
+UNBLOCK_RESULT=$(docker exec "${AUTH_SVC}" python3 -c "
 import socket, errno, sys
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.settimeout(1)
@@ -220,61 +228,60 @@ finally:
 pass
 sleep 3
 
-# ── T7: Host reads container filesystem ──────────────────────────────────────
+# ── T7: Host reads container filesystem — order_service ──────────────────────
 # T1611
 
-header 7 11 "Host process reads container filesystem" "CRITICAL T1611_escape_to_host_fs + action=kill_process"
-MERGED=$(docker inspect "${TARGET}" \
+header 7 11 "Host process reads container filesystem (order_service)" "CRITICAL T1611_escape_to_host_fs + action=kill_process"
+MERGED=$(docker inspect "${ORDER_SVC}" \
     --format '{{.GraphDriver.Data.MergedDir}}' 2>/dev/null || echo "")
 
 if [[ -z "${MERGED}" ]]; then
-    echo "  SKIP: could not resolve overlay2 MergedDir for ${TARGET}"
+    echo "  SKIP: could not resolve overlay2 MergedDir for ${ORDER_SVC}"
 else
     cat "${MERGED}/etc/hostname" 2>/dev/null || true
     pass
 fi
 sleep 3
 
-# ── T8: System information discovery ─────────────────────────────────────────
+# ── T8: System information discovery — insights_service ──────────────────────
 # T1082
 
-header 8 11 "Read /etc/passwd from container (system recon)" "MEDIUM T1082_system_info_discovery"
-docker exec "${TARGET}" cat /etc/passwd 2>/dev/null || true
+header 8 11 "Read /etc/passwd from container — system recon (insights_service)" "MEDIUM T1082_system_info_discovery"
+docker exec "${INSIGHTS_SVC}" cat /etc/passwd 2>/dev/null || true
 pass
 sleep 3
 
-# ── T9: Binary masquerading ───────────────────────────────────────────────────
+# ── T9: Binary masquerading — order_service ───────────────────────────────────
 # T1036
 # Two separate docker exec calls — avoids /bin/sh wrapper which would trigger T1059.
 
-header 9 11 "Binary masquerading from /tmp" "HIGH T1036_masquerading"
-docker exec "${TARGET}" cp /bin/cat /tmp/sshd 2>/dev/null || true
+header 9 11 "Binary masquerading from /tmp (order_service)" "HIGH T1036_masquerading"
+docker exec "${ORDER_SVC}" cp /bin/cat /tmp/sshd 2>/dev/null || true
 sleep 1
-docker exec "${TARGET}" /tmp/sshd /etc/hostname 2>/dev/null || true
+docker exec "${ORDER_SVC}" /tmp/sshd /etc/hostname 2>/dev/null || true
 pass
 sleep 3
 
-# ── T10: Cron configuration access ───────────────────────────────────────────
+# ── T10: Cron configuration access — user_service ────────────────────────────
 # T1053.003
-# Use docker cp to place the file — opensnoop only fires on successful opens.
+# Use docker cp to place the file — lsm/file_open only fires on successful opens.
 
-header 10 11 "Cron config access from container" "HIGH T1053_003_scheduled_task_cron"
+header 10 11 "Cron config access from container (user_service)" "HIGH T1053_003_scheduled_task_cron"
 echo "* * * * * root /tmp/evil_payload" > "${TESTDIR}/crontab"
-docker cp "${TESTDIR}/crontab" "${TARGET}":/etc/crontab
-docker exec "${TARGET}" cat /etc/crontab 2>/dev/null || true
+docker cp "${TESTDIR}/crontab" "${USER_SVC}":/etc/crontab
+docker exec "${USER_SVC}" cat /etc/crontab 2>/dev/null || true
 pass
 sleep 3
 
-# ── T11: Command history access ───────────────────────────────────────────────
+# ── T11: Command history access — insights_service ───────────────────────────
 # T1070.003
-# Use docker cp to place the file — opensnoop only fires on successful opens.
-
-header 11 11 "Command history access from container" "MEDIUM T1070_003_clear_command_history"
-# Use /tmp/.bash_history — container runs as uid=1000, /root/ is 700 (unreadable).
+# Use docker cp to place the file — lsm/file_open only fires on successful opens.
 # /tmp/.bash_history matches the .bash_history suffix → fires T1070 at MEDIUM.
+
+header 11 11 "Command history access from container (insights_service)" "MEDIUM T1070_003_clear_command_history"
 echo "rm -rf /important_data" > "${TESTDIR}/bash_history"
-docker cp "${TESTDIR}/bash_history" "${TARGET}":/tmp/.bash_history 2>/dev/null || true
-docker exec "${TARGET}" cat /tmp/.bash_history 2>/dev/null || true
+docker cp "${TESTDIR}/bash_history" "${INSIGHTS_SVC}":/tmp/.bash_history 2>/dev/null || true
+docker exec "${INSIGHTS_SVC}" cat /tmp/.bash_history 2>/dev/null || true
 pass
 sleep 3
 
@@ -303,20 +310,20 @@ echo "  Verify results:"
 echo "    tail -20 ${LOG}"
 echo ""
 echo "  Expected alerts:"
-echo "    T1  CRITICAL T1059_unix_shell_execution          action=kill_process"
-echo "    T2  HIGH     T1105_ingress_tool_transfer         (nc/wget must be installed)"
-echo "    T3  HIGH     T1003_008_os_credential_dumping     filename=/etc/shadow"
-echo "    T4  HIGH     T1552_004_private_keys              filename=/tmp/id_rsa"
-echo "    T5  HIGH     T1041_exfiltration_over_c2          dst=8.8.8.8:80 + block_ip"
+echo "    T1  CRITICAL T1059_unix_shell_execution          service=user_service"
+echo "    T2  HIGH     T1105_ingress_tool_transfer         service=auth_service"
+echo "    T3  HIGH     T1003_008_os_credential_dumping     service=order_service    filename=/etc/shadow"
+echo "    T4  HIGH     T1552_004_private_keys              service=user_service     filename=/tmp/id_rsa"
+echo "    T5  HIGH     T1041_exfiltration_over_c2          service=auth_service     dst=8.8.8.8:80 + block_ip"
 echo "         step1: alert fires + IP added to blocked_ips BPF map"
 echo "         step2: second connect to same IP → EPERM (kernel blocks before handshake)"
 echo "         step3: private IP (10.0.0.1) → no EPERM (private IPs never blocked)"
 echo "    T6  (no alert — inventory_service allowlisted)"
-echo "    T7  CRITICAL T1611_escape_to_host_fs             action=kill_process"
-echo "    T8  MEDIUM   T1082_system_info_discovery         filename=/etc/passwd"
-echo "    T9  HIGH     T1036_masquerading                  comm=/tmp/sshd"
-echo "    T10 HIGH     T1053_003_scheduled_task_cron       filename=/etc/crontab"
-echo "    T11 MEDIUM   T1070_003_clear_command_history     filename=/tmp/.bash_history"
+echo "    T7  CRITICAL T1611_escape_to_host_fs             service=order_service    action=kill_process"
+echo "    T8  MEDIUM   T1082_system_info_discovery         service=insights_service filename=/etc/passwd"
+echo "    T9  HIGH     T1036_masquerading                  service=order_service    comm=/tmp/sshd"
+echo "    T10 HIGH     T1053_003_scheduled_task_cron       service=user_service     filename=/etc/crontab"
+echo "    T11 MEDIUM   T1070_003_clear_command_history     service=insights_service filename=/tmp/.bash_history"
 echo ""
 echo "  Normal service traffic (integration tests) should NOT"
 echo "  produce any CRITICAL or HIGH alerts."
