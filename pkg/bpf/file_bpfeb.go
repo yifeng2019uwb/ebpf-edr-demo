@@ -8,21 +8,9 @@ import (
 	_ "embed"
 	"fmt"
 	"io"
-	"structs"
 
 	"github.com/cilium/ebpf"
 )
-
-type fileFileEvent struct {
-	_        structs.HostLayout
-	MntNsId  uint64
-	Pid      int32
-	Ppid     int32
-	Uid      uint32
-	Pad      uint32
-	Comm     [128]int8
-	Filename [256]int8
-}
 
 // loadFile returns the embedded CollectionSpec for file.
 func loadFile() (*ebpf.CollectionSpec, error) {
@@ -66,16 +54,14 @@ type fileSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type fileProgramSpecs struct {
-	HandleEnter *ebpf.ProgramSpec `ebpf:"handle_enter"`
-	HandleExit  *ebpf.ProgramSpec `ebpf:"handle_exit"`
+	HandleFileOpen *ebpf.ProgramSpec `ebpf:"handle_file_open"`
 }
 
 // fileMapSpecs contains maps before they are loaded into the kernel.
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type fileMapSpecs struct {
-	PendingOpens *ebpf.MapSpec `ebpf:"pending_opens"`
-	Rb           *ebpf.MapSpec `ebpf:"rb"`
+	Rb *ebpf.MapSpec `ebpf:"rb"`
 }
 
 // fileVariableSpecs contains global variables before they are loaded into the kernel.
@@ -104,13 +90,11 @@ func (o *fileObjects) Close() error {
 //
 // It can be passed to loadFileObjects or ebpf.CollectionSpec.LoadAndAssign.
 type fileMaps struct {
-	PendingOpens *ebpf.Map `ebpf:"pending_opens"`
-	Rb           *ebpf.Map `ebpf:"rb"`
+	Rb *ebpf.Map `ebpf:"rb"`
 }
 
 func (m *fileMaps) Close() error {
 	return _FileClose(
-		m.PendingOpens,
 		m.Rb,
 	)
 }
@@ -125,14 +109,12 @@ type fileVariables struct {
 //
 // It can be passed to loadFileObjects or ebpf.CollectionSpec.LoadAndAssign.
 type filePrograms struct {
-	HandleEnter *ebpf.Program `ebpf:"handle_enter"`
-	HandleExit  *ebpf.Program `ebpf:"handle_exit"`
+	HandleFileOpen *ebpf.Program `ebpf:"handle_file_open"`
 }
 
 func (p *filePrograms) Close() error {
 	return _FileClose(
-		p.HandleEnter,
-		p.HandleExit,
+		p.HandleFileOpen,
 	)
 }
 
