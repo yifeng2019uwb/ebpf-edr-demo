@@ -84,20 +84,20 @@ Structured JSON to three destinations simultaneously:
 
 | Rule | MITRE | Severity | Response |
 |------|-------|----------|----------|
-| `T1059_unix_shell_execution` | T1059.004 · T1609 | CRITICAL | kill_process |
-| `T1105_ingress_tool_transfer` | T1105 · T1095 | HIGH | kill_process |
+| `T1059_unix_shell_execution` | T1059.004 · T1609 | CRITICAL | — |
+| `T1105_ingress_tool_transfer` | T1105 · T1095 | HIGH | — |
 | `T1611_escape_to_host_ns` | T1611 | CRITICAL | — |
 | `T1036_masquerading` | T1036 | HIGH | — |
 | `T1613_container_resource_discovery` | T1613 | HIGH | — |
 | `T1611_escape_to_host_fs` | T1611 | CRITICAL | kill_process |
 | `T1611_escape_to_host_proc` | T1611 | HIGH | — |
 | `T1552_004_private_keys` | T1552.004 | CRITICAL/HIGH | kill_process |
-| `T1552_001_credentials_in_files` | T1552.001 | HIGH | kill_process |
+| `T1552_001_credentials_in_files` | T1552.001 | HIGH | — |
 | `T1003_008_os_credential_dumping` | T1003.008 | HIGH | kill_process |
 | `T1082_system_info_discovery` | T1082 | MEDIUM | — |
 | `T1053_003_scheduled_task_cron` | T1053.003 | HIGH | — |
 | `T1070_003_clear_command_history` | T1070.003 | MEDIUM | — |
-| `T1041_exfiltration_over_c2` | T1041 · T1048 | HIGH | block_ip (alert-only on GKE) |
+| `T1041_exfiltration_over_c2` | T1041 · T1048 | HIGH | — (block_ip disabled) |
 
 All single-event-detectable MITRE techniques for containerized workloads are covered.
 

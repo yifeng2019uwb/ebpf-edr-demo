@@ -250,7 +250,7 @@ Once all environments are verified, run the full test suites:
 cd ~/workspace/ebpf-edr-demo
 sudo ./validate.sh
 ```
-See `docs/VALIDATION.md` for T1–T7 test cases.
+See `docs/VALIDATION.md` for T1–T13 test cases.
 
 ### GKE
 ```bash

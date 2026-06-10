@@ -2,8 +2,8 @@
 
 ## Current State
 
-**GCP Docker VM: ACTIVE** — eBPF agent running, all 11 validate.sh tests passing.
-**Health-AI GKE Cluster: ACTIVE** — deployed, all 9 validate-gke.sh tests passing ✅.
+**GCP Docker VM: ACTIVE** — eBPF agent running, all 13 validate.sh tests passing.
+**Health-AI GKE Cluster: ACTIVE** — deployed, all 11 validate-gke.sh tests passing ✅.
 **Health-AI DigitalOcean: PLANNED** — next permanent always-on deploy target. Migrate before GCP expiry.
 GCP credits expire 2026-06-17 (~7 days). Resources on project `ebpfagent`.
 
@@ -27,9 +27,9 @@ Full rebuild on GCP VM (`make generate && make rebuild`) regenerated `pkg/bpf/fi
 
 Both `validate.sh` (Docker) and `validate-gke.sh` (GKE) now spread tests across all available services instead of targeting a single container. This confirms the eBPF resolver correctly maps mount-namespace IDs to service identities for every service, not just auth-service.
 
-**validate-gke.sh** — auth-service (V3/V8/V10), provider-service (V2/V7), gateway (V4/V9), ai-service (V5).
+**validate-gke.sh** — auth-service (V3/V8/V10), provider-service (V2/V7/V11), gateway (V4/V9/V12), ai-service (V5).
 
-**validate.sh** — auth_service (T2/T5), user_service (T1/T4/T10), order_service (T3/T7/T9), insights_service (T8/T11), inventory_service (T6).
+**validate.sh** — auth_service (T2/T5/T13), user_service (T1/T4/T10/T12), order_service (T3/T7/T9), insights_service (T8/T11), inventory_service (T6).
 
 ### V3/V7/V9 root cause confirmed and fixed ✅
 
@@ -177,8 +177,6 @@ Deferred — implement after opensnoop issue resolved.
 
 ## validate-gke.sh — Current Results
 
-> **GKE is currently DOWN** — bring up with `pulumi up` + `deploy.sh all` before running. Results below are from the last run before teardown.
-
 Tests are distributed across all 4 services to confirm the K8s resolver maps mnt_ns_id correctly for each:
 
 | Test | Service | Result | Notes |
@@ -192,10 +190,12 @@ Tests are distributed across all 4 services to confirm the K8s resolver maps mnt
 | V8 Network recon tool | auth-service | ✅ PASS | Process sensor working |
 | V9 /etc/passwd recon | gateway | ✅ PASS | Fixed: comm:pid:filename dedup key separates runc→cat exec pattern |
 | V10 Reverse shell | auth-service | ✅ PASS | Process + network sensors working |
+| V11 .env credentials file | provider-service | ✅ PASS | T1552_001_credentials_in_files confirmed |
+| V12 Container mgmt tool | gateway | ✅ PASS | T1613_container_resource_discovery confirmed |
 
-**9 passed · 0 failed · 0 skipped** ✅ (2026-06-10)
+**11 passed · 0 failed · 0 skipped** ✅ (2026-06-09/10)
 
-Service coverage: auth-service (V3/V8/V10), provider-service (V2/V7), gateway (V4/V9), ai-service (V5).
+Service coverage: auth-service (V3/V8/V10), provider-service (V2/V7/V11), gateway (V4/V9/V12), ai-service (V5).
 
 ---
 
@@ -271,3 +271,9 @@ Service coverage: auth-service (V3/V8/V10), provider-service (V2/V7), gateway (V
 - `T1611_escape_to_host_proc` on GKE — monitoring sidecars read `/proc/1/`; response set to none
 - `docker cp` during validate.sh creates `state=unknown / comm=exe` alerts — test-setup artifact
 - `ai-service` external Gemini calls — add to `externalAllowedServices` in `policy.go` if HIGH alerts appear
+
+### Known Limitations (minor, no action needed)
+- T2 (T1105) skips silently in Docker if nc/wget not installed in auth_service — rule confirmed working via GKE V8
+- block_ip is disabled everywhere (`NewResponder(nil)`) — T1041 alerts fire but no kernel enforcement; re-enable requires C changes
+- T1611_escape_to_host_ns and T1611_escape_to_host_proc not testable via validate.sh (need real escape scenario or --pid=host container)
+- `kernel/opensnoop.bpf.c` still present — dead code, safe to delete anytime

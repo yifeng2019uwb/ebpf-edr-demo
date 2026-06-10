@@ -95,8 +95,8 @@ Status: ✅ implemented + validated  🔲 planned — not yet implemented
 
 | Action | Rules | When |
 |--------|-------|------|
-| `kill_process` | T1059, T1611_fs, T1611_proc, T1552_004, T1552_001, T1003_008, T1105 | CRITICAL/HIGH — kill immediately |
-| `none` (alert only) | T1611_ns, T1041, T1036, T1613, T1053, T1070, T1082 | Phase 2 block_ip for T1041; T1611_ns excluded due to Podman FP |
+| `kill_process` | T1611_fs, T1552_004, T1003_008 | File rules with high-confidence credential/escape access |
+| `none` (alert only) | T1059, T1105, T1611_ns, T1611_proc, T1036, T1613, T1053, T1070, T1082, T1552_001, T1041 | Process rules (kill FP risk); lower-confidence file rules; network (block_ip disabled — LPMTrie removed) |
 
 ---
 
@@ -109,7 +109,7 @@ For GKE: use `kubectl exec` equivalents.
 
 ```bash
 docker exec order-processor-user_service bash -c "id"
-# Expected: CRITICAL T1059_unix_shell_execution service=user_service action=kill_process
+# Expected: CRITICAL T1059_unix_shell_execution service=user_service
 ```
 
 ### T1105 / T1095 — Ingress Tool Transfer (`T1105_ingress_tool_transfer`)
@@ -207,7 +207,7 @@ docker exec order-processor-auth_service /usr/local/bin/docker ps
 
 ```bash
 sudo ./validate.sh       # runs all 13 tests on Docker VM (distributed across services)
-./validate-gke.sh        # runs all 9 tests on GKE (distributed across services)
+./validate-gke.sh        # runs all 11 tests on GKE (distributed across services)
 ```
 
 T1–T11 validated on GCP Docker VM (`instance-20260318-023006`) as of 2026-06-10. T12–T13 pending.

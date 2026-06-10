@@ -49,10 +49,8 @@ docker exec order-processor-user_service bash -c "id"
 
 **Expected**:
 ```
-level=CRITICAL rule=T1059_unix_shell_execution service=user_service comm=/usr/bin/bash action=kill_process
+level=CRITICAL rule=T1059_unix_shell_execution service=user_service comm=/usr/bin/bash
 ```
-
-**Response**: process killed immediately via SIGKILL.
 
 ---
 
@@ -69,7 +67,7 @@ docker exec order-processor-auth_service nc -w 2 1.1.1.1 80
 
 **Expected**:
 ```
-level=HIGH rule=T1105_ingress_tool_transfer service=auth_service comm=nc action=kill_process
+level=HIGH rule=T1105_ingress_tool_transfer service=auth_service comm=nc
 ```
 
 **Note**: validate.sh copies `nc` from host if not present in container. If neither nc/wget is in the container nor `nc` on the host, the test is silently skipped. Rule correctness confirmed by GKE V8 (wget in auth-service image).
@@ -260,7 +258,7 @@ docker exec order-processor-user_service cat /tmp/app.env
 
 **Expected**:
 ```
-level=HIGH rule=T1552_001_credentials_in_files service=user_service filename=/tmp/app.env action=kill_process
+level=HIGH rule=T1552_001_credentials_in_files service=user_service filename=/tmp/app.env
 ```
 
 **Why it fires**: `/tmp/app.env` matches the `.env` suffix in `t1552CredentialFileSuffixes`. Docker cp places the file; docker exec cat opens it — `lsm/file_open` fires on the successful open.
@@ -292,8 +290,8 @@ level=HIGH rule=T1613_container_resource_discovery service=auth_service comm=/us
 
 **Attack detection:**
 
-- [x] T1  — CRITICAL `T1059_unix_shell_execution` + kill_process
-- [x] T2  — HIGH `T1105_ingress_tool_transfer` + kill_process
+- [x] T1  — CRITICAL `T1059_unix_shell_execution`
+- [x] T2  — HIGH `T1105_ingress_tool_transfer` (requires nc/wget in container — see T2 note)
 - [x] T3  — HIGH `T1003_008_os_credential_dumping` + kill_process
 - [x] T4  — HIGH `T1552_004_private_keys` + kill_process
 - [x] T5  — HIGH `T1041_exfiltration_over_c2` + block_ip (EPERM on retry verified)

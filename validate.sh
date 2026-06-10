@@ -93,7 +93,7 @@ sleep 3
 # ── T1: Shell spawn in container — user_service ───────────────────────────────
 # T1059.004 · T1609
 
-header 1 13 "Shell spawn in container (user_service)" "CRITICAL T1059_unix_shell_execution + action=kill_process"
+header 1 13 "Shell spawn in container (user_service)" "CRITICAL T1059_unix_shell_execution"
 docker exec "${USER_SVC}" bash -c "id" 2>/dev/null || true
 pass
 sleep 3
@@ -103,7 +103,7 @@ sleep 3
 # Detection fires on binary name — nc/ncat/wget must be executed inside the container.
 # If not installed, copy nc from the host into /usr/local/bin (not /tmp — avoids T1036).
 
-header 2 13 "Network staging tool in container (auth_service)" "HIGH T1105_ingress_tool_transfer"
+header 2 13 "Network staging tool in container (auth_service)" "HIGH T1105_ingress_tool_transfer (SKIP if nc/wget unavailable)"
 if docker exec "${AUTH_SVC}" which nc > /dev/null 2>&1; then
     echo "  Using nc (already installed)"
     docker exec "${AUTH_SVC}" nc -w 2 1.1.1.1 80 2>/dev/null || true

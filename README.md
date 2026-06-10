@@ -62,8 +62,8 @@ All rules follow MITRE ATT&CK naming. Rules marked with a response action are ac
 
 | Rule | MITRE | Severity | Response | Trigger |
 |------|-------|----------|----------|---------|
-| `T1059_unix_shell_execution` | T1059.004 · T1609 | CRITICAL | kill_process | Shell spawned inside container |
-| `T1105_ingress_tool_transfer` | T1105 · T1095 | HIGH | kill_process | `nc`, `wget` executed in container |
+| `T1059_unix_shell_execution` | T1059.004 · T1609 | CRITICAL | — | Shell spawned inside container |
+| `T1105_ingress_tool_transfer` | T1105 · T1095 | HIGH | — | `nc`, `wget` executed in container |
 | `T1611_escape_to_host_ns` | T1611 | CRITICAL | — | Process in unrecognized mount namespace |
 | `T1036_masquerading` | T1036 | HIGH | — | Binary running from `/tmp`, `/dev/shm` |
 | `T1613_container_resource_discovery` | T1613 | HIGH | — | `kubectl`, `docker` run inside container |

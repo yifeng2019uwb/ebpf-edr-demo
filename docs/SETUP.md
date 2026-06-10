@@ -223,21 +223,23 @@ Open **http://localhost:8888** — alerts from both Docker VM and GKE stream in 
 ./validate-gke.sh   # from cloud-native-order-processor/gcp_gke/
 ```
 
-### Expected alerts in the UI after Docker validation (T1–T11)
+### Expected alerts in the UI after Docker validation (T1–T13)
 
 | Test | Level    | Rule                                   | Response     | Details               |
 |------|----------|----------------------------------------|--------------|-----------------------|
-| T1   | CRITICAL | `T1059_unix_shell_execution`           | kill_process | comm=/usr/bin/bash    |
-| T2   | HIGH     | `T1105_ingress_tool_transfer`          | kill_process | comm=nc or wget       |
+| T1   | CRITICAL | `T1059_unix_shell_execution`           | —            | comm=/usr/bin/bash    |
+| T2   | HIGH     | `T1105_ingress_tool_transfer`          | —            | comm=nc or wget (skip if unavailable) |
 | T3   | HIGH     | `T1003_008_os_credential_dumping`      | kill_process | /etc/shadow           |
 | T4   | HIGH     | `T1552_004_private_keys`               | kill_process | /tmp/id_rsa           |
-| T5   | HIGH     | `T1041_exfiltration_over_c2`           | block_ip     | 8.8.8.8:80            |
+| T5   | HIGH     | `T1041_exfiltration_over_c2`           | —            | 8.8.8.8:80 (block_ip disabled) |
 | T6   | (no alert — inventory_service allowlisted)                                       |
 | T7   | CRITICAL | `T1611_escape_to_host_fs`              | kill_process | service=host          |
 | T8   | MEDIUM   | `T1082_system_info_discovery`          | —            | /etc/passwd           |
 | T9   | HIGH     | `T1036_masquerading`                   | —            | comm=/tmp/sshd        |
 | T10  | HIGH     | `T1053_003_scheduled_task_cron`        | —            | /etc/crontab          |
 | T11  | MEDIUM   | `T1070_003_clear_command_history`      | —            | /tmp/.bash_history    |
+| T12  | HIGH     | `T1552_001_credentials_in_files`       | —            | /tmp/app.env          |
+| T13  | HIGH     | `T1613_container_resource_discovery`   | —            | /usr/local/bin/docker |
 
 ---
 
