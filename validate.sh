@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # validate.sh — eBPF EDR detection validation
 #
-# Runs all 11 attack test cases while the order-processor integration tests
+# Runs all 13 attack test cases while the order-processor integration tests
 # run concurrently in the background. This validates two things at once:
 #   1. Attack detection: each threat rule fires correctly
 #   2. No false positives: normal service traffic does not trigger alerts
 #
 # Tests are distributed across 4 services to confirm eBPF monitors the full stack:
-#   auth_service     — T2 (net-tool), T5 (ext-connect + block)
-#   user_service     — T1 (shell-spawn), T4 (ssh-key), T10 (cron)
+#   auth_service     — T2 (net-tool), T5 (ext-connect + block), T13 (container-mgmt)
+#   user_service     — T1 (shell-spawn), T4 (ssh-key), T10 (cron), T12 (credentials-env)
 #   order_service    — T3 (shadow), T7 (host-fs), T9 (masquerade)
 #   insights_service — T8 (passwd), T11 (history)
 #   inventory_service — T6 (allowlist passive check, no change)
@@ -23,8 +23,8 @@
 
 set -euo pipefail
 
-AUTH_SVC="order-processor-auth_service"        # T2, T5
-USER_SVC="order-processor-user_service"        # T1, T4, T10
+AUTH_SVC="order-processor-auth_service"        # T2, T5, T13
+USER_SVC="order-processor-user_service"        # T1, T4, T10, T12
 ORDER_SVC="order-processor-order_service"      # T3, T7, T9
 INSIGHTS_SVC="order-processor-insights_service" # T8, T11
 INV="order-processor-inventory_service"        # T6: external connects are allowlisted
@@ -67,7 +67,7 @@ if ! pgrep -x ebpf-edr > /dev/null 2>&1; then
 fi
 
 echo ""
-echo "EDR Validation — 11 attack tests + concurrent integration traffic"
+echo "EDR Validation — 13 attack tests + concurrent integration traffic"
 echo "Log: tail -f ${LOG}"
 
 # ── Start integration tests in background ────────────────────────────────────
@@ -93,7 +93,7 @@ sleep 3
 # ── T1: Shell spawn in container — user_service ───────────────────────────────
 # T1059.004 · T1609
 
-header 1 11 "Shell spawn in container (user_service)" "CRITICAL T1059_unix_shell_execution + action=kill_process"
+header 1 13 "Shell spawn in container (user_service)" "CRITICAL T1059_unix_shell_execution + action=kill_process"
 docker exec "${USER_SVC}" bash -c "id" 2>/dev/null || true
 pass
 sleep 3
@@ -103,7 +103,7 @@ sleep 3
 # Detection fires on binary name — nc/ncat/wget must be executed inside the container.
 # If not installed, copy nc from the host into /usr/local/bin (not /tmp — avoids T1036).
 
-header 2 11 "Network staging tool in container (auth_service)" "HIGH T1105_ingress_tool_transfer"
+header 2 13 "Network staging tool in container (auth_service)" "HIGH T1105_ingress_tool_transfer"
 if docker exec "${AUTH_SVC}" which nc > /dev/null 2>&1; then
     echo "  Using nc (already installed)"
     docker exec "${AUTH_SVC}" nc -w 2 1.1.1.1 80 2>/dev/null || true
@@ -126,7 +126,7 @@ sleep 3
 # ── T3: OS credential dumping — order_service ────────────────────────────────
 # T1003.008
 
-header 3 11 "Read /etc/shadow from container (order_service)" "HIGH T1003_008_os_credential_dumping"
+header 3 13 "Read /etc/shadow from container (order_service)" "HIGH T1003_008_os_credential_dumping"
 docker exec "${ORDER_SVC}" cat /etc/shadow 2>/dev/null || true
 pass
 sleep 3
@@ -137,7 +137,7 @@ sleep 3
 # and be killed before the file write completes).
 # /tmp/id_rsa matches the id_rsa suffix → fires T1552_004 at HIGH.
 
-header 4 11 "Read SSH private key from container (user_service)" "HIGH T1552_004_private_keys"
+header 4 13 "Read SSH private key from container (user_service)" "HIGH T1552_004_private_keys"
 echo 'test-key-material' > "${TESTDIR}/id_rsa"
 docker cp "${TESTDIR}/id_rsa" "${USER_SVC}":/tmp/id_rsa 2>/dev/null || true
 docker exec "${USER_SVC}" cat /tmp/id_rsa 2>/dev/null || true
@@ -151,7 +151,7 @@ sleep 3
 # Third connect to private IP: must NOT get EPERM (private IPs never blocked).
 # Map is flushed before the test so each validate.sh run is independent.
 
-header 5 11 "Unauthorized external connect — block verification (auth_service)" "HIGH T1041_exfiltration_over_c2 + block_ip"
+header 5 13 "Unauthorized external connect — block verification (auth_service)" "HIGH T1041_exfiltration_over_c2 + block_ip"
 
 # Flush blocked_ips map so the test is repeatable across multiple validate.sh runs.
 BLOCK_MAP_ID=$(sudo bpftool map show 2>/dev/null | awk '/blocked_ips/{print id} {id=$1}' | tr -d ':' | head -1)
@@ -214,7 +214,7 @@ sleep 3
 
 # ── T6: Authorized external connect (allowlisted — no alert expected) ─────────
 
-header 6 11 "Authorized external connect — inventory_service" "no alert (allowlisted)"
+header 6 13 "Authorized external connect — inventory_service" "no alert (allowlisted)"
 echo "  Triggering inventory_service to call CoinGecko..."
 docker exec "${INV}" python3 -c "
 import socket
@@ -231,7 +231,7 @@ sleep 3
 # ── T7: Host reads container filesystem — order_service ──────────────────────
 # T1611
 
-header 7 11 "Host process reads container filesystem (order_service)" "CRITICAL T1611_escape_to_host_fs + action=kill_process"
+header 7 13 "Host process reads container filesystem (order_service)" "CRITICAL T1611_escape_to_host_fs + action=kill_process"
 MERGED=$(docker inspect "${ORDER_SVC}" \
     --format '{{.GraphDriver.Data.MergedDir}}' 2>/dev/null || echo "")
 
@@ -246,7 +246,7 @@ sleep 3
 # ── T8: System information discovery — insights_service ──────────────────────
 # T1082
 
-header 8 11 "Read /etc/passwd from container — system recon (insights_service)" "MEDIUM T1082_system_info_discovery"
+header 8 13 "Read /etc/passwd from container — system recon (insights_service)" "MEDIUM T1082_system_info_discovery"
 docker exec "${INSIGHTS_SVC}" cat /etc/passwd 2>/dev/null || true
 pass
 sleep 3
@@ -255,7 +255,7 @@ sleep 3
 # T1036
 # Two separate docker exec calls — avoids /bin/sh wrapper which would trigger T1059.
 
-header 9 11 "Binary masquerading from /tmp (order_service)" "HIGH T1036_masquerading"
+header 9 13 "Binary masquerading from /tmp (order_service)" "HIGH T1036_masquerading"
 docker exec "${ORDER_SVC}" cp /bin/cat /tmp/sshd 2>/dev/null || true
 sleep 1
 docker exec "${ORDER_SVC}" /tmp/sshd /etc/hostname 2>/dev/null || true
@@ -266,7 +266,7 @@ sleep 3
 # T1053.003
 # Use docker cp to place the file — lsm/file_open only fires on successful opens.
 
-header 10 11 "Cron config access from container (user_service)" "HIGH T1053_003_scheduled_task_cron"
+header 10 13 "Cron config access from container (user_service)" "HIGH T1053_003_scheduled_task_cron"
 echo "* * * * * root /tmp/evil_payload" > "${TESTDIR}/crontab"
 docker cp "${TESTDIR}/crontab" "${USER_SVC}":/etc/crontab
 docker exec "${USER_SVC}" cat /etc/crontab 2>/dev/null || true
@@ -278,10 +278,38 @@ sleep 3
 # Use docker cp to place the file — lsm/file_open only fires on successful opens.
 # /tmp/.bash_history matches the .bash_history suffix → fires T1070 at MEDIUM.
 
-header 11 11 "Command history access from container (insights_service)" "MEDIUM T1070_003_clear_command_history"
+header 11 13 "Command history access from container (insights_service)" "MEDIUM T1070_003_clear_command_history"
 echo "rm -rf /important_data" > "${TESTDIR}/bash_history"
 docker cp "${TESTDIR}/bash_history" "${INSIGHTS_SVC}":/tmp/.bash_history 2>/dev/null || true
 docker exec "${INSIGHTS_SVC}" cat /tmp/.bash_history 2>/dev/null || true
+pass
+sleep 3
+
+# ── T12: Credentials in .env file — user_service ─────────────────────────────
+# T1552.001
+# Use docker cp to place the .env file — lsm/file_open fires on successful opens.
+# /tmp/app.env matches .env suffix → fires T1552_001_credentials_in_files at HIGH.
+
+header 12 13 "Credentials in .env file from container (user_service)" "HIGH T1552_001_credentials_in_files"
+echo "DB_PASSWORD=super_secret_password" > "${TESTDIR}/app.env"
+docker cp "${TESTDIR}/app.env" "${USER_SVC}":/tmp/app.env 2>/dev/null || true
+docker exec "${USER_SVC}" cat /tmp/app.env 2>/dev/null || true
+pass
+sleep 3
+
+# ── T13: Container management tool execution — auth_service ──────────────────
+# T1613
+# Copy the docker binary from the host into the container and execute it.
+# /usr/local/bin/docker matches the /docker suffix → fires T1613_container_resource_discovery.
+# The command fails at runtime (no socket in container) but the execve fires the alert.
+
+header 13 13 "Container management tool in container (auth_service)" "HIGH T1613_container_resource_discovery"
+if which docker > /dev/null 2>&1; then
+    docker cp "$(which docker)" "${AUTH_SVC}":/usr/local/bin/docker 2>/dev/null || true
+    docker exec "${AUTH_SVC}" /usr/local/bin/docker ps 2>/dev/null || true
+else
+    echo "  SKIP: docker not on PATH — cannot copy binary to container"
+fi
 pass
 sleep 3
 
@@ -324,6 +352,8 @@ echo "    T8  MEDIUM   T1082_system_info_discovery         service=insights_serv
 echo "    T9  HIGH     T1036_masquerading                  service=order_service    comm=/tmp/sshd"
 echo "    T10 HIGH     T1053_003_scheduled_task_cron       service=user_service     filename=/etc/crontab"
 echo "    T11 MEDIUM   T1070_003_clear_command_history     service=insights_service filename=/tmp/.bash_history"
+echo "    T12 HIGH     T1552_001_credentials_in_files      service=user_service     filename=/tmp/app.env"
+echo "    T13 HIGH     T1613_container_resource_discovery  service=auth_service     comm=/usr/local/bin/docker"
 echo ""
 echo "  Normal service traffic (integration tests) should NOT"
 echo "  produce any CRITICAL or HIGH alerts."

@@ -5,8 +5,8 @@
 #
 # Test-to-service mapping (confirms resolver correctness for each service):
 #   auth-service     — V3 (shadow), V8 (net-tool), V10 (reverse-shell)
-#   provider-service — V2 (shell-spawn), V7 (ssh-key)
-#   gateway          — V4 (ext-connect), V9 (passwd)
+#   provider-service — V2 (shell-spawn), V7 (ssh-key), V11 (credentials-env)
+#   gateway          — V4 (ext-connect), V9 (passwd), V12 (container-mgmt)
 #   ai-service       — V5 (allowlist passive check)
 
 set -euo pipefail
@@ -29,6 +29,8 @@ RULE_EXT_CONNECT="T1041_exfiltration_over_c2"
 RULE_PRIV_KEY="T1552_004_private_keys"
 RULE_NET_TOOL="T1105_ingress_tool_transfer"
 RULE_SYSINFO="T1082_system_info_discovery"
+RULE_CREDS_ENV="T1552_001_credentials_in_files"
+RULE_CONTAINER_DISC="T1613_container_resource_discovery"
 
 # ─────────────────────────────────────────────────────────────────────────────
 PASS=0
@@ -235,6 +237,40 @@ if expect_alert "CRITICAL.*${RULE_SHELL}.*service=auth-service" 60 "$V10_SINCE" 
     pass "V10: reverse shell — CRITICAL ${RULE_SHELL} + HIGH ${RULE_EXT_CONNECT} both detected"
 else
     fail "V10: reverse shell — one or both alerts missing within timeout"
+fi
+
+# ── V11: Credentials in .env file — provider-service ─────────────────────────
+echo "=== V11: Credentials in .env file (provider-service) ==="
+V11_ENV=$(mktemp /tmp/edr_v11.XXXXXX)
+echo "DB_PASSWORD=super_secret_password" > "$V11_ENV"
+# Copy file into container first (tar open fires before V11_SINCE — we don't count it)
+$KUBECTL cp "$V11_ENV" "$PROVIDER_POD":/tmp/app.env -n "$NAMESPACE" 2>/dev/null || true
+rm -f "$V11_ENV"
+# Set timestamp AFTER copy so the check captures the cat-triggered alert only
+V11_SINCE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+$KUBECTL exec "$PROVIDER_POD" -n "$NAMESPACE" -- cat /tmp/app.env >/dev/null 2>&1 || true
+if expect_alert "HIGH.*${RULE_CREDS_ENV}.*service=provider-service.*namespace=${NAMESPACE}" 60 "$V11_SINCE"; then
+    pass "V11: HIGH ${RULE_CREDS_ENV} — /tmp/app.env detected"
+else
+    fail "V11: no HIGH ${RULE_CREDS_ENV} alert within timeout"
+fi
+
+# ── V12: Container management tool execution — gateway ────────────────────────
+echo "=== V12: Container management tool execution (gateway) ==="
+V12_SINCE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+# Step 1: copy a binary into the container under the name 'kubectl'.
+# sh -c fires T1059 but cp (fork-child) completes before SIGKILL arrives.
+$KUBECTL exec "$GW_POD" -n "$NAMESPACE" -- sh -c \
+    "cp /bin/cat /usr/local/bin/kubectl 2>/dev/null || cp /usr/bin/cat /usr/local/bin/kubectl 2>/dev/null || true" \
+    >/dev/null 2>&1 || true
+sleep 3
+# Step 2: execute the binary — /usr/local/bin/kubectl matches /kubectl suffix → T1613.
+$KUBECTL exec "$GW_POD" -n "$NAMESPACE" -- /usr/local/bin/kubectl /etc/hostname \
+    >/dev/null 2>&1 || true
+if expect_alert "HIGH.*${RULE_CONTAINER_DISC}.*service=gateway.*namespace=${NAMESPACE}" 60 "$V12_SINCE"; then
+    pass "V12: HIGH ${RULE_CONTAINER_DISC} — /usr/local/bin/kubectl detected"
+else
+    fail "V12: no HIGH ${RULE_CONTAINER_DISC} alert within timeout"
 fi
 
 # ── summary ───────────────────────────────────────────────────────────────────

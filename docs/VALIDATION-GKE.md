@@ -13,8 +13,8 @@ maps mount-namespace IDs to service identities for every pod, not just one.
 | Service | Tests |
 |---------|-------|
 | auth-service | V3 (shadow), V8 (net-tool), V10 (reverse-shell) |
-| provider-service | V2 (shell-spawn), V7 (ssh-key) |
-| gateway | V4 (ext-connect), V9 (passwd) |
+| provider-service | V2 (shell-spawn), V7 (ssh-key), V11 (credentials-env) |
+| gateway | V4 (ext-connect), V9 (passwd), V12 (container-mgmt) |
 | ai-service | V5 (allowlist passive check) |
 
 Two goals verified together:
@@ -203,6 +203,50 @@ level=HIGH rule=T1041_exfiltration_over_c2 service=auth-service namespace=health
 the `wget http://8.8.8.8:4444` attempt triggers `T1041_exfiltration_over_c2` HIGH.
 Both together signal a reverse shell pattern.
 
+### V11 — Credentials in Files (provider-service)
+
+**MITRE**: T1552.001 — Unsecured Credentials: Credentials in Files
+
+**Threat**: Attacker finds a `.env` file inside a pod containing database passwords or API keys.
+
+**Trigger**:
+```bash
+kubectl cp /tmp/app.env <provider-service-pod>:/tmp/app.env -n health-ai
+kubectl exec <provider-service-pod> -n health-ai -- cat /tmp/app.env
+```
+
+**Expected alert**:
+```
+level=HIGH rule=T1552_001_credentials_in_files service=provider-service namespace=health-ai
+filename=/tmp/app.env
+```
+
+**Why it fires**: `/tmp/app.env` matches `.env` suffix in `t1552CredentialFileSuffixes`. `kubectl cp` uses tar (open for write happens before `V11_SINCE`); `cat` triggers the alert captured by the test.
+
+---
+
+### V12 — Container Management Tool Execution (gateway)
+
+**MITRE**: T1613 — Container and Resource Discovery
+
+**Threat**: Attacker inside a pod runs a container management tool (`kubectl`, `docker`, `crictl`) to enumerate the surrounding cluster and discover lateral movement targets.
+
+**Trigger**:
+```bash
+kubectl exec <gateway-pod> -n health-ai -- sh -c \
+  "cp /bin/cat /usr/local/bin/kubectl"
+# wait 3s for cp to complete
+kubectl exec <gateway-pod> -n health-ai -- /usr/local/bin/kubectl /etc/hostname
+```
+
+**Expected alert**:
+```
+level=HIGH rule=T1613_container_resource_discovery service=gateway namespace=health-ai
+comm=/usr/local/bin/kubectl
+```
+
+**Note**: The setup step (`sh -c "cp ..."`) fires `T1059_unix_shell_execution` CRITICAL — expected side effect. The cp fork-child completes before SIGKILL arrives (cp is extremely fast). The second exec fires T1613 on the binary name match `/kubectl`. The binary itself fails to do anything useful (it's actually `cat`) but the execve fires the alert.
+
 ---
 
 ## Results Checklist
@@ -218,6 +262,8 @@ Both together signal a reverse shell pattern.
 - [x] V8 — HIGH `T1105_ingress_tool_transfer` wget (auth-service)
 - [x] V9 — MEDIUM `T1082_system_info_discovery` `/etc/passwd` (gateway)
 - [x] V10 — CRITICAL `T1059_unix_shell_execution` + HIGH `T1041_exfiltration_over_c2` (auth-service)
+- [x] V11 — HIGH `T1552_001_credentials_in_files` `/tmp/app.env` (provider-service)
+- [x] V12 — HIGH `T1613_container_resource_discovery` `/usr/local/bin/kubectl` (gateway)
 
 **Workload identity verified on all alerts:**
 
@@ -225,3 +271,5 @@ Both together signal a reverse shell pattern.
 - [x] `namespace` field populated (`health-ai`)
 - [x] `runtime` = `k8s`
 - [x] All 4 services confirmed: resolver maps mnt_ns_id correctly for every pod
+
+All 11 GKE tests validated on health-ai cluster. V2–V10 as of 2026-06-10; V11–V12 as of 2026-06-09.

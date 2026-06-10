@@ -109,7 +109,7 @@ All 11 attack tests distributed across `auth_service`, `user_service`, `order_se
 | Container touches cron config | `T1053_003_scheduled_task_cron` | HIGH |
 | Container touches shell history | `T1070_003_clear_command_history` | MEDIUM |
 
-### GKE — 9/9 pass
+### GKE — 11/11 pass
 
 Tests distributed across all 4 health-ai services — confirms eBPF resolver maps mount-namespace IDs correctly for every pod.
 
@@ -124,6 +124,8 @@ Tests distributed across all 4 health-ai services — confirms eBPF resolver map
 | Network tool | auth-service | `T1105_ingress_tool_transfer` | HIGH |
 | Read `/etc/passwd` | gateway | `T1082_system_info_discovery` | MEDIUM |
 | Reverse shell | auth-service | `T1059` + `T1041` | CRITICAL + HIGH |
+| `.env` credentials file | provider-service | `T1552_001_credentials_in_files` | HIGH |
+| Container mgmt tool | gateway | `T1613_container_resource_discovery` | HIGH |
 
 ![Docker VM validation](snapshots/monitor-dashboardWithResponse.png)
 
@@ -141,7 +143,7 @@ sudo ./validate.sh        # 11 attack tests across 4 services
 ```bash
 cd kubernetes/pulumi && pulumi up
 cd kubernetes && ./deploy.sh all
-./validate-gke.sh         # 9 attack tests across 4 services
+./validate-gke.sh         # 11 attack tests across 4 services
 ```
 
 **Alert Router (Mac):**
@@ -158,7 +160,7 @@ make run-alert-router
 |-----|-------------|
 | [MITRE-COVERAGE.md](docs/MITRE-COVERAGE.md) | Full ATT&CK technique mapping — 14 rules, all severities and response actions |
 | [DETECTION-POLICY.md](docs/DETECTION-POLICY.md) | Whitelist rationale and per-environment noise policy |
-| [VALIDATION.md](docs/VALIDATION.md) | Docker VM — 11 attack test cases with expected alerts |
-| [VALIDATION-GKE.md](docs/VALIDATION-GKE.md) | GKE — 9 attack test cases distributed across services |
+| [VALIDATION.md](docs/VALIDATION.md) | Docker VM — 13 attack test cases with expected alerts |
+| [VALIDATION-GKE.md](docs/VALIDATION-GKE.md) | GKE — 11 attack test cases distributed across services |
 | [NOTES.md](docs/NOTES.md) | Development notes, debugging reference, key technical decisions |
 | [REPORT.md](docs/REPORT.md) | Full project report — architecture, implementation, results |

@@ -3,7 +3,7 @@
 Manual test procedure to verify each detection rule fires correctly against real container behavior.
 Run on the GCP Docker VM while the EDR agent is running.
 
-Automated: `sudo ./validate.sh` runs all 11 tests with concurrent integration traffic.
+Automated: `sudo ./validate.sh` runs all 13 tests with concurrent integration traffic.
 
 ---
 
@@ -29,7 +29,7 @@ docker ps
 # Three terminals
 tail -f alerts/alert.log          # Terminal 1: watch alerts live
 tail -f /tmp/integ_tests.log      # Terminal 2: watch integration tests
-sudo ./validate.sh                # Terminal 3: run all 11 tests
+sudo ./validate.sh                # Terminal 3: run all 13 tests
 ```
 
 ---
@@ -245,6 +245,47 @@ docker exec order-processor-insights_service cat /tmp/.bash_history
 level=MEDIUM rule=T1070_003_clear_command_history service=insights_service filename=/tmp/.bash_history
 ```
 
+### T12 — Credentials in Files
+
+**MITRE**: T1552.001 — Unsecured Credentials: Credentials in Files
+
+**Threat**: Attacker finds an unencrypted `.env` file inside a container containing database passwords or API keys.
+
+**Command**:
+```bash
+echo "DB_PASSWORD=super_secret_password" > /tmp/app.env
+docker cp /tmp/app.env order-processor-user_service:/tmp/app.env
+docker exec order-processor-user_service cat /tmp/app.env
+```
+
+**Expected**:
+```
+level=HIGH rule=T1552_001_credentials_in_files service=user_service filename=/tmp/app.env action=kill_process
+```
+
+**Why it fires**: `/tmp/app.env` matches the `.env` suffix in `t1552CredentialFileSuffixes`. Docker cp places the file; docker exec cat opens it — `lsm/file_open` fires on the successful open.
+
+---
+
+### T13 — Container Resource Discovery
+
+**MITRE**: T1613 — Container and Resource Discovery
+
+**Threat**: Attacker inside a container runs a container management tool (`docker`, `kubectl`, `crictl`) to enumerate the surrounding container environment and discover lateral movement targets.
+
+**Command**:
+```bash
+docker cp $(which docker) order-processor-auth_service:/usr/local/bin/docker
+docker exec order-processor-auth_service /usr/local/bin/docker ps
+```
+
+**Expected**:
+```
+level=HIGH rule=T1613_container_resource_discovery service=auth_service comm=/usr/local/bin/docker
+```
+
+**Note**: The `docker ps` command fails at runtime (no socket mounted in container) but the execve fires the process event before any I/O. `/usr/local/bin/docker` matches the `/docker` suffix in `t1613ContainerMgmtTools`.
+
 ---
 
 ## Results Checklist
@@ -262,6 +303,8 @@ level=MEDIUM rule=T1070_003_clear_command_history service=insights_service filen
 - [x] T9  — HIGH `T1036_masquerading`
 - [x] T10 — HIGH `T1053_003_scheduled_task_cron`
 - [x] T11 — MEDIUM `T1070_003_clear_command_history`
+- [ ] T12 — HIGH `T1552_001_credentials_in_files` (`.env` file — not yet run)
+- [ ] T13 — HIGH `T1613_container_resource_discovery` (docker in container — not yet run)
 
 **False positive check — confirmed clean:**
 

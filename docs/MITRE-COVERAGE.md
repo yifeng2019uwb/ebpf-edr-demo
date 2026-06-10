@@ -15,15 +15,15 @@ Remaining gaps require stateful/behavioral detection (see Phase 2 section).
 
 ## Detection Rules → MITRE Mapping
 
-Status: ✅ implemented + validated by validate.sh  🔲 planned — not yet implemented
+Status: ✅ implemented + validated  🔲 planned — not yet implemented
 
 | Rule | Severity | MITRE ID | Technique | Status |
 |------|----------|----------|-----------|--------|
 | `T1059_unix_shell_execution` | CRITICAL | T1059.004 | Command & Scripting: Unix Shell | ✅ |
 | `T1059_unix_shell_execution` | CRITICAL | T1609 | Container Administration Command | ✅ |
-| `T1611_escape_to_host_ns` | CRITICAL | T1611 | Escape to Host — unknown mount namespace | ✅ |
+| `T1611_escape_to_host_ns` | CRITICAL | T1611 | Escape to Host — unknown mount namespace | ✅² |
 | `T1611_escape_to_host_fs` | CRITICAL | T1611 | Escape to Host — host reads container overlay2 | ✅ |
-| `T1611_escape_to_host_proc` | HIGH | T1611 | Escape to Host — container reads /proc/1/ | ✅ |
+| `T1611_escape_to_host_proc` | HIGH | T1611 | Escape to Host — container reads /proc/1/ | ✅² |
 | `T1105_ingress_tool_transfer` (nc/ncat) | HIGH | T1095 | Non-App Layer Protocol — binary in container¹ | ✅ |
 | `T1105_ingress_tool_transfer` (wget) | HIGH | T1105 | Ingress Tool Transfer — binary in container¹ | ✅ |
 | `T1552_004_private_keys` /root/.ssh/ /home/.ssh/ | CRITICAL | T1552.004 | Unsecured Credentials: Private Keys — SSH dirs | ✅ |
@@ -41,6 +41,7 @@ Status: ✅ implemented + validated by validate.sh  🔲 planned — not yet imp
 | `T1046_network_service_scanning` | HIGH | T1046 | Network Service Scanning | 🔲 needs stateful burst detection |
 
 ¹ Detection fires on binary presence in container (unexpected tool = signal). Not intent-based.
+² Rule is implemented and fires in production (observed on GKE); not testable via `docker exec` because normal Docker containers have PID namespace isolation — `/proc/1/` inside the container resolves to the container's own init, not the host's. T1611_ns requires a process in a genuinely unrecognized mount namespace.
 
 ---
 
@@ -101,7 +102,7 @@ Status: ✅ implemented + validated by validate.sh  🔲 planned — not yet imp
 
 ## Atomic Red Team Tests
 
-Run via `sudo ./validate.sh` on the GCP Docker VM (covers all 11 tests below).
+Run via `sudo ./validate.sh` on the GCP Docker VM (covers all 13 tests below).
 For GKE: use `kubectl exec` equivalents.
 
 ### T1059.004 / T1609 — Unix Shell (`T1059_unix_shell_execution`)
@@ -182,14 +183,32 @@ docker exec order-processor-insights_service cat /tmp/.bash_history
 # Expected: MEDIUM T1070_003_clear_command_history service=insights_service
 ```
 
+### T1552.001 — Credentials in Files (`T1552_001_credentials_in_files`) — T12
+
+```bash
+echo "DB_PASSWORD=super_secret_password" > /tmp/app.env
+docker cp /tmp/app.env order-processor-user_service:/tmp/app.env
+docker exec order-processor-user_service cat /tmp/app.env
+# Expected: HIGH T1552_001_credentials_in_files service=user_service filename=/tmp/app.env
+```
+
+### T1613 — Container Resource Discovery (`T1613_container_resource_discovery`) — T13
+
+```bash
+docker cp $(which docker) order-processor-auth_service:/usr/local/bin/docker
+docker exec order-processor-auth_service /usr/local/bin/docker ps
+# Expected: HIGH T1613_container_resource_discovery service=auth_service comm=/usr/local/bin/docker
+# Note: docker ps fails (no socket) but execve fires the alert before any I/O.
+```
+
 ---
 
 ## Validation Script
 
 ```bash
-sudo ./validate.sh       # runs all 11 tests on Docker VM (distributed across services)
+sudo ./validate.sh       # runs all 13 tests on Docker VM (distributed across services)
 ./validate-gke.sh        # runs all 9 tests on GKE (distributed across services)
 ```
 
-All 11 Docker tests validated on GCP Docker VM (`instance-20260318-023006`) as of 2026-06-10.
-All 9 GKE tests validated on health-ai cluster as of 2026-06-10.
+T1–T11 validated on GCP Docker VM (`instance-20260318-023006`) as of 2026-06-10. T12–T13 pending.
+All 11 GKE tests validated on health-ai cluster (V2–V10: 2026-06-10, V11–V12: 2026-06-09).

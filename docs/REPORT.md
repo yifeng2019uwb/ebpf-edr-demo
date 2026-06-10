@@ -134,7 +134,7 @@ Tests distributed across 4 services: `auth_service` (T2/T5), `user_service` (T1/
 
 Block verification (T5): second connect to blocked IP returns `EPERM`; private IPs remain unaffected.
 
-### GKE — 9/9 pass
+### GKE — 11/11 pass
 
 Tests distributed across all 4 health-ai services — confirms eBPF resolver maps mount-namespace IDs correctly for every pod, not just one.
 
@@ -149,6 +149,8 @@ Tests distributed across all 4 health-ai services — confirms eBPF resolver map
 | V8 Network tool | auth-service | `T1105_ingress_tool_transfer` HIGH | ✅ |
 | V9 `/etc/passwd` | gateway | `T1082_system_info_discovery` MEDIUM | ✅ |
 | V10 Reverse shell | auth-service | `T1059` CRITICAL + `T1041` HIGH | ✅ |
+| V11 `.env` credentials file | provider-service | `T1552_001_credentials_in_files` HIGH | ✅ |
+| V12 Container mgmt tool | gateway | `T1613_container_resource_discovery` HIGH | ✅ |
 
 ### False Positive Policy
 
