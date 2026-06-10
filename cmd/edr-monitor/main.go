@@ -169,7 +169,7 @@ func main() {
 			}
 
 			if ev.Type == pipeline.FileEventType {
-				key := fmt.Sprintf("%d:%s", ev.File.Pid, processor.CString(ev.File.Filename[:]))
+				key := fmt.Sprintf("%s:%d:%s", processor.CString(ev.File.Comm[:]), ev.File.Pid, processor.CString(ev.File.Filename[:]))
 				fileDedupMu.Lock()
 				last, seen := fileDedupSeen[key]
 				if seen && time.Since(last) < fileDedupWindow {

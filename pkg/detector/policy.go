@@ -126,6 +126,17 @@ var t1611ProcEscapePrefixes = []string{
 	"/proc/1/", // host PID 1 (init/systemd) — not reachable from inside a container normally
 }
 
+// t1611ProcEscapeAllowed — read-only stat files under /proc/1/ that monitoring
+// tools (redis, prometheus node-exporter) legitimately read. These expose no
+// writable state and are not a container escape vector.
+// Real escape paths (/proc/1/mem, /proc/1/fd/, /proc/1/root/, /proc/1/exe)
+// are NOT excluded — they remain detectable.
+var t1611ProcEscapeAllowed = []string{
+	"/proc/1/stat",
+	"/proc/1/status",
+	"/proc/1/cmdline",
+}
+
 // ── T1552.004 — Unsecured Credentials: Private Keys ──────────────────────────
 // SSH key directories → CRITICAL. Key files by extension → HIGH.
 var t1552PrivateKeyDirPrefixes = []string{

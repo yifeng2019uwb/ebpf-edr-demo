@@ -59,6 +59,15 @@ func matchesSuffix(comm string, list []string) bool {
 	return false
 }
 
+func isProcEscapeAllowed(filename string) bool {
+	for _, allowed := range t1611ProcEscapeAllowed {
+		if filename == allowed {
+			return true
+		}
+	}
+	return false
+}
+
 func isPemExcluded(filename string) bool {
 	for _, path := range pemExcludePaths {
 		if strings.Contains(filename, path) {
@@ -176,7 +185,7 @@ func checkFileRules(event processor.FileEvent, res workload.ResolveResult) *aler
 
 	// T1611 — container reading host init process (/proc/1/)
 	for _, prefix := range t1611ProcEscapePrefixes {
-		if strings.HasPrefix(filename, prefix) {
+		if strings.HasPrefix(filename, prefix) && !isProcEscapeAllowed(filename) {
 			return newFileAlert(event, res, comm, filename, alert.High, RuleT1611EscapeToHostProc, "Container accessed host process namespace: "+filename)
 		}
 	}
