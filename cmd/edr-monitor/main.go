@@ -9,7 +9,6 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -114,7 +113,6 @@ func main() {
 			}
 		}
 	}()
-	var fileRingbufTotal atomic.Int64
 	go func() {
 		for {
 			rec, err := loader.FileRd.Read()
@@ -125,10 +123,6 @@ func main() {
 				log.Printf("file reader error (restarting): %v", err)
 				time.Sleep(time.Second)
 				continue
-			}
-			n := fileRingbufTotal.Add(1)
-			if n == 1 || n%1000 == 0 {
-				log.Printf("DEBUG opensnoop ringbuf: %d total events read", n)
 			}
 			select {
 			case rawCh <- pipeline.RawEvent{Source: "opensnoop", Data: append([]byte(nil), rec.RawSample...)}:
@@ -291,6 +285,14 @@ func main() {
 	// Detector
 	go func() {
 		for ev := range enrichedCh {
+			// DEBUG: log file events that survive dedup and reach the detector.
+			// Remove once V3/V7/V9 pass.
+			if ev.Type == pipeline.FileEventType && ev.Workload.State == workload.StateResolved {
+				log.Printf("DEBUG file-detect: comm=%q filename=%q svc=%s",
+					processor.CString(ev.File.Comm[:]),
+					processor.CString(ev.File.Filename[:]),
+					ev.Workload.Identity.Service)
+			}
 			for _, a := range det.Detect(ev) {
 				action := detector.ResponseFor(a.Rule, a.Level)
 				if action != detector.ActionNone {
@@ -349,9 +351,12 @@ func enrich(raw pipeline.RawEvent, r workload.WorkloadResolver) *pipeline.Enrich
 		comm := processor.CString(ev.Comm[:])
 		filename := processor.CString(ev.Filename[:])
 		res := r.Resolve(uint32(ev.MntNsId), uint32(ev.Pid))
-		if strings.Contains(filename, "shadow") || strings.Contains(filename, "id_rsa") || filename == "/etc/passwd" {
-			log.Printf("DEBUG file-target: comm=%q filename=%q state=%s svc=%s ns=%d pid=%d",
-				comm, filename, res.State, res.Identity.Service, ev.MntNsId, ev.Pid)
+		// DEBUG: log every file event from resolved containers so we can see
+		// the full path bpf_d_path returns and confirm busybox is now captured.
+		// Remove once V3/V7/V9 pass.
+		if res.State == workload.StateResolved {
+			log.Printf("DEBUG file-enrich: comm=%q filename=%q svc=%s pid=%d",
+				comm, filename, res.Identity.Service, ev.Pid)
 		}
 		return &pipeline.EnrichedEvent{
 			Type:      pipeline.FileEventType,

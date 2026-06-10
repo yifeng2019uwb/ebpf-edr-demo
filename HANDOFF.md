@@ -1,15 +1,23 @@
-# Session Handoff — 2026-06-08
+# Session Handoff — 2026-06-10
 
 ## Current State
 
 **GCP Docker VM: ACTIVE** — eBPF agent running, all 11 validate.sh tests passing.
-**Health-AI GKE Cluster: DESTROYED** — torn down to save costs; redeploy when ready for eBPF testing.
-**Health-AI DigitalOcean: PLANNED** — next permanent always-on deploy target. Plan: fix opensnoop on GKE first (1-2 sessions), then migrate infra to DO before GCP expiry.
-GCP credits expire 2026-06-17 (~8 days). Resources on project `ebpfagent`.
+**Health-AI GKE Cluster: ACTIVE** — deployed, V2/V4/V5/V6/V8/V10 passing; V3/V7/V9 pending lsm-file fix.
+**Health-AI DigitalOcean: PLANNED** — next permanent always-on deploy target. Migrate before GCP expiry.
+GCP credits expire 2026-06-17 (~7 days). Resources on project `ebpfagent`.
 
 ---
 
-## What Changed This Session (2026-06-08)
+## What Changed This Session (2026-06-10)
+
+### Supabase T1041 false positives — fixed ✅
+
+Added port 6543 (Supabase pgbouncer) to `externalAllowedDstPorts` in `pkg/detector/policy.go` and `checkNetworkRules` in `pkg/detector/rules.go`. All health-ai services connect to Supabase — the HIGH T1041 alerts were false positives. Confirmed working.
+
+### V3/V7/V9 root cause confirmed — fix planned
+
+Confirmed via debug logs that `sh`/`cat` (busybox on Alpine) never appear in the opensnoop ring buffer for any filename. Root cause: busybox uses `SYS_open` (syscall 2), our probe covers only `SYS_openat` (syscall 257). Fix decided: replace `opensnoop.bpf.c` with `lsm-file.bpf.c` using `lsm.s/file_open` hook. Rebuild required on GCP VM — not yet done.
 
 ### Container Registry — migrated from GCP AR to ghcr.io
 
@@ -42,43 +50,57 @@ GCP Artifact Registry expires with credits on 2026-06-17 and requires extra auth
 | File | Status | C changes needed |
 |------|--------|-----------------|
 | `execsnoop.bpf.c` | ✅ Correct | None |
-| `lsm-connect.bpf.c` | ✅ Correct | None (blocked_ips removed — was wrong scope) |
-| `opensnoop.bpf.c` | ⚠️ Under investigation | tgid != tid filter suspected on GKE kernel 6.8 — diagnose first |
+| `lsm-connect.bpf.c` | ✅ Correct | None |
+| `opensnoop.bpf.c` | ❌ Replace | Being replaced by `lsm-file.bpf.c` — see decision below |
 
 ### What each C file does (and should only do)
-- **C responsibility**: capture raw kernel events, minimal performance filtering (skip loopback, skip ENOENT, skip thread-level opens), emit to ring buffer
+- **C responsibility**: capture raw kernel events, minimal performance filtering (skip loopback), emit to ring buffer
 - **Go responsibility**: all detection policy, workload resolution, alerting, response actions
 
-### opensnoop — GKE kernel 6.8 issue (unresolved)
+### opensnoop — Root Cause Confirmed + Decision
 
-**Symptom**: zero file events reach Go on GKE kernel 6.8. Process and network sensors work fine.
+**Root cause (confirmed 2026-06-10)**:
 
-**What we know**:
-- Tracepoints `sys_enter_openat` / `sys_exit_openat` exist on GKE nodes ✅
-- Pod runs without crash — BPF programs loaded and attached ✅
-- Zero file events in pod logs — not even from Java startup which opens hundreds of class files ❌
-- V3/V7/V9 consistently fail across multiple deploys with different binary builds
+`opensnoop.bpf.c` hooks `sys_enter_openat` (syscall 257). Alpine Linux's busybox (`eclipse-temurin:21-jre-alpine` base image) calls `SYS_open` (syscall 2) directly — a completely different syscall. Our tracepoint never fires for `sh` or `cat`.
 
-**Suspected cause**: `tgid != tid` filter in `handle_enter` (opensnoop.bpf.c line 72) may always be true for container processes on GKE kernel 6.8, silencing opensnoop entirely. But this is unconfirmed — `cat` is single-threaded (tgid == tid) and should pass the filter.
+Evidence from debug logs:
+- `runc:[2:INIT]` (Go binary, uses `openat`) → ✅ appears in logs
+- `sshd` (glibc, uses `openat`) → ✅ appears in logs
+- `sh`, `cat`, `busybox` → ❌ never appear, for any filename
 
-**Next step — Go-only diagnostic (no C change, no VM rebuild)**:
-Add one log line in `enrich()` for opensnoop events to count how many arrive in Go:
-```go
-case "opensnoop":
-    log.Printf("DBG file event received: pid=%d filename=%s", ev.Pid, processor.CString(ev.Filename[:]))
-    // ... rest of existing code
-```
-- If **zero** log lines → problem is in C/BPF layer → C change needed
-- If **events arrive but no alerts** → filename is garbage or rule not matching → Go fix only
+This explains why V3/V7/V9 have always failed. The `tgid != tid` theory from the previous handoff was wrong — the ring buffer IS active (~1000 events/sec), but all events are from non-busybox processes.
 
-**If C change is needed**: remove `tgid != tid` filter AND plan Go-side noise handling in the same change. Do not change C without planning both sides. Requires rebuild on GCP VM.
+**Industry research (2026-06-10)**:
+- **Falco** solves this by hooking `open + openat + openat2` — all three syscall tracepoints
+- **Tetragon** solves this by hooking `security_file_open` (kernel internal function via kprobe), which fires for ALL file-open syscall variants regardless of which one was called
 
-### The one open C question — ENOENT in opensnoop
+**Decision: Replace opensnoop.bpf.c with lsm-file.bpf.c using `lsm.s/file_open`**
 
-Current: ENOENT dropped (`bool valid = ret >= 0 || ret == -EACCES || ret == -EPERM`).
-Gap: container probing `/etc/shadow` on Alpine (doesn't exist) returns ENOENT → invisible.
-validate-gke.sh works around this by creating the file first.
-Decision deferred until opensnoop issue resolved.
+Chosen approach: **Option B — `SEC("lsm.s/file_open")` + `bpf_d_path()`**
+
+Rationale:
+- `lsm/file_open` fires for every file open regardless of syscall variant (open, openat, openat2, io_uring) — catches busybox, glibc, musl, everything
+- `bpf_d_path()` extracts the full resolved path from `struct file *` — single call, no two-probe hash map needed
+- Mirrors our existing `lsm/socket_connect` pattern in `lsm-connect.bpf.c` exactly
+- The `.s` (sleepable) designation is required for `bpf_d_path()` and is safe — `bpf_lsm_file_open` is in the kernel's sleepable LSM hooks set; `BPF_MAP_TYPE_RINGBUF` is allowed in sleepable programs
+- GKE kernel 6.8 supports sleepable LSM programs (5.10+) and `bpf_d_path()` (5.11+) ✅
+- Eliminates the two-probe enter/exit pattern and `pending_opens` hash map entirely — LSM hook fires after kernel validates the open (file exists, permissions checked), so ENOENT events are naturally absent with no extra filter needed
+
+Why not Tetragon's exact approach (kprobe/security_file_open + manual dentry walk):
+- Tetragon uses manual dentry walking in BPF to avoid the sleepable requirement — ~100 lines of complex BPF loop code
+- On GKE 6.8 we have `bpf_d_path()` available, making that complexity unnecessary
+
+**Implementation plan**:
+1. Create `kernel/lsm-file.bpf.c` — `SEC("lsm.s/file_open")` hook, `bpf_d_path()` for path, emit `file_event` to ring buffer
+2. Reuse existing `kernel/opensnoop.h` struct (`file_event`) — Go side unchanged
+3. Update `pkg/bpf/loader.go` — load and attach `lsm-file` instead of `opensnoop`
+4. Delete `kernel/opensnoop.bpf.c` (or keep as reference, rename)
+5. Remove `pending_opens` map and two-probe logic from the new C file
+6. Add V9 dedup fix in Go: change key from `pid:filename` to `comm:pid:filename` to handle runc→cat exec pattern
+7. Rebuild on GCP VM (`make rebuild`), push, redeploy
+
+**Also needed (Go only, no rebuild)**:
+- Remove existing debug logs (`DEBUG file-target`, `DEBUG opensnoop ringbuf`) once V3/V7/V9 pass
 
 ---
 
@@ -121,19 +143,21 @@ Deferred — implement after opensnoop issue resolved.
 
 | Test | Result | Root cause |
 |------|--------|------------|
-| V2 Shell spawn | ✅ PASS | Process sensor working |
-| V3 Shadow read | ❌ FAIL | opensnoop emits zero events on GKE kernel 6.8 |
-| V4 External connect | ✅ PASS | Network sensor working |
+| V2 Shell spawn | ✅ PASS | Process sensor (execsnoop) working |
+| V3 Shadow read | ❌ FAIL | **Root cause confirmed**: busybox uses SYS_open, probe covers SYS_openat only |
+| V4 External connect | ✅ PASS | Network sensor (lsm-connect) working |
 | V5 ai-service allowlist | ✅ PASS | |
 | V6 No FP gateway traffic | ✅ PASS | |
-| V7 SSH private key | ❌ FAIL | opensnoop emits zero events on GKE kernel 6.8 |
+| V7 SSH private key | ❌ FAIL | Same root cause as V3 |
 | V8 Network recon tool | ✅ PASS | Process sensor working |
-| V9 /etc/passwd recon | ❌ FAIL | opensnoop emits zero events on GKE kernel 6.8 |
+| V9 /etc/passwd recon | ❌ FAIL | Same root cause as V3 + dedup collision (runc→cat same PID) |
 | V10 Reverse shell | ✅ PASS | Process + network sensors working |
 
 **6 passed · 3 failed · 0 skipped**
 
-Note: validate-gke.sh targets `auth-service`. Both Docker VM (validate.sh) and GKE use the same service — hard to verify resolver correctness for other services. Consider switching GKE target to `provider-service` in a future session.
+Fix in progress: replacing `opensnoop.bpf.c` (SYS_openat tracepoint) with `lsm-file.bpf.c` (`lsm.s/file_open` + `bpf_d_path`). See BPF C Files section above.
+
+Note: validate-gke.sh targets `auth-service`. Consider switching GKE target to `provider-service` in a future session to verify resolver correctness across services.
 
 ---
 

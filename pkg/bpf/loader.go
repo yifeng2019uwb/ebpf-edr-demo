@@ -90,19 +90,11 @@ func (l *Loader) attachLinks() error {
 	}
 	l.links = append(l.links, processTp)
 
-	fileEnterTp, err := link.Tracepoint("syscalls", "sys_enter_openat",
-		l.fileObjs.HandleEnter, nil)
+	fileLsmLink, err := link.AttachLSM(link.LSMOptions{Program: l.fileObjs.HandleFileOpen})
 	if err != nil {
-		return fmt.Errorf("attaching file enter tracepoint: %w", err)
+		return fmt.Errorf("attaching lsm file_open hook: %w", err)
 	}
-	l.links = append(l.links, fileEnterTp)
-
-	fileExitTp, err := link.Tracepoint("syscalls", "sys_exit_openat",
-		l.fileObjs.HandleExit, nil)
-	if err != nil {
-		return fmt.Errorf("attaching file exit tracepoint: %w", err)
-	}
-	l.links = append(l.links, fileExitTp)
+	l.links = append(l.links, fileLsmLink)
 
 	lsmLink, err := link.AttachLSM(link.LSMOptions{Program: l.lsmObjs.HandleConnect})
 	if err != nil {
