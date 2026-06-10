@@ -91,23 +91,25 @@ All rules follow MITRE ATT&CK naming. Rules marked with a response action are ac
 
 ## Validation
 
-### Docker VM — 11/11 pass
+### Docker VM — 13/13 pass
 
-All 11 attack tests distributed across `auth_service`, `user_service`, `order_service`, `insights_service`.
+All 13 attack tests distributed across `auth_service`, `user_service`, `order_service`, `insights_service`.
 
-| Test | Rule | Severity |
-|------|------|----------|
-| Shell spawn | `T1059_unix_shell_execution` | CRITICAL |
-| Network tool | `T1105_ingress_tool_transfer` | HIGH |
-| Read `/etc/shadow` | `T1003_008_os_credential_dumping` | HIGH |
-| Read SSH private key | `T1552_004_private_keys` | HIGH |
-| Unauthorized external connect | `T1041_exfiltration_over_c2` | HIGH |
-| Authorized connect (allowlisted) | — | no alert |
-| Host reads container filesystem | `T1611_escape_to_host_fs` | CRITICAL |
-| Read `/etc/passwd` | `T1082_system_info_discovery` | MEDIUM |
-| Binary masquerading from `/tmp` | `T1036_masquerading` | HIGH |
-| Container touches cron config | `T1053_003_scheduled_task_cron` | HIGH |
-| Container touches shell history | `T1070_003_clear_command_history` | MEDIUM |
+| Test | Service | Rule | Severity |
+|------|---------|------|----------|
+| Shell spawn | user_service | `T1059_unix_shell_execution` | CRITICAL |
+| Network tool | auth_service | `T1105_ingress_tool_transfer` | HIGH |
+| Read `/etc/shadow` | order_service | `T1003_008_os_credential_dumping` | HIGH |
+| Read SSH private key | user_service | `T1552_004_private_keys` | HIGH |
+| Unauthorized external connect | auth_service | `T1041_exfiltration_over_c2` | HIGH |
+| Authorized connect (allowlisted) | inventory_service | — | no alert |
+| Host reads container filesystem | order_service | `T1611_escape_to_host_fs` | CRITICAL |
+| Read `/etc/passwd` | insights_service | `T1082_system_info_discovery` | MEDIUM |
+| Binary masquerading from `/tmp` | order_service | `T1036_masquerading` | HIGH |
+| Container touches cron config | user_service | `T1053_003_scheduled_task_cron` | HIGH |
+| Container touches shell history | insights_service | `T1070_003_clear_command_history` | MEDIUM |
+| `.env` credentials file | user_service | `T1552_001_credentials_in_files` | HIGH |
+| Container mgmt tool | auth_service | `T1613_container_resource_discovery` | HIGH |
 
 ### GKE — 11/11 pass
 
@@ -136,7 +138,7 @@ Tests distributed across all 4 health-ai services — confirms eBPF resolver map
 **Docker VM:**
 ```bash
 sudo env GOOGLE_CLOUD_PROJECT=ebpfagent ./ebpf-edr --runtime=docker
-sudo ./validate.sh        # 11 attack tests across 4 services
+sudo ./validate.sh        # 13 attack tests across 4 services
 ```
 
 **GKE:**

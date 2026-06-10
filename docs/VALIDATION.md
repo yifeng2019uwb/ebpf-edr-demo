@@ -72,7 +72,7 @@ docker exec order-processor-auth_service nc -w 2 1.1.1.1 80
 level=HIGH rule=T1105_ingress_tool_transfer service=auth_service comm=nc action=kill_process
 ```
 
-**Note**: validate.sh copies `nc` from host if not present in container.
+**Note**: validate.sh copies `nc` from host if not present in container. If neither nc/wget is in the container nor `nc` on the host, the test is silently skipped. Rule correctness confirmed by GKE V8 (wget in auth-service image).
 
 ---
 
@@ -303,8 +303,8 @@ level=HIGH rule=T1613_container_resource_discovery service=auth_service comm=/us
 - [x] T9  — HIGH `T1036_masquerading`
 - [x] T10 — HIGH `T1053_003_scheduled_task_cron`
 - [x] T11 — MEDIUM `T1070_003_clear_command_history`
-- [ ] T12 — HIGH `T1552_001_credentials_in_files` (`.env` file — not yet run)
-- [ ] T13 — HIGH `T1613_container_resource_discovery` (docker in container — not yet run)
+- [x] T12 — HIGH `T1552_001_credentials_in_files` `.env` file (user_service)
+- [x] T13 — HIGH `T1613_container_resource_discovery` docker in container (auth_service)
 
 **False positive check — confirmed clean:**
 

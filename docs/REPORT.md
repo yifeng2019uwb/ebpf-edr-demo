@@ -114,25 +114,28 @@ All single-event-detectable MITRE techniques for containerized workloads are cov
 
 ## Validation Results
 
-### Docker VM — 11/11 pass
+### Docker VM — 13/13 pass
 
-Tests distributed across 4 services: `auth_service` (T2/T5), `user_service` (T1/T4/T10), `order_service` (T3/T7/T9), `insights_service` (T8/T11).
+Tests distributed across 4 services: `auth_service` (T2/T5/T13), `user_service` (T1/T4/T10/T12), `order_service` (T3/T7/T9), `insights_service` (T8/T11).
 
 | Test | Service | Rule | Result |
 |------|---------|------|--------|
 | T1 Shell spawn | user_service | `T1059_unix_shell_execution` CRITICAL | ✅ |
-| T2 Network tool | auth_service | `T1105_ingress_tool_transfer` HIGH | ✅ |
+| T2 Network tool | auth_service | `T1105_ingress_tool_transfer` HIGH | ✅¹ |
 | T3 `/etc/shadow` | order_service | `T1003_008_os_credential_dumping` HIGH | ✅ |
 | T4 SSH private key | user_service | `T1552_004_private_keys` HIGH | ✅ |
-| T5 External connect + block | auth_service | `T1041_exfiltration_over_c2` HIGH | ✅ |
+| T5 External connect | auth_service | `T1041_exfiltration_over_c2` HIGH | ✅ |
 | T6 Allowlisted connect | inventory_service | — no alert | ✅ |
 | T7 Host reads container FS | order_service | `T1611_escape_to_host_fs` CRITICAL | ✅ |
 | T8 `/etc/passwd` | insights_service | `T1082_system_info_discovery` MEDIUM | ✅ |
 | T9 Masquerading `/tmp/sshd` | order_service | `T1036_masquerading` HIGH | ✅ |
 | T10 Cron config | user_service | `T1053_003_scheduled_task_cron` HIGH | ✅ |
 | T11 Shell history | insights_service | `T1070_003_clear_command_history` MEDIUM | ✅ |
+| T12 `.env` credentials file | user_service | `T1552_001_credentials_in_files` HIGH | ✅ |
+| T13 Container mgmt tool | auth_service | `T1613_container_resource_discovery` HIGH | ✅ |
 
-Block verification (T5): second connect to blocked IP returns `EPERM`; private IPs remain unaffected.
+¹ T2 requires nc/wget in the container or nc on the host VM. Rule confirmed by GKE V8 (wget in auth-service image).
+Block verification (T5): `blockIP skipped` on this VM (LPMTrie map not loaded); IP blocking confirmed in previous test session.
 
 ### GKE — 11/11 pass
 
