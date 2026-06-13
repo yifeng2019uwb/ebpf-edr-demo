@@ -28,8 +28,6 @@ spec:
           value: "${REGION}"
         - name: CLUSTER_NAME
           value: "${CLUSTER_NAME}"
-        - name: GOOGLE_CLOUD_PROJECT
-          value: "${GOOGLE_CLOUD_PROJECT}"
         - name: CONTAINER_RUNTIME_ENDPOINT
           value: unix:///run/containerd/containerd.sock
         securityContext:
