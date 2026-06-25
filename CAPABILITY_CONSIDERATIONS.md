@@ -1,60 +1,61 @@
 # Capability Considerations
 
-Checkpoint for evaluating features to add next. Rooncyber used as industry reference.
+Checkpoint for evaluating features to add next. Compared against industry standard (Falco).
 
 ---
 
 ## Monitoring Capabilities
 
-| Capability            | What                                          | C  | RC | F |
-|:---|:---|:---:|:---:|:---:|
-| Command-Line Args     | Full process cmdline (not just binary name)   | ❌ | ✅ | ✅ |
-| DNS Monitoring        | Capture domain queries (C2, exfil detection)  | ❌ | ✅ | ✅ |
-| Privilege Escalation  | Detect sudo, setuid, CAP changes              | ❌ | ✅ | ✅ |
-| Kernel Module Tracking | Monitor loaded kernel modules                | ❌ | ✅ | ✅ |
+| Capability            | What                                          | Current | Falco |
+|:---|:---|:---:|:---:|
+| Command-Line Args     | Full process cmdline (not just binary name)   | ❌ | ✅ |
+| DNS Monitoring        | Capture domain queries (C2, exfil detection)  | ❌ | ✅ |
+| Privilege Escalation  | Detect sudo, setuid, CAP changes              | ❌ | ✅ |
+| Kernel Module Tracking | Monitor loaded kernel modules                | ❌ | ✅ |
 
 ---
 
 ## Response Capabilities
 
-| Capability        | What                                  | C  | RC | F |
-|:---|:---|:---:|:---:|:---:|
-| Network Blocking  | Block unauthorized connections        | ❌ Disabled | ✅ | ❌ |
-| Process Kill      | Terminate malicious processes         | ✅ | ✅ | ⚠️ |
-| Process Isolation | Isolate process (network namespace)   | ❌ | ✅ | ❌ |
-| File Quarantine   | Prevent access to suspicious files    | ❌ | ✅ | ❌ |
+| Capability        | What                                  | Current | Falco |
+|:---|:---|:---:|:---:|
+| Network Blocking  | Block unauthorized connections        | ❌ Disabled | ❌ |
+| Process Kill      | Terminate malicious processes         | ✅ | ⚠️ |
+| Process Isolation | Isolate process (network namespace)   | ❌ | ✅ |
+| File Quarantine   | Prevent access to suspicious files    | ❌ | ❌ |
 
 ---
 
 ## Detection Capabilities
 
-| Capability                | What                              | C  | RC | F |
-|:---|:---|:---:|:---:|:---:|
-| Single-Event Rules        | Detect from one event             | ✅ 15 | ✅ All | ✅ 100+ |
-| Multi-Event Correlation   | Detect attack chains              | ❌ | ✅ | ❌ |
-| Behavioral Baselines      | Learn normal, alert on deviation  | ❌ | ✅ | ❌ |
-| Anomaly Detection         | Detect statistical deviations     | ❌ | ✅ | ❌ |
-| Threat Intelligence       | Integration with malware/C2 feeds | ❌ | ✅ | ⚠️ |
+| Capability                | What                              | Current | Falco |
+|:---|:---|:---:|:---:|
+| Single-Event Rules        | Detect from one event             | ✅ 15 | ✅ 100+ |
+| Multi-Event Correlation   | Detect attack chains              | ❌ | ✅ |
+| Behavioral Baselines      | Learn normal, alert on deviation  | ❌ | ✅ |
+| Anomaly Detection         | Detect statistical deviations     | ❌ | ✅ |
+| Threat Intelligence       | Integration with malware/C2 feeds | ❌ | ⚠️ |
 
 ---
 
 ## Storage & Visibility
 
-| Capability            | What                          | C  | RC | F |
-| Local File Logging    | Write alerts to local file    | ✅ | ✅ | ✅ |
-| Centralized Logging   | Queryable database storage    | ❌ | ✅ | ✅ |
-| Real-Time Dashboard   | Live alert monitoring UI      | ❌ | ✅ | ❌ |
-| Alert Search          | Query historical alerts       | ❌ | ✅ | ⚠️ |
+| Capability            | What                          | Current | Falco |
+|:---|:---|:---:|:---:|
+| Local File Logging    | Write alerts to local file    | ✅ | ✅ |
+| Centralized Logging   | Queryable database storage    | ❌ | ✅ |
+| Real-Time Dashboard   | Live alert monitoring UI      | ❌ | ✅ |
+| Alert Search          | Query historical alerts       | ❌ | ⚠️ |
 
 ---
 
 ## Rule Coverage
 
-| Metric            | Y                 | RC                                | F |
-|:---|:---:|:---:|:---:|
-| MITRE Techniques  | 15 (single-event) | Unknown                           | 100+ |
-| Detection Depth   | Signature-based   | Signature + Behavioral + Stateful | Signature-based |
-| FP Tuning         | Manual whitelists | Automated baselines               | Manual tuning |
+| Metric            | Current | Falco |
+|:---|:---|:---|
+| MITRE Techniques  | 15 (single-event) | 100+ |
+| Detection Depth   | Signature-based | Signature + Behavioral + Stateful |
+| FP Tuning         | Manual whitelists | Automated baselines |
 
 ---
 

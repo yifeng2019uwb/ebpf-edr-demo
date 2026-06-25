@@ -37,6 +37,7 @@ Enricher → Detector → Responder → AlertHandler
 **Project Overview:**
 - [MITRE-COVERAGE.md](docs/MITRE-COVERAGE.md) — 15 techniques covered, detection rules
 - [DETECTION-POLICY.md](docs/DETECTION-POLICY.md) — whitelists, false positive handling
+- [CAPABILITY_CONSIDERATIONS.md](CAPABILITY_CONSIDERATIONS.md) — evaluate features to add next
 
 **Testing & Validation:**
 - [VALIDATION.md](docs/VALIDATION.md) — Docker VM test guide
