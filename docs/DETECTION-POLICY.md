@@ -1,7 +1,7 @@
 # Detection Policy
 
-This document covers **what we suppress and why**, organized by environment.
-For what we detect and MITRE mapping, see [MITRE-COVERAGE.md](MITRE-COVERAGE.md).
+This document covers **suppression policies and rationale**, organized by environment.
+For detection rules and MITRE mapping, see [MITRE-COVERAGE.md](MITRE-COVERAGE.md).
 For implementation details and technical notes, see [NOTES.md](NOTES.md).
 
 ---

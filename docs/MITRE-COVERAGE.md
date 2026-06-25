@@ -2,9 +2,12 @@
 
 Scope: runtime-detectable container/K8s techniques only.
 
-Full ATT&CK has 200+ techniques. Of those, ~35 apply to containerized GKE workloads.
-Of those 35, only ~15 are detectable via eBPF at runtime via single-event detection —
-the rest require image scanning, CI/CD pipeline hooks, WAF, or stateful behavioral analysis.
+**Framework context** (MITRE ATT&CK Enterprise v18, October 2025):
+- Total techniques: 200+ across 14 tactics
+- Container-applicable techniques: ~35 (via [MITRE ATT&CK Containers Matrix](https://attack.mitre.org/matrices/enterprise/containers/))
+- Single-event runtime-detectable (eBPF/syscall): ~15
+  - Industry reference: [Falco detects ~20-25 container techniques](https://www.sysdig.com/blog/mitre-defense-evasion-falco) via syscalls
+  - This project (ebpf-edr-demo): 15 implemented and validated
 
 **Current coverage: 15 of ~15 single-event-detectable techniques**
 
@@ -212,3 +215,21 @@ sudo ./validate.sh       # runs all 13 tests on Docker VM (distributed across se
 
 T1–T11 validated on GCP Docker VM (`instance-20260318-023006`) as of 2026-06-10. T12–T13 pending.
 All 11 GKE tests validated on health-ai cluster (V2–V10: 2026-06-10, V11–V12: 2026-06-09).
+
+---
+
+## Sources & References
+
+**MITRE ATT&CK Framework:**
+- [MITRE ATT&CK Official Site](https://attack.mitre.org/) — Enterprise matrix, October 2025 (v18)
+- [MITRE ATT&CK Containers Matrix](https://attack.mitre.org/matrices/enterprise/containers/) — Container/K8s specific techniques
+- [MITRE ATT&CK Updates (October 2025)](https://attack.mitre.org/resources/updates/updates-october-2025/) — 216 techniques, 14 tactics
+
+**Runtime Detection (eBPF/Syscall):**
+- [Sysdig Falco: MITRE ATT&CK Defense Evasion](https://www.sysdig.com/blog/mitre-defense-evasion-falco) — Falco coverage (~20-25 techniques)
+- [Trend Micro: Container Security Detection Maps MITRE](https://www.trendmicro.com/en_us/research/25/a/mitre-attack-container-security-detection.html) — Runtime detection strategies
+- [Orca Security: Container Runtime Security Guide](https://orca.security/resources/blog/what-is-container-runtime-security/) — eBPF-based detection overview
+
+**Scope Validation:**
+- [RedHat: Protecting Kubernetes Against MITRE ATT&CK](https://www.redhat.com/en/blog/protecting-kubernetes-against-mitre-attck-execution) — K8s specific techniques
+- [Tigera: Using MITRE ATT&CK for Container Security](https://www.tigera.io/blog/using-the-mitre-attck-framework-to-understand-container-security/) — Detection coverage gaps
