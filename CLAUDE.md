@@ -14,3 +14,15 @@ Current files are correct scope:
 
 ## Think before coding
 Read HANDOFF.md first. Discuss design before writing any code.
+
+## No TODO comments in personal projects
+This is a personal learning project, not a production product. Never use TODO/FIXME/NOTE comments implying future commitment.
+Instead, use plain comments explaining current state or design rationale.
+
+Examples:
+- ❌ `// TODO: Add AWS support` 
+- ✅ `// AWS support (design ready, not yet validated)`
+- ❌ `// FIXME: optimize this later`
+- ✅ `// currently sequential, could parallelize if needed`
+
+Be honest about scope: design can be extensible, but don't promise future work in a learning project.

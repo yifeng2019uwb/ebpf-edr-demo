@@ -20,6 +20,23 @@
 
 ---
 
+## False Positives & Whitelisting
+
+### Known False Positives (Phase 1 Testing)
+
+**T1611_escape_to_host_ns on open-iscsi:**
+- Triggered when `open-iscsi/net-interface-handler` runs in unknown namespace
+- Legitimate system service, not an escape attempt
+- **Question:** Should we auto-whitelist system services, or let Phase 2 behavioral detection learn patterns?
+
+### Whitelist Tuning Strategy
+
+1. **Manual whitelisting:** Add known-safe processes to `rules/default.yaml`
+2. **Behavioral detection (Phase 2):** Learn baseline → alert on deviations
+3. **Example:** `open-iscsi` always unknown (normal) vs. `malware` suddenly unknown (anomaly)
+
+---
+
 ## Deployment Workflow
 
 ### Go-only changes (safe on Mac)

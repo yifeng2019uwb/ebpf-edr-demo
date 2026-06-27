@@ -1,6 +1,6 @@
 # Session Handoff
 
-**Last Updated:** 2026-06-25
+**Last Updated:** 2026-06-27 (Phase 1 Complete — tested on DigitalOcean K8s ✅)
 
 ---
 
@@ -25,45 +25,78 @@
 
 ## Upcoming Tasks
 
-### Phase 1: MITRE Deep Review + Rules Refactoring (NEXT)
+### Phase 1: MITRE Deep Review + Rules Refactoring (COMPLETE ✅)
 
 **Goal:** Move rules from hardcoded Go to YAML format while learning MITRE attack patterns.
 
-**Why now:**
-- Rules are currently buried in `pkg/detector/policy.go` (hard to review)
-- YAML format enables per-service customization (Phase 3)
-- Forces understanding of each MITRE technique while refactoring
+**Completed:**
+1. ✅ Created `pkg/rules/loader.go` — Falco-style YAML loader with environment detection
+   - ListDef, MacroDef, Detection, RulesDB structures
+   - LoadRules(), CompileRules(), GetList(), GetMacro() functions
+   - Consolidated DetectEnvironment() with context timeout (1.5s)
+   - MergeWhitelists() for cloud agents + K8s infrastructure
+   - LoadRulesForEnvironment() integration function
 
-**Plan:**
-1. Create `pkg/rules/` package — YAML loader
-2. Add `rules/default.yaml` — move all rules from policy.go
-3. Refactor `pkg/detector/` to load rules from YAML
-4. Test: ensure identical behavior (same alerts on same tests)
-5. Document each rule in `/workspace/learning/ebpf-edr/MITRE-STUDY.md`
+2. ✅ Created `rules/default.yaml` — all rules from policy.go (100% coverage)
+   - 20+ lists (whitelists, credentials, MITRE indicators)
+   - 20+ macros (conditions with clear state documentation)
+   - 14 detections (MITRE techniques)
+   - Network policy (allowed_ports, allowed_services)
+   - Ignore namespaces (kube-system, gmp-system, gke-managed-cim)
+
+3. ✅ Created `pkg/detector/yaml_detector.go` — Detection using loaded rules
+   - YAMLDetector class using RulesDB instead of hardcoded policy.go
+   - All detection methods (process, file, network) ported from rules.go
+   - Reuses detection logic, only data source changed to YAML
+
+4. ✅ Integrated loader into pipeline
+   - Updated `cmd/edr-monitor/main.go` to load YAML rules
+   - Calls LoadRulesForEnvironment() at startup
+   - Creates YAMLDetector with loaded rules
+   - Auto-detects environment, merges whitelists
+
+5. ✅ Environment detection refactored
+   - Consolidated into single DetectEnvironment() function
+   - Context timeout prevents hanging (1.5s)
+   - Tries DigitalOcean, GCP, defaults to local
+   - Shared tryMetadata() helper (no code duplication)
+
+6. ✅ K8s DaemonSet verified
+   - k8s/ebpf-edr-ds.yaml already has hostNetwork: true, hostPID: true
+   - All necessary volume mounts for eBPF and metadata access
+
+**Ready for Testing:**
+- Build: `make build`
+- Deploy: k8s/ebpf-edr-ds.yaml (unchanged)
+- Test on DigitalOcean K8s: environment detection, whitelist merging, MITRE rules
 
 **Learning resources:**
 - `/workspace/learning/ebpf-edr/LEARNING_PLAN.md` — study structure
 - `/workspace/learning/ebpf-edr/MITRE-STUDY.md` — technique deep-dives (started with T1552)
 - `/workspace/learning/ebpf-edr/DISCUSSION_SUMMARY.md` — context & reasoning
 
-**YAML structure (example):**
-```yaml
-rules:
-  whitelist:
-    processes: [sshd, runc, dockerd, containerd, getconf]
-  
-  detections:
-    T1552_private_keys:
-      dir_prefixes: [/root/.ssh/, /home/.ssh/]
-      suffixes: [.key, .pem, id_rsa, id_ed25519]
-    
-    T1036_masquerading:
-      suspicious_paths: [/tmp/, /dev/shm/, /var/tmp/, /run/user/]
-  
-  network:
-    allowed_ports: [6543]  # Supabase
-    allowed_services: [inventory-service, inventory_service]
-```
+---
+
+## Phase 1 Testing Results ✅
+
+**Completed:** 2026-06-27 (DigitalOcean K8s)
+
+**Verification:**
+1. ✅ Build: `make build` — success
+2. ✅ Environment detection: "rules: detected DigitalOcean environment" ✓
+3. ✅ Whitelist merging: "rules: merged 2 cloud agents" ✓
+4. ✅ Detection working: T1059_unix_shell_execution triggered correctly
+5. ✅ YAML rules loaded: no parsing errors
+6. ✅ yaml_detector integration: working identically to old rules.go
+
+**Test Observations:**
+- Shell spawn in container (T1059) — **correctly detected** ✓
+- System process in unknown namespace (open-iscsi T1611) — **detected but false positive**
+  - Question: Should open-iscsi be whitelisted? See Phase 2 notes.
+
+**Next: Phase 2 (Whitelist Tuning + Behavioral Detection)**
+
+---
 
 ### Phase 2: Behavioral Detection (Later)
 
@@ -76,6 +109,32 @@ rules:
 **Goal:** Let clients customize rules via YAML at deployment.
 
 **Dependencies:** Phase 1 (rules in YAML) + Phase 2 (behavioral baseline understanding)
+
+---
+
+## Design Clarifications (This Session)
+
+**Workload State Values:**
+- `resolved` — container/pod found in resolver cache (normal path for Docker + K8s)
+- `host` — host process (all detection rules skipped)
+- `pending` — container/pod starting up (grace period, retried up to 60s)
+- `unknown` — unresolved namespace (possible escape attempt)
+
+**Environment-Specific Whitelists:**
+- Base whitelists: `whitelisted_processes`, `whitelisted_unknown_ns_procs`
+- Cloud agents merged at runtime: GCP getconf, DigitalOcean droplet-agent
+- K8s infrastructure merged at runtime: GKE pause container, DigitalOcean specific processes
+- Single YAML file works everywhere; merging happens based on detected environment
+
+**Exception vs Condition Logic:**
+- Use exceptions (`exception_macros: [is_whitelisted_proc]`) to suppress alerts
+- Use conditions for positive checks (e.g., `workload.state == unknown`)
+- Avoid negative logic in conditions; use exceptions instead
+
+**No TODO/FIXME in Personal Projects:**
+- Design can be extensible (support multiple clouds, AWS/Azure commented as ready)
+- But don't promise future work with TODO comments
+- Be honest about scope: "design ready, not yet validated" instead of "TODO"
 
 ---
 

@@ -19,6 +19,7 @@ import (
 	"ebpf-edr-demo/pkg/bpf"
 	"ebpf-edr-demo/pkg/detector"
 	"ebpf-edr-demo/pkg/pipeline"
+	"ebpf-edr-demo/pkg/rules"
 	"ebpf-edr-demo/pkg/workload"
 )
 
@@ -78,6 +79,11 @@ func main() {
 	}
 	defer loader.Close()
 
+	rulesDB, err := rules.LoadRulesForEnvironment("rules/default.yaml")
+	if err != nil {
+		log.Fatalf("loading rules from YAML: %v", err)
+	}
+
 	rawCh := make(chan pipeline.RawEvent, rawChCap)
 	enrichedCh := make(chan pipeline.EnrichedEvent, enrichedChCap)
 	alertCh := make(chan alert.Alert, alertChCap)
@@ -90,7 +96,7 @@ func main() {
 	var pendingMu sync.Mutex
 	pendingBuf := make(map[uint32][]pendingEntry)
 
-	det := detector.NewRuleDetector()
+	det := detector.NewYAMLDetector(rulesDB)
 	responder := detector.NewResponder(nil)
 
 	// Producers

@@ -7,6 +7,7 @@ require (
 	cloud.google.com/go/pubsub/v2 v2.6.0
 	github.com/cilium/ebpf v0.21.0
 	github.com/gorilla/websocket v1.5.3
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (

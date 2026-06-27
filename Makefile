@@ -4,9 +4,11 @@ GHCR_IMAGE := ghcr.io/yifeng2019uwb/ebpf-edr:latest
 .PHONY: generate build rebuild test vet clean run_ebpf run-docker run-alert-router infra-up infra-down infra-refresh github-release docker-push-ghcr docker-push-ghcr-prebuilt
 
 ## generate — compile .bpf.c → .o and regenerate Go wrappers in pkg/bpf/
-## Requires: clang, llvm, libbpf-dev (run on GCP VM, not Mac)
+## Requires: clang, llvm, libbpf-dev, bpftool (run on Linux VM, not Mac)
 generate:
+	bpftool btf dump file /sys/kernel/btf/vmlinux format c > kernel/vmlinux.h
 	go generate ./pkg/bpf/
+	rm kernel/vmlinux.h
 
 ## build — compile the EDR agent binary (cross-compiles to linux/amd64 from any host)
 build:

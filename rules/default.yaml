@@ -1,0 +1,385 @@
+rules:
+
+  # ─────────────────────────────────────────────────────────
+  # LISTS — Reusable collections
+  # ─────────────────────────────────────────────────────────
+
+  lists:
+
+    # Shell binaries — full paths to shell interpreters.
+    # Two detection paths for shell execution (different attack signals):
+    #   1. Exec path (proc.name): catches when shell process is SPAWNED
+    #   2. File path (fd.name): catches when shell BINARY is ACCESSED
+    # Currently: Exec path is primary (detects T1059 instantly when process starts).
+    # Future behavioral detection: File path deviations (shell accessed from /tmp vs /bin).
+    - name: shell_binaries
+      items: [/bash, /sh, /zsh, /dash]
+
+    # Shell processes — process names (without path) of shell interpreters.
+    # Used in exec detection: proc.name in (shell_processes)
+    # eBPF captures: when execsnoop (eBPF) traces execve() syscall
+    # Signal: shell process spawned in container (T1059 remote code execution).
+    - name: shell_processes
+      items: [bash, sh, zsh, dash]
+
+    # Network recon tools — raw socket utilities used for scanning.
+    # Presence in container indicates network reconnaissance.
+    - name: network_tools
+      items: [nc, ncat, wget]
+
+    # Container management tools — docker, kubectl, etc.
+    # T1613 — executing from inside container indicates resource discovery.
+    - name: container_mgmt_tools
+      items: [kubectl, docker, crictl, ctr, podman]
+
+    # SSH key directories — where private keys are typically stored.
+    # T1552.004 — reading these is CRITICAL credential access attempt.
+    - name: ssh_key_dirs
+      items: [/root/.ssh/, /home/.ssh/]
+
+    # SSH key file suffixes — specific private key file names.
+    # T1552.004 — patterns to match private keys by extension.
+    - name: ssh_key_suffixes
+      items: [.key, .pem, id_rsa, id_ed25519]
+
+    # Credential file directories — Docker secrets mount.
+    # T1552.001 — where application secrets may be stored.
+    - name: credential_file_dirs
+      items: [/run/secrets/]
+
+    # Credential file suffixes — .env files containing secrets.
+    # T1552.001 — environment variables often contain passwords.
+    - name: credential_file_suffixes
+      items: [.env]
+
+    # Sensitive system files — shadow, passwd, group.
+    # T1082 (system discovery) and T1003.008 (credential dumping).
+    - name: sensitive_system_files
+      items: [/etc/shadow, /etc/passwd, /etc/group]
+
+    # Cron configuration files — persistence mechanism.
+    # T1053.003 — containers should never access cron files.
+    - name: cron_paths
+      items:
+        - /etc/cron.d/
+        - /etc/cron.hourly/
+        - /etc/cron.daily/
+        - /etc/cron.weekly/
+        - /etc/cron.monthly/
+        - /var/spool/cron/
+        - /etc/crontab
+
+    # Shell history files — attacker covers tracks.
+    # T1070.003 — accessing these indicates cleanup of evidence.
+    - name: shell_history_suffixes
+      items: [.bash_history, .zsh_history, .ash_history, .sh_history]
+
+    # Container filesystem paths — Docker overlay layers.
+    # T1611 — reading these indicates escape to host filesystem.
+    - name: container_fs_paths
+      items: [/var/lib/docker/overlay2/, /run/containerd/]
+
+    # Host init process directory — /proc/1/ accessible only from host.
+    # T1611 — container reading this indicates namespace escape attempt.
+    - name: proc_escape_paths
+      items: [/proc/1/]
+
+    # Allowed /proc/1/ reads — stat, status, cmdline are read-only.
+    # Monitoring tools (prometheus, redis) legitimately read these.
+    - name: proc_escape_allowed
+      items: [/proc/1/stat, /proc/1/status, /proc/1/cmdline]
+
+    # Suspicious binary paths — where executables shouldn't be.
+    # T1036 — masquerading detects binaries running from writable directories.
+    - name: suspicious_exec_paths
+      items: [/tmp/, /dev/shm/, /var/tmp/, /run/user/]
+
+    # Whitelisted processes — known safe tools that shouldn't alert.
+    # System services like sshd, runc, dockerd are expected.
+    - name: whitelisted_processes
+      items: [sshd, runc, dockerd, containerd, getconf]
+
+    # Cloud provider agent binaries — whitelisted per environment.
+    # Conditionally merged at runtime based on detected environment.
+    - name: gcp_cloud_agents
+      items: [getconf]
+
+    # AWS and Azure support (design extensible, currently only validating GCP + DigitalOcean)
+    # - name: aws_cloud_agents
+    #   items: [amazon-ssm-agent]
+    # - name: azure_cloud_agents
+    #   items: [waagent]
+
+    - name: digitalocean_cloud_agents
+      items: [droplet-agent, do-agent]
+
+    # K8s infrastructure processes — common across all K8s distributions.
+    # These run outside pod namespaces (on nodes) but are legitimate.
+    - name: k8s_infrastructure_procs
+      items:
+        - iptables                 # kube-proxy network rules
+        - iptables-legacy
+        - iptables-restore
+        - ip6tables
+        - conntrack
+        - ip                       # iproute2 — route/addr management
+        - kube-proxy               # K8s network proxy
+        - systemd-sysctl           # node sysctl configuration
+        - bridge-network-interface # udev network bridge setup
+
+    # GKE-specific infrastructure processes.
+    # Conditionally merged at runtime when environment is detected as GCP.
+    - name: gke_infrastructure_procs
+      items: [pause]
+
+    # DigitalOcean-specific infrastructure processes.
+    # Conditionally merged at runtime when environment is detected as DigitalOcean.
+    - name: digitalocean_infrastructure_procs
+      items: []
+
+    # Whitelisted unknown namespace procs — merged from base + environment-specific lists.
+    # Built at runtime by combining k8s_infrastructure_procs + environment-specific items.
+    - name: whitelisted_unknown_ns_procs
+      items: []
+
+    # Whitelisted file access processes — known safe file readers.
+    # runc, curl, id, bash legitimately read system files at startup.
+    - name: whitelisted_file_access_procs
+      items: ["runc:[2:INIT]", "runc:[1:CHILD]", runc, curl, id, systemd-logind, bash, containerd-shim, containerd, dockerd]
+
+    # PEM file exclusions — CA bundles, not private keys.
+    # Python certifi library and requests load these on every HTTPS request.
+    - name: pem_exclude_paths
+      items: [/site-packages/, /certifi/]
+
+    # Private IP ranges — RFC 1918 + loopback + link-local.
+    # Used to exclude internal connections from external communication detection.
+    - name: private_ranges
+      items:
+        - 127.0.0.0/8           # IPv4 loopback
+        - 10.0.0.0/8            # RFC 1918 private
+        - 172.16.0.0/12         # RFC 1918 private
+        - 192.168.0.0/16        # RFC 1918 private
+        - 169.254.0.0/16        # Link-local (APIPA)
+        - ::1/128               # IPv6 loopback
+        - fc00::/7              # IPv6 unique local
+        - fe80::/10             # IPv6 link-local
+
+  # ─────────────────────────────────────────────────────────
+  # MACROS — Reusable conditions
+  # ─────────────────────────────────────────────────────────
+
+  macros:
+
+    # Spawned shell — process is a shell interpreter.
+    # Base condition for T1059 (command & scripting execution).
+    - name: spawned_shell
+      condition: proc.name in (shell_processes)
+
+    # Is container — workload resolved to a known container/pod.
+    # Includes both Docker containers and K8s pods (anything non-host in the resolver cache).
+    # States: resolved = known container/pod in cache; host = host process; pending = startup grace period; unknown = unresolved.
+    - name: is_container
+      condition: workload.state == resolved
+
+    # Is unknown namespace — workload state unresolved (potential escape).
+    # Process in an unresolved namespace indicates possible escape from container to host.
+    # Used for T1611 escape detection. States: unknown = mnt_ns_id not found in resolver cache after grace period.
+    - name: is_unknown_namespace
+      condition: workload.state == unknown
+
+    # Is whitelisted process — process in known-good list.
+    # Used as exception: suppress alert if process is legitimately allowed.
+    - name: is_whitelisted_proc
+      condition: proc.name in (whitelisted_processes)
+
+    # Accessing SSH keys directory — opening /root/.ssh/ or /home/.ssh/.
+    # T1552.004 — private key access (CRITICAL severity).
+    - name: accessing_ssh_keys_dir
+      condition: fd.name in (ssh_key_dirs)
+
+    # Accessing SSH key file — opening .key, .pem, id_rsa, etc.
+    # T1552.004 — specific private key file access.
+    - name: accessing_ssh_key_file
+      condition: fd.name in (ssh_key_suffixes)
+
+    # Accessing credentials file — opening .env files.
+    # T1552.001 — credentials stored in plain-text files.
+    - name: accessing_credentials_file
+      condition: fd.name in (credential_file_suffixes)
+
+    # Accessing sensitive system file — reading passwd, shadow, group.
+    # T1082 (discovery) and T1003.008 (credential dumping).
+    - name: accessing_sensitive_system_file
+      condition: fd.name in (sensitive_system_files)
+
+    # Accessing cron file — modifying scheduled tasks.
+    # T1053.003 — persistence mechanism (containers shouldn't access).
+    - name: accessing_cron_file
+      condition: fd.name in (cron_paths)
+
+    # Accessing history file — reading/writing shell history.
+    # T1070.003 — attacker covering tracks by clearing history.
+    - name: accessing_history_file
+      condition: fd.name in (shell_history_suffixes)
+
+    # Accessing container filesystem — reading Docker overlay layers.
+    # T1611 — escape to host by accessing container's filesystem data.
+    - name: accessing_container_fs
+      condition: fd.name in (container_fs_paths)
+
+    # Accessing proc escape path — reading /proc/1/ outside allowed files.
+    # T1611 — escape attempt via procfs (not allowed read-only files).
+    - name: accessing_proc_escape
+      condition: fd.name in (proc_escape_paths) and fd.name not_in (proc_escape_allowed)
+
+    # External connection — outbound socket to non-private IP.
+    # T1041 — exfiltration over C2 channel.
+    - name: external_connection
+      condition: evt.type == socket_connect and dst.ip not_in (private_ranges)
+
+    # Suspicious shell in container — container spawned shell process.
+    # T1059.004 / T1609 — remote code execution indicator.
+    - name: suspicious_shell_in_container
+      condition: spawned_shell and is_container
+
+    # Sensitive file access — container accessing credential or system files.
+    # Combined condition for T1552 / T1003 / T1082 detection.
+    - name: sensitive_file_access
+      condition: is_container and (accessing_ssh_keys_dir or accessing_ssh_key_file or accessing_sensitive_system_file)
+
+  # ─────────────────────────────────────────────────────────
+  # DETECTIONS — Rules using lists and macros
+  # ─────────────────────────────────────────────────────────
+
+  detections:
+
+    # T1059.004 / T1609 — Command & Scripting: Unix Shell
+    # Container spawning /bin/sh, /bin/bash, etc. → remote code execution.
+    T1059_unix_shell_execution:
+      condition: spawned_shell and is_container
+      severity: CRITICAL
+      exception_macros: [is_whitelisted_proc]
+      output: "Shell spawned in container (proc=%proc.name service=%service)"
+
+    # T1105 / T1095 — Ingress Tool Transfer
+    # Container contains nc, ncat, wget → attacker brought in attack tools.
+    T1105_ingress_tool_transfer:
+      condition: is_container and proc.name in (network_tools)
+      severity: HIGH
+      output: "Network tool in container (proc=%proc.name service=%service)"
+
+    # T1552.004 — Unsecured Credentials: Private Keys
+    # Container reading SSH keys → credential theft for lateral movement.
+    T1552_004_private_keys:
+      condition: is_container and (accessing_ssh_keys_dir or accessing_ssh_key_file)
+      severity: CRITICAL
+      exception_macros: [is_whitelisted_proc]
+      output: "SSH private key access (file=%fd.name service=%service)"
+
+    # T1552.001 — Unsecured Credentials: Credentials in Files
+    # Container reading .env files → credential extraction.
+    T1552_001_credentials_in_files:
+      condition: is_container and accessing_credentials_file
+      severity: HIGH
+      output: "Credentials file access (file=%fd.name service=%service)"
+
+    # T1003.008 — OS Credential Dumping
+    # Container reading /etc/shadow → password hash extraction.
+    T1003_008_os_credential_dumping:
+      condition: is_container and fd.name == /etc/shadow
+      severity: HIGH
+      exception_macros: [is_whitelisted_proc]
+      output: "Credential dump attempt (file=%fd.name service=%service)"
+
+    # T1082 — System Information Discovery
+    # Container reading /etc/passwd, /etc/group → reconnaissance.
+    T1082_system_discovery:
+      condition: is_container and accessing_sensitive_system_file
+      severity: MEDIUM
+      output: "System info discovery (file=%fd.name service=%service)"
+
+    # T1036 — Masquerading
+    # Binary running from /tmp/, /dev/shm/, etc. → attacker hiding malware.
+    T1036_masquerading:
+      condition: is_container and proc.binary in (suspicious_exec_paths)
+      severity: HIGH
+      output: "Suspicious binary location (proc=%proc.name path=%proc.binary service=%service)"
+
+    # T1053.003 — Scheduled Task/Job: Cron
+    # Container accessing /etc/cron.d/, /var/spool/cron/ → persistence.
+    T1053_003_scheduled_task:
+      condition: is_container and accessing_cron_file
+      severity: HIGH
+      output: "Cron file access (file=%fd.name service=%service)"
+
+    # T1070.003 — Indicator Removal: Clear Command History
+    # Container accessing .bash_history, .zsh_history → covering tracks.
+    T1070_003_clear_history:
+      condition: is_container and accessing_history_file
+      severity: MEDIUM
+      output: "History file access (file=%fd.name service=%service)"
+
+    # T1611 — Escape to Host (Filesystem)
+    # Container reading /var/lib/docker/overlay2/, /run/containerd/ → escape.
+    T1611_escape_host_fs:
+      condition: is_container and accessing_container_fs
+      severity: CRITICAL
+      output: "Container escape attempt - filesystem (file=%fd.name service=%service)"
+
+    # T1611 — Escape to Host (Procfs)
+    # Container reading /proc/1/ → accessing host init process (escape).
+    T1611_escape_host_proc:
+      condition: is_container and accessing_proc_escape
+      severity: HIGH
+      output: "Container escape attempt - procfs (file=%fd.name service=%service)"
+
+    # T1611 — Escape to Host (Namespace)
+    # Process in unknown namespace (should be in pod NS) → escape to host.
+    T1611_escape_host_ns:
+      condition: is_unknown_namespace
+      severity: CRITICAL
+      exception_macros: [is_whitelisted_proc]
+      output: "Container escape attempt - namespace (proc=%proc.name service=%service)"
+
+    # T1613 — Container and Resource Discovery
+    # Container executing kubectl, docker, crictl → discovering infrastructure.
+    T1613_container_discovery:
+      condition: is_container and proc.name in (container_mgmt_tools)
+      severity: HIGH
+      output: "Container management tool in container (proc=%proc.name service=%service)"
+
+    # T1041 / T1048 — Exfiltration Over C2 Channel / Alternative Protocol
+    # Container making external connection → potential data exfiltration.
+    T1041_exfiltration_over_c2:
+      condition: is_container and external_connection
+      severity: HIGH
+      output: "External connection from container (dst=%dst.ip:%dst.port service=%service)"
+
+  # ─────────────────────────────────────────────────────────
+  # NETWORK POLICY
+  # ─────────────────────────────────────────────────────────
+
+  network:
+    # Allowed destination ports — services that all containers may connect to.
+    # 6543 — Supabase pgbouncer (all health-ai services use Supabase).
+    allowed_ports:
+      - 6543
+
+    # Allowed services — services permitted to make external connections.
+    # These services have legitimate reasons to call external APIs.
+    # inventory-service calls CoinGecko for live market data.
+    allowed_services:
+      - inventory-service
+      - inventory_service
+
+  # ─────────────────────────────────────────────────────────
+  # SYSTEM NAMESPACES (suppress alerts)
+  # ─────────────────────────────────────────────────────────
+
+  # Namespaces that generate constant false positive noise.
+  # These are K8s infrastructure, not user workloads.
+  ignore_namespaces:
+    - kube-system      # K8s system namespace (kubelet, coredns, kube-proxy)
+    - gmp-system       # Google Managed Prometheus
+    - gke-managed-cim  # GKE managed services
