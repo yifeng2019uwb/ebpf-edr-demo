@@ -94,7 +94,48 @@
 - System process in unknown namespace (open-iscsi T1611) — **detected but false positive**
   - Question: Should open-iscsi be whitelisted? See Phase 2 notes.
 
-**Next: Phase 2 (Whitelist Tuning + Behavioral Detection)**
+**Next: Phase 2 (Central Hub + Real-Time Alerts)**
+
+---
+
+## Phase 2: Infrastructure Design
+
+**Architecture:**
+```
+Central Hub (one location — any VM)
+  ├─ Redis (Pub/Sub for real-time alerts)
+  ├─ Monitoring Service (subscribes to Redis)
+  └─ Supabase connection (persistent storage)
+
+Agents (deployed everywhere)
+  ├─ DigitalOcean K8s
+  ├─ GCP VM
+  ├─ AWS EC2
+  └─ Azure VM
+  
+  All publish alerts to Central Hub (Redis + Supabase)
+```
+
+**Implementation order:**
+1. **Build Central Hub first**
+   - Deploy Redis (local VM or cloud)
+   - Create Monitoring Service (subscribes to Redis, writes to Supabase)
+   - Connect to Supabase
+   
+2. **Then deploy Agents**
+   - Agents publish alerts to Central Hub
+   - Two parallel writes: Redis (real-time) + Supabase (persistent)
+
+**Infrastructure:** 
+- Central Hub location: flexible (DO VM, local VM, anywhere)
+- Network: agents reach Hub via DNS + VPC peering
+- Cost: minimal (Redis small, Supabase free tier)
+
+**Agent Resilience (Personal Project):**
+- Try: Write to Redis + Supabase
+- Fallback: Write to local alert.txt (if services unavailable)
+- Agent continues running (doesn't crash)
+- This allows testing without full infrastructure setup
 
 ---
 

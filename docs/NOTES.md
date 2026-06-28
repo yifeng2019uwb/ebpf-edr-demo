@@ -24,16 +24,27 @@
 
 ### Known False Positives (Phase 1 Testing)
 
-**T1611_escape_to_host_ns on open-iscsi:**
-- Triggered when `open-iscsi/net-interface-handler` runs in unknown namespace
-- Legitimate system service, not an escape attempt
-- **Question:** Should we auto-whitelist system services, or let Phase 2 behavioral detection learn patterns?
+**T1611_escape_to_host_ns on system services:**
+- `open-iscsi/net-interface-handler` — network interface handler (repeating)
+- `fwupd` / `fwupdmgr` — firmware update daemon (legitimate)
+- All run in unknown namespace (host-level, not pod) → triggered as escape attempts
+- These are legitimate system operations, not escape attempts
 
-### Whitelist Tuning Strategy
+### Design Decision: Whitelist vs. Behavioral Detection
 
-1. **Manual whitelisting:** Add known-safe processes to `rules/default.yaml`
-2. **Behavioral detection (Phase 2):** Learn baseline → alert on deviations
-3. **Example:** `open-iscsi` always unknown (normal) vs. `malware` suddenly unknown (anomaly)
+**Problem:** Whitelisting every system service → bloat, maintenance burden, false negatives
+
+**Falco's approach:**
+- Context-aware rules (parent process, startup context)
+- Baseline learning (what's normal in this environment)
+- Multi-event correlation (chains suspicious events)
+
+**Our Phase 2 approach:**
+- Don't bloat whitelist with every service
+- Learn baseline: which processes normally run in unknown NS at startup
+- Alert on deviations: unexpected process in unknown NS = anomaly signal
+
+**For Phase 1:** Keep whitelist minimal. System service noise is expected — Phase 2 behavioral detection will filter intelligently.
 
 ---
 
