@@ -59,13 +59,13 @@ infra-refresh:
 
 ## docker-push-ghcr — build binary + image and push to ghcr.io (run on GCP VM — needs Linux for BPF headers)
 docker-push-ghcr: build
-	docker buildx build --platform linux/amd64 --no-cache --push \
-		-t $(GHCR_IMAGE) .
+	docker build -t $(GHCR_IMAGE) .
+	docker push $(GHCR_IMAGE)
 
 ## docker-push-ghcr-prebuilt — push image using committed binary (safe to run on Mac)
 docker-push-ghcr-prebuilt:
-	docker buildx build --platform linux/amd64 --no-cache --push \
-		-t $(GHCR_IMAGE) .
+	docker build -t $(GHCR_IMAGE) .
+	docker push $(GHCR_IMAGE)
 
 ## github-release — build linux/amd64 binary and publish as a GitHub release
 ## Usage: make github-release VERSION=v0.1.0
