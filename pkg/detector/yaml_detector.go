@@ -163,8 +163,16 @@ func (d *YAMLDetector) checkProcessRules(event processor.ProcessEvent, res workl
 		universalTools := d.getListStrings("universal_system_tools")
 		k8sInfra := d.getListStrings("k8s_infrastructure_procs")
 		systemTools := d.getListStrings("system_container_detection_tools")
+		procFdPatterns := d.getListStrings("proc_fd_patterns")
 
 		// Check if process is whitelisted (using environment-aware logic)
+		// eBPF artifacts: /proc/*/fd/ patterns (symlink resolution artifacts)
+		for _, pattern := range procFdPatterns {
+			if strings.Contains(comm, pattern) {
+				return nil
+			}
+		}
+
 		for _, w := range universalTools {
 			if base == w {
 				return nil

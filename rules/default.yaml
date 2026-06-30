@@ -116,6 +116,12 @@ rules:
     - name: universal_system_tools
       items: [fd]
 
+    # eBPF artifact patterns — processes with these path patterns are eBPF symlink resolution artifacts.
+    # Safe to ignore: not actual process execution, just kernel introspection.
+    # Pattern: /proc/*/fd/ catches /proc/self/fd/N, /proc/1/fd/N, etc.
+    - name: proc_fd_patterns
+      items: [/proc/*/fd/]
+
     # Cloud provider agent binaries — whitelisted per environment.
     # Conditionally merged at runtime based on detected environment.
     - name: gcp_cloud_agents
