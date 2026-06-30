@@ -379,6 +379,46 @@ pkg/detector/       ← Detection logic using internal BPF events
 - T1611 escape variants not easily testable locally
 - `kernel/opensnoop.bpf.c` is dead code (safe to delete)
 - **IPv6 blocking not supported** (Phase 2): blockIP only supports IPv4 (`.To4()` in response.go:79). IPv6 addresses are captured in alerts but cannot be blocked. Requires kernel-side lpmKey restructuring to support variable-length keys or dual IPv4/IPv6 key types.
+- **T1611 Unknown Namespace Noise (Phase 2)**: Transient container processes (runc, dpkg, apt, open-iscsi, ischroot) appear in unknown namespaces during container startup. Currently CRITICAL alerts; need research to distinguish escape attempts from legitimate initialization. See Phase 2 research below.
+
+---
+
+## Phase 2: T1611 Detection Research Required
+
+**Problem:** Unknown namespace processes during Docker container startup generate false positives.
+- Transient processes (package manager, system tools) in unknown namespace
+- Namespace not in resolver cache yet (container still starting)
+- After 60s, promoted to StateUnknown → CRITICAL alert
+
+**Observations from logs:**
+- Same tools (runc, dpkg, apt, ischroot) appear consistently during startup
+- Multiple different namespace IDs (not host, not running containers)
+- Processes expire after ~58-60 seconds (pending retry timeout)
+- No actual escape attempts detected (all legitimate tools)
+
+**Questions to research:**
+1. **T1611 threat model:** What actual container escape attempts look like?
+   - Real escapes use what techniques? (ptrace, cgroup, namespace manipulation, kernel exploits?)
+   - How do they differ from transient startup processes?
+   
+2. **Namespace lifecycle:** When does a container's namespace appear in Docker ps?
+   - Before container's first process starts?
+   - After container is "running"?
+   - Are transient processes before that normal?
+   
+3. **Docker variant handling:** How do these patterns differ across:
+   - Docker Desktop vs server
+   - Snap-packaged Docker vs native
+   - Different base images (Alpine, Debian, Ubuntu)
+   
+4. **Detection strategy options:**
+   - A) Whitelist by tool + environment (risky: misses variants)
+   - B) Whitelist by behavior (e.g., "tool appears then exits in <X seconds" = startup)
+   - C) Demote to LOW/MEDIUM alert + require persistence for CRITICAL
+   - D) Track process ancestry (if parent is container init, probably legit)
+   - E) Correlate with container logs (is container actually starting?)
+
+**Next steps:** Research actual T1611 exploits, understand container namespace timing, decide on approach before implementing.
 
 ---
 

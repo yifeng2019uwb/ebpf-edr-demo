@@ -5,9 +5,11 @@ package workload
 import (
 	"bufio"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -60,11 +62,29 @@ func (r *DockerResolver) bareResult(state ResolveState) ResolveResult {
 func (r *DockerResolver) Resolve(mntNsID uint32, _ uint32) ResolveResult {
 	r.mu.RLock()
 	result, ok := r.cache[mntNsID]
+	cacheSize := len(r.cache)
 	r.mu.RUnlock()
 
 	if ok {
 		return result
 	}
+
+	// DEBUG: log cache miss + investigate what's in that namespace
+	// Check if any processes are running in this namespace
+	var procs []string
+	entries, _ := filepath.Glob("/proc/[0-9]*/ns/mnt")
+	for _, nsPath := range entries {
+		var stat syscall.Stat_t
+		if err := syscall.Stat(nsPath, &stat); err == nil && uint32(stat.Ino) == mntNsID {
+			parts := strings.Split(nsPath, "/")
+			if len(parts) >= 3 {
+				procs = append(procs, parts[2])
+			}
+		}
+	}
+
+	log.Printf("DEBUG docker-resolver: mntNsID=%d not in cache (cache_size=%d, processes_in_ns=%v)",
+		mntNsID, cacheSize, procs)
 
 	go r.refresh()
 
@@ -90,6 +110,15 @@ func (r *DockerResolver) buildCache() map[uint32]ResolveResult {
 	hostNsID := getMntNsID(1)
 	if hostNsID != 0 {
 		m[hostNsID] = r.bareResult(StateHost)
+	}
+
+	// Find Docker daemon namespace (snap docker or system docker)
+	// Snap docker typically runs as PID 1534 or similar; also check /var/run/docker.sock
+	dockerdNsID := findDockerDaemonNamespace()
+	if dockerdNsID != 0 && dockerdNsID != hostNsID {
+		// Docker daemon infrastructure namespace — treat as system
+		m[dockerdNsID] = r.bareResult(StateHost)
+		log.Printf("DEBUG docker-resolver: found dockerd namespace %d, added to cache", dockerdNsID)
 	}
 
 	idToInfo := dockerIDToInfo()
@@ -150,7 +179,79 @@ func (r *DockerResolver) buildCache() map[uint32]ResolveResult {
 		}
 	}
 
+	// DEBUG: log namespace cache state with details
+	containerCount := len(m) - 1
+	if containerCount < 0 {
+		containerCount = 0
+	}
+
+	var containerNsIDs []uint32
+	for nsID, result := range m {
+		if result.State == StateResolved {
+			containerNsIDs = append(containerNsIDs, nsID)
+		}
+	}
+
+	log.Printf("DEBUG docker-resolver: buildCache - hostNsID=%d, cache_entries=%d (host=1, containers=%d, container_nsids=%v)",
+		hostNsID, len(m), containerCount, containerNsIDs)
+
 	return m
+}
+
+// findDockerDaemonNamespace finds the mount namespace of the Docker daemon.
+// Prioritizes snap docker over system docker to find the isolated namespace.
+// Returns 0 if not found.
+func findDockerDaemonNamespace() uint32 {
+	// Try to find dockerd process by searching /proc
+	entries, err := filepath.Glob("/proc/[0-9]*/cmdline")
+	if err != nil {
+		return 0
+	}
+
+	var snapDockerNsID uint32
+
+	for _, cmdlinePath := range entries {
+		data, err := os.ReadFile(cmdlinePath)
+		if err != nil {
+			continue
+		}
+
+		cmdline := string(data)
+
+		// Look for dockerd processes
+		if !strings.Contains(cmdline, "dockerd") {
+			continue
+		}
+
+		// Extract PID from path: /proc/1234/cmdline → 1234
+		parts := strings.Split(cmdlinePath, "/")
+		if len(parts) < 3 {
+			continue
+		}
+
+		pid, err := strconv.Atoi(parts[2])
+		if err != nil {
+			continue
+		}
+
+		nsID := getMntNsID(pid)
+		if nsID == 0 {
+			continue
+		}
+
+		// Prioritize snap docker (contains /snap/docker or /run/snap.docker)
+		if strings.Contains(cmdline, "/snap/docker") || strings.Contains(cmdline, "/run/snap.docker") {
+			log.Printf("DEBUG docker-resolver: found snap dockerd pid=%d with namespace %d", pid, nsID)
+			snapDockerNsID = nsID
+			break // Found snap docker, use it
+		}
+	}
+
+	if snapDockerNsID != 0 {
+		return snapDockerNsID
+	}
+
+	return 0
 }
 
 // containerIDInfo holds the Docker container name and its resolved service name.
@@ -178,6 +279,7 @@ func dockerIDToInfo() map[string]containerIDInfo {
 		return m
 	}
 
+	var containerIDs []string
 	scanner := bufio.NewScanner(strings.NewReader(string(out)))
 	for scanner.Scan() {
 		fields := strings.Fields(scanner.Text())
@@ -190,7 +292,10 @@ func dockerIDToInfo() map[string]containerIDInfo {
 			service = fields[2]
 		}
 		m[id] = containerIDInfo{name: name, service: service}
+		containerIDs = append(containerIDs, name)
 	}
+
+	log.Printf("DEBUG docker-resolver: docker ps found %d containers: %v", len(m), containerIDs)
 
 	return m
 }

@@ -166,9 +166,10 @@ func (d *YAMLDetector) checkProcessRules(event processor.ProcessEvent, res workl
 		procFdPatterns := d.getListStrings("proc_fd_patterns")
 
 		// Check if process is whitelisted (using environment-aware logic)
-		// eBPF artifacts: /proc/*/fd/ patterns (symlink resolution artifacts)
+		// eBPF artifacts: /proc/*/fd/* patterns (symlink resolution artifacts)
 		for _, pattern := range procFdPatterns {
-			if strings.Contains(comm, pattern) {
+			// Use filepath.Match for glob patterns (* matches any sequence)
+			if matched, _ := filepath.Match(pattern, comm); matched {
 				return nil
 			}
 		}

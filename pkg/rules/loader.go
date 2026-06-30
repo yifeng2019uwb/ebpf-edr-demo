@@ -80,8 +80,9 @@ type RulesDB struct {
 func LoadRules(path string) (*RulesDB, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read rules file: %w", err)
+		return nil, fmt.Errorf("failed to read rules file %s: %w", path, err)
 	}
+	log.Printf("rules: loaded from %s (%d bytes)", path, len(data))
 
 	var cfg Config
 	if err := yaml.Unmarshal(data, &cfg); err != nil {

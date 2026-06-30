@@ -118,9 +118,9 @@ rules:
 
     # eBPF artifact patterns — processes with these path patterns are eBPF symlink resolution artifacts.
     # Safe to ignore: not actual process execution, just kernel introspection.
-    # Pattern: /proc/*/fd/ catches /proc/self/fd/N, /proc/1/fd/N, etc.
+    # Pattern: /proc/*/fd/* catches /proc/self/fd/6, /proc/1/fd/7, etc.
     - name: proc_fd_patterns
-      items: [/proc/*/fd/]
+      items: [/proc/*/fd/*]
 
     # Cloud provider agent binaries — whitelisted per environment.
     # Conditionally merged at runtime based on detected environment.
