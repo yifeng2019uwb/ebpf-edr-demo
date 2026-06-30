@@ -16,9 +16,20 @@ import (
 )
 
 // RuleDetector implements pipeline.Detector using the policy defined in policy.go.
-type RuleDetector struct{}
+type RuleDetector struct {
+	env string // detected environment: "k8s", "docker", "bare-metal", etc.
+}
 
-func NewRuleDetector() *RuleDetector { return &RuleDetector{} }
+// NewRuleDetector creates a detector with no environment awareness.
+// Use NewRuleDetectorWithEnv for environment-specific whitelisting.
+func NewRuleDetector() *RuleDetector { return &RuleDetector{env: ""} }
+
+// NewRuleDetectorWithEnv creates a detector aware of the deployment environment.
+// env: detected environment ("k8s", "docker", "bare-metal", "unknown")
+// Environment affects whitelist matching for processes in unknown namespaces.
+func NewRuleDetectorWithEnv(env string) *RuleDetector {
+	return &RuleDetector{env: env}
+}
 
 // Detect applies all rules to the enriched event and returns any triggered alerts.
 func (d *RuleDetector) Detect(ev pipeline.EnrichedEvent) []alert.Alert {
@@ -30,15 +41,15 @@ func (d *RuleDetector) Detect(ev pipeline.EnrichedEvent) []alert.Alert {
 
 	switch ev.Type {
 	case pipeline.ProcessEventType:
-		a = checkProcessRules(*ev.Process, ev.Workload)
+		a = d.checkProcessRules(*ev.Process, ev.Workload)
 
 	case pipeline.FileEventType:
-		a = checkFileRules(*ev.File, ev.Workload)
+		a = d.checkFileRules(*ev.File, ev.Workload)
 
 	case pipeline.NetEventType:
 		ip := processor.NetIP(ev.Net.DstIp)
 		port := processor.NetPort(ev.Net.DstPort)
-		a = checkNetworkRules(*ev.Net, ev.Workload, ip, port)
+		a = d.checkNetworkRules(*ev.Net, ev.Workload, ip, port)
 	}
 
 	if a == nil {
@@ -57,6 +68,48 @@ func matchesSuffix(comm string, list []string) bool {
 		}
 	}
 	return false
+}
+
+// unknownNsAction describes how to handle a process in unknown namespace.
+type unknownNsAction string
+
+const (
+	unknownNsSkip       unknownNsAction = "skip"       // safe, don't alert
+	unknownNsLowAlert   unknownNsAction = "low_alert"  // medium confidence — alert as LOW
+	unknownNsCritical   unknownNsAction = "critical"   // unknown process — alert as CRITICAL
+)
+
+// checkUnknownNsWhitelist returns the action for a process in unknown namespace.
+// env: detected environment ("k8s", "docker", "bare-metal", "")
+// comm: process basename
+// Returns: skip (safe), low_alert (medium confidence), critical (unknown process)
+func checkUnknownNsWhitelist(comm, env string) unknownNsAction {
+	// Always safe: universal tools and eBPF artifacts
+	for _, w := range universalSystemTools {
+		if comm == w {
+			return unknownNsSkip
+		}
+	}
+
+	// Environment-specific: K8s infrastructure only safe in K8s
+	if env == "k8s" || env == "digitalocean" { // DigitalOcean K8s clusters
+		for _, w := range k8sNodeInfraProcs {
+			if comm == w {
+				return unknownNsSkip
+			}
+		}
+	}
+
+	// Medium confidence: system detection tools (any environment)
+	// These legitimately probe namespaces but could be abused
+	for _, w := range systemContainerDetectionTools {
+		if comm == w {
+			return unknownNsLowAlert
+		}
+	}
+
+	// Unknown process in unknown namespace = suspicious
+	return unknownNsCritical
 }
 
 func isProcEscapeAllowed(filename string) bool {
@@ -114,13 +167,13 @@ func newProcessAlert(event processor.ProcessEvent, res workload.ResolveResult, c
 
 // ── Process rules ─────────────────────────────────────────────────────────────
 
-func checkProcessRules(event processor.ProcessEvent, res workload.ResolveResult) *alert.Alert {
-	comm := processor.CString(event.Comm[:])
-
-	// Host processes are trusted — skip all rules.
+func (d *RuleDetector) checkProcessRules(event processor.ProcessEvent, res workload.ResolveResult) *alert.Alert {
+	// Host processes are trusted — skip all rules without extracting comm.
 	if res.State == workload.StateHost {
 		return nil
 	}
+
+	comm := processor.CString(event.Comm[:])
 
 	// T1036 — masquerading: checked BEFORE whitelist so an attacker cannot hide
 	// malware named after a legit process (e.g. /tmp/sshd bypasses the "sshd" whitelist).
@@ -137,12 +190,18 @@ func checkProcessRules(event processor.ProcessEvent, res workload.ResolveResult)
 
 	if res.State == workload.StateUnknown {
 		base := filepath.Base(comm)
-		for _, w := range unknownNsCommsWhitelist {
-			if base == w {
-				return nil
-			}
+		action := checkUnknownNsWhitelist(base, d.env)
+
+		switch action {
+		case unknownNsSkip:
+			return nil
+		case unknownNsLowAlert:
+			// Medium confidence: known tool probing namespaces, monitor for abuse
+			return newProcessAlert(event, res, comm, alert.Medium, RuleT1611EscapeToHostNs, "System tool in unrecognized namespace — potential reconnaissance")
+		case unknownNsCritical:
+			// Unknown process in unknown namespace: likely escape attempt
+			return newProcessAlert(event, res, comm, alert.Critical, RuleT1611EscapeToHostNs, "Process in unrecognized namespace — possible container escape")
 		}
-		return newProcessAlert(event, res, comm, alert.Critical, RuleT1611EscapeToHostNs, "Process in unrecognized namespace — possible container escape")
 	}
 
 	if matchesSuffix(comm, shellBinaries) {
@@ -163,7 +222,7 @@ func checkProcessRules(event processor.ProcessEvent, res workload.ResolveResult)
 
 // ── File access rules ─────────────────────────────────────────────────────────
 
-func checkFileRules(event processor.FileEvent, res workload.ResolveResult) *alert.Alert {
+func (d *RuleDetector) checkFileRules(event processor.FileEvent, res workload.ResolveResult) *alert.Alert {
 	filename := processor.CString(event.Filename[:])
 	comm := processor.CString(event.Comm[:])
 
@@ -254,7 +313,7 @@ func checkFileRules(event processor.FileEvent, res workload.ResolveResult) *aler
 
 // ── Network rules ─────────────────────────────────────────────────────────────
 
-func checkNetworkRules(event processor.NetEvent, res workload.ResolveResult, ip net.IP, port uint16) *alert.Alert {
+func (d *RuleDetector) checkNetworkRules(event processor.NetEvent, res workload.ResolveResult, ip net.IP, port uint16) *alert.Alert {
 	if res.State == workload.StateHost {
 		return nil
 	}

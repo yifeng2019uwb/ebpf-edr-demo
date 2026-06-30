@@ -27,19 +27,40 @@ var whitelistComm = []string{
 	"getconf",    // GCP guest agent
 }
 
-// unknownNsCommsWhitelist — node-level GKE infrastructure processes that run outside
-// any pod namespace. These trip unknown_namespace_process but are not threats.
-var unknownNsCommsWhitelist = []string{
-	"iptables",                 // kube-proxy network rules
+// ── Unknown Namespace Process Whitelists ──────────────────────────────────────
+// Processes detected in unknown namespaces (state=unknown) but NOT escape attempts.
+// Split by PURPOSE and ENVIRONMENT to avoid accidentally skipping real alerts.
+// Strategy: Unknown namespace + not whitelisted for environment = CRITICAL alert
+
+// universalSystemTools — Safe to skip in ANY environment.
+// These are eBPF capture artifacts or universal system utilities.
+var universalSystemTools = []string{
+	"fd",  // /proc/self/fd/ symlink resolved as process name — eBPF capture artifact
+}
+
+// k8sNodeInfraProcs — Kubernetes infrastructure at node level (K8S ENVIRONMENT ONLY).
+// These legitimately run outside pod namespaces in K8s clusters.
+// In non-K8s environments (Docker), these in unknown namespace = suspicious.
+// NOTE: "pause" is GKE-specific, not universal — it's in gke_infrastructure_procs in YAML.
+var k8sNodeInfraProcs = []string{
+	"iptables",                 // kube-proxy enforces network policies
 	"iptables-legacy",          // older iptables variant on some nodes
 	"iptables-restore",         // bulk iptables rule restore
 	"ip6tables",                // IPv6 iptables
-	"conntrack",                // connection tracking tool
+	"conntrack",                // connection tracking daemon
 	"ip",                       // iproute2 — route/addr management
-	"kube-proxy",               // Kubernetes network proxy
-	"pause",                    // GKE pod sandbox container
+	"kube-proxy",               // Kubernetes cluster network proxy
 	"systemd-sysctl",           // node sysctl configuration
 	"bridge-network-interface", // udev network bridge setup
+}
+
+// systemContainerDetectionTools — Admin tools that probe namespace boundaries.
+// MEDIUM CONFIDENCE: legitimate in any environment, but monitor for abuse.
+// In unknown namespace: alert as LOW (suspicious but known tool), not CRITICAL.
+// Could indicate attacker doing reconnaissance.
+var systemContainerDetectionTools = []string{
+	"ps",               // process listing — system tools check if running in container
+	"apparmor_parser",  // AppArmor config — reads namespace info during profile load
 }
 
 // shellBinaries — binary path suffixes that indicate an interactive shell.
@@ -132,9 +153,10 @@ var t1611ProcEscapePrefixes = []string{
 // Real escape paths (/proc/1/mem, /proc/1/fd/, /proc/1/root/, /proc/1/exe)
 // are NOT excluded — they remain detectable.
 var t1611ProcEscapeAllowed = []string{
-	"/proc/1/stat",
-	"/proc/1/status",
-	"/proc/1/cmdline",
+	"/proc/1/stat",       // process statistics — monitoring tools check this
+	"/proc/1/status",     // process status info — monitoring tools check this
+	"/proc/1/cmdline",    // process command line — monitoring tools check this
+	"/proc/1/mountinfo",  // mount namespace info — ischroot and container detection tools use this
 }
 
 // ── T1552.004 — Unsecured Credentials: Private Keys ──────────────────────────
@@ -234,6 +256,8 @@ func isSystemNamespace(ns string) bool {
 var privateNets []*net.IPNet
 
 func init() {
+	// Initialize RFC 1918 private networks — applicable everywhere.
+	// These do NOT require environment detection.
 	for _, cidr := range []string{
 		"10.0.0.0/8",     // RFC 1918 — private class A
 		"172.16.0.0/12",  // RFC 1918 — private class B (includes Docker bridge 172.17.x)
@@ -244,8 +268,8 @@ func init() {
 		privateNets = append(privateNets, n)
 	}
 
-	// SERVICE_CIDR — manual override; takes precedence over GCP metadata.
-	// Set this env var only when auto-detection is not available (non-GKE, local Docker).
+	// SERVICE_CIDR environment variable — manual override (no network calls needed).
+	// Set this only when auto-detection is not available (non-GKE, local Docker).
 	if cidr := strings.TrimSpace(os.Getenv("SERVICE_CIDR")); cidr != "" {
 		if _, n, err := net.ParseCIDR(cidr); err == nil {
 			privateNets = append(privateNets, n)
@@ -253,10 +277,16 @@ func init() {
 		}
 	}
 
-	// Auto-detect service CIDR from GCP metadata server (GKE nodes only).
-	// GKE service CIDRs are outside RFC 1918 (e.g. 34.118.x.x); inter-service calls
-	// via ClusterIP would otherwise be flagged as unauthorized external connections.
-	// On non-GKE nodes the metadata server is unreachable and we skip silently.
+	// GKE-specific CIDRs: DEFER to addGKEServiceCIDR() — call only when GKE detected.
+	// Reason: gkeServiceCIDR() makes HTTP requests to metadata server (2s timeout).
+	// Avoid unnecessary latency on non-GKE environments (Docker, bare-metal).
+}
+
+// AddGKEServiceCIDR loads GKE-specific service CIDR from metadata server.
+// Call this only after detecting GKE environment.
+// GKE service CIDRs are outside RFC 1918 (e.g. 34.118.x.x); inter-service calls
+// via ClusterIP would otherwise be flagged as unauthorized external connections.
+func AddGKEServiceCIDR() {
 	if cidr := gkeServiceCIDR(); cidr != "" {
 		if _, n, err := net.ParseCIDR(cidr); err == nil {
 			privateNets = append(privateNets, n)

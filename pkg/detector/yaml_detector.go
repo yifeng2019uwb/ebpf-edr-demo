@@ -18,10 +18,20 @@ import (
 // YAMLDetector implements pipeline.Detector using rules loaded from YAML.
 type YAMLDetector struct {
 	rules *rules.RulesDB
+	env   string // detected environment: "k8s", "docker", "bare-metal", etc.
 }
 
+// NewYAMLDetector creates a detector with no environment awareness.
+// Use NewYAMLDetectorWithEnv for environment-specific whitelisting.
 func NewYAMLDetector(db *rules.RulesDB) *YAMLDetector {
-	return &YAMLDetector{rules: db}
+	return &YAMLDetector{rules: db, env: ""}
+}
+
+// NewYAMLDetectorWithEnv creates a detector aware of the deployment environment.
+// env: detected environment ("k8s", "docker", "bare-metal", "unknown")
+// Environment affects whitelist matching for processes in unknown namespaces.
+func NewYAMLDetectorWithEnv(db *rules.RulesDB, env string) *YAMLDetector {
+	return &YAMLDetector{rules: db, env: env}
 }
 
 // Detect applies all rules to the enriched event and returns any triggered alerts.
@@ -127,12 +137,12 @@ func (d *YAMLDetector) isPrivateIP(ip net.IP) bool {
 // ── Process rules ─────────────────────────────────────────────────────────────
 
 func (d *YAMLDetector) checkProcessRules(event processor.ProcessEvent, res workload.ResolveResult) *alert.Alert {
-	comm := processor.CString(event.Comm[:])
-
-	// Host processes are trusted — skip all rules.
+	// Host processes are trusted — skip all rules without extracting comm.
 	if res.State == workload.StateHost {
 		return nil
 	}
+
+	comm := processor.CString(event.Comm[:])
 
 	// T1036 — masquerading: checked BEFORE whitelist
 	t1036Paths := d.getListStrings("suspicious_exec_paths")
@@ -148,12 +158,36 @@ func (d *YAMLDetector) checkProcessRules(event processor.ProcessEvent, res workl
 
 	if res.State == workload.StateUnknown {
 		base := filepath.Base(comm)
-		unknownNsWhitelist := d.getListStrings("whitelisted_unknown_ns_procs")
-		for _, w := range unknownNsWhitelist {
+
+		// Load whitelists from YAML rules
+		universalTools := d.getListStrings("universal_system_tools")
+		k8sInfra := d.getListStrings("k8s_infrastructure_procs")
+		systemTools := d.getListStrings("system_container_detection_tools")
+
+		// Check if process is whitelisted (using environment-aware logic)
+		for _, w := range universalTools {
 			if base == w {
 				return nil
 			}
 		}
+
+		// Environment-specific: K8s infrastructure only safe in K8s
+		if d.env == "k8s" || d.env == "digitalocean" {
+			for _, w := range k8sInfra {
+				if base == w {
+					return nil
+				}
+			}
+		}
+
+		// Medium confidence: system detection tools (any environment)
+		for _, w := range systemTools {
+			if base == w {
+				return newProcessAlert(event, res, comm, alert.Medium, RuleT1611EscapeToHostNs, "System tool in unrecognized namespace — potential reconnaissance")
+			}
+		}
+
+		// Unknown process in unknown namespace: likely escape attempt
 		return newProcessAlert(event, res, comm, alert.Critical, RuleT1611EscapeToHostNs, "Process in unrecognized namespace — possible container escape")
 	}
 
@@ -213,10 +247,10 @@ func (d *YAMLDetector) checkFileRules(event processor.FileEvent, res workload.Re
 	}
 
 	// T1003.008 — OS credential dumping (/etc/shadow)
-	shadowPaths := d.getListStrings("sensitive_system_files")
+	shadowPaths := d.getListStrings("credential_dump_paths")
 	for _, path := range shadowPaths {
-		if path == "/etc/shadow" && strings.HasPrefix(filename, path) {
-			return newFileAlert(event, res, comm, filename, alert.High, RuleT1003OsCredentialDumping, "Container accessed OS credential file: "+filename)
+		if strings.HasPrefix(filename, path) {
+			return newFileAlert(event, res, comm, filename, alert.Critical, RuleT1003OsCredentialDumping, "Container accessed OS credential file: "+filename)
 		}
 	}
 
@@ -248,9 +282,9 @@ func (d *YAMLDetector) checkFileRules(event processor.FileEvent, res workload.Re
 	}
 
 	// T1082 — system information discovery (/etc/passwd, /etc/group)
-	systemFiles := d.getListStrings("sensitive_system_files")
+	systemFiles := d.getListStrings("system_info_paths")
 	for _, prefix := range systemFiles {
-		if prefix != "/etc/shadow" && strings.HasPrefix(filename, prefix) {
+		if strings.HasPrefix(filename, prefix) {
 			return newFileAlert(event, res, comm, filename, alert.Medium, RuleT1082SystemInfoDiscovery, "Container accessed system file: "+filename)
 		}
 	}
@@ -314,5 +348,23 @@ func (d *YAMLDetector) checkNetworkRules(event processor.NetEvent, res workload.
 		Workload: res,
 		DstIP:    ipStr,
 		DstPort:  port,
+	}
+}
+
+// ── Alert Constructors ────────────────────────────────────────────────────────
+
+func newFileAlert(event processor.FileEvent, res workload.ResolveResult, comm, filename string, level alert.Level, rule, msg string) *alert.Alert {
+	return &alert.Alert{
+		Level: level, Rule: rule, Message: msg,
+		Pid: event.Pid, Ppid: event.Ppid, Uid: int32(event.Uid),
+		Comm: comm, Workload: res, Filename: filename,
+	}
+}
+
+func newProcessAlert(event processor.ProcessEvent, res workload.ResolveResult, comm string, level alert.Level, rule, msg string) *alert.Alert {
+	return &alert.Alert{
+		Level: level, Rule: rule, Message: msg,
+		Pid: event.Pid, Ppid: event.Ppid, Uid: event.Uid,
+		Comm: comm, Workload: res,
 	}
 }

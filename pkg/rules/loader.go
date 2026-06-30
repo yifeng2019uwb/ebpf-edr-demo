@@ -73,6 +73,7 @@ type RulesDB struct {
 	Detections map[string]Detection
 	Network    Network
 	IgnoreNs   map[string]bool
+	Env        Environment // detected environment: "k8s", "docker", "bare-metal", "unknown"
 }
 
 // LoadRules loads and compiles rules from YAML file.
@@ -246,6 +247,7 @@ func LoadRulesForEnvironment(path string) (*RulesDB, error) {
 	}
 
 	env := DetectEnvironment()
+	db.Env = env // store detected environment for detector use
 	db.MergeWhitelists(env)
 
 	return db, nil

@@ -52,10 +52,15 @@ rules:
     - name: credential_file_suffixes
       items: [.env]
 
-    # Sensitive system files — shadow, passwd, group.
-    # T1082 (system discovery) and T1003.008 (credential dumping).
-    - name: sensitive_system_files
-      items: [/etc/shadow, /etc/passwd, /etc/group]
+    # Credential dump files — /etc/shadow (password hashes).
+    # T1003.008 — CRITICAL severity. No legitimate app reads this at runtime.
+    - name: credential_dump_paths
+      items: [/etc/shadow]
+
+    # System info discovery files — /etc/passwd, /etc/group.
+    # T1082 — MEDIUM severity. System tools may read for normal operation.
+    - name: system_info_paths
+      items: [/etc/passwd, /etc/group]
 
     # Cron configuration files — persistence mechanism.
     # T1053.003 — containers should never access cron files.
@@ -84,10 +89,10 @@ rules:
     - name: proc_escape_paths
       items: [/proc/1/]
 
-    # Allowed /proc/1/ reads — stat, status, cmdline are read-only.
-    # Monitoring tools (prometheus, redis) legitimately read these.
+    # Allowed /proc/1/ reads — stat, status, cmdline, mountinfo are read-only.
+    # Monitoring tools (prometheus, redis) and ischroot legitimately read these.
     - name: proc_escape_allowed
-      items: [/proc/1/stat, /proc/1/status, /proc/1/cmdline]
+      items: [/proc/1/stat, /proc/1/status, /proc/1/cmdline, /proc/1/mountinfo]
 
     # Suspicious binary paths — where executables shouldn't be.
     # T1036 — masquerading detects binaries running from writable directories.
@@ -98,6 +103,18 @@ rules:
     # System services like sshd, runc, dockerd are expected.
     - name: whitelisted_processes
       items: [sshd, runc, dockerd, containerd, getconf]
+
+    # System container detection tools — admin tools that probe namespace boundaries.
+    # T1611 escape detection: medium confidence (legitimate but monitor for abuse).
+    # Examples: ps (process listing), apparmor_parser (AppArmor configuration).
+    - name: system_container_detection_tools
+      items: [ps, apparmor_parser]
+
+    # Universal system tools — safe to skip in ANY environment.
+    # These are eBPF capture artifacts or universal utilities (not real threats).
+    # Example: fd (symlink resolution quirk in /proc/self/fd capture).
+    - name: universal_system_tools
+      items: [fd]
 
     # Cloud provider agent binaries — whitelisted per environment.
     # Conditionally merged at runtime based on detected environment.

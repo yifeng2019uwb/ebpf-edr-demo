@@ -130,8 +130,14 @@ func main() {
 	var pendingMu sync.Mutex
 	pendingBuf := make(map[uint32][]pendingEntry)
 
-	det := detector.NewYAMLDetector(rulesDB)
+	det := detector.NewYAMLDetectorWithEnv(rulesDB, string(rulesDB.Env))
 	responder := detector.NewResponder(nil)
+
+	// Load GKE-specific service CIDRs only if detected in GKE environment.
+	// Avoids unnecessary metadata server calls on Docker/bare-metal.
+	if string(rulesDB.Env) == "gcp" {
+		detector.AddGKEServiceCIDR()
+	}
 
 	// Producers
 	go func() {

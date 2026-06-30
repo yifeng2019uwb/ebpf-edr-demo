@@ -83,19 +83,35 @@
 - `internal/alert/alert_test.go` — Sink-based tests (already committed)
 - `Makefile` — Updated for deployments (already committed)
 
-**Known Issues:**
-1. Supabase IPv6 unreachable — PostgreSQL connection fails from DO VM
-   - Will retry when deploying to K8s (different network path)
-   - Fallback: local file sink + Redis working, Supabase optional
-2. T1611 false positives — too many system processes detected as container escapes
-   - Alert channel overflow when too many alerts generated
-   - Need to tune rule: whitelist or refine detection logic
+### Session 2026-06-30 (Continued): Supabase Connection Fixed ✅
 
-**Next Session:**
-1. Deploy eBPF DaemonSet to DO K8s
-2. Test alert-router dashboard with Redis
-3. Verify Supabase on K8s (likely better IPv6 connectivity)
-4. Tune T1611 rule to reduce false positives
+**Issue Resolved:**
+- **Problem:** Supabase direct endpoint (`db.*.supabase.co`) IPv6-only on free tier, DO VM lacks IPv6 connectivity
+- **Solution:** Switched to Supavisor pooler endpoint (`aws-1-us-east-1.pooler.supabase.com`) which provides IPv4
+
+**Key Discoveries:**
+1. Supavisor endpoint format: `aws-{POOL_NUMBER}-{REGION}.pooler.supabase.com` (pool number "1" for this project)
+2. Username format: `postgres.{PROJECT_ID}` (not just `postgres`)
+3. DATABASE_REGION env var must include pool number: `1-us-east-1`
+4. PASSWORD must be actual PostgreSQL password, not API key
+
+**Fixed Code:**
+- `pkg/alertsink/supabase_sink.go` — Supavisor pooler support with fallback paths
+- `internal/config/config.go` — Simplified path resolution (repo root or bin/ directory)
+- `.env` configuration — Added `DATABASE_REGION=1-us-east-1`
+
+**Verified:**
+- ✅ File sink working
+- ✅ Redis sink working  
+- ✅ Supabase sink working (via Supavisor IPv4 endpoint)
+- ✅ All three sinks connected and receiving alerts
+
+**Status:** Supabase connection issue RESOLVED ✅
+
+**Next Priority:** Fix T1611 false positives (blocking detection testing)
+- Capture alert log with T1611 events
+- Identify which processes are false positives
+- Add to whitelist or refine detection logic
 
 ### Architecture Now
 
@@ -362,6 +378,7 @@ pkg/detector/       ← Detection logic using internal BPF events
 - block_ip disabled (BPF verifier limits)
 - T1611 escape variants not easily testable locally
 - `kernel/opensnoop.bpf.c` is dead code (safe to delete)
+- **IPv6 blocking not supported** (Phase 2): blockIP only supports IPv4 (`.To4()` in response.go:79). IPv6 addresses are captured in alerts but cannot be blocked. Requires kernel-side lpmKey restructuring to support variable-length keys or dual IPv4/IPv6 key types.
 
 ---
 
