@@ -1,10 +1,133 @@
 # Session Handoff
 
-**Last Updated:** 2026-06-27 (Phase 1 Complete — tested on DigitalOcean K8s ✅)
+**Last Updated:** 2026-06-29 (Infrastructure Refactoring + K8s Multi-Cloud Deployment)**  
+**Previous:** 2026-06-27 (Phase 1 Complete — YAML rules refactoring ✅)
 
 ---
 
-## Current State
+## Session 2026-06-29: K8s Infrastructure Refactoring
+
+### Completed This Session ✅
+
+1. **DigitalOcean K8s Cluster Setup**
+   - Deployed K8s cluster: `k8s-1-36-0-do-2-sfo3-1782763501543` (SFO3, 1.36.0)
+   - Cost: $12/month per node + free control plane
+   - kubectl configured and ready
+
+2. **Health-AI Services → DO K8s**
+   - All 4 services deployed and running (auth, provider, ai, gateway)
+   - LoadBalancer assigned: `164.90.244.53:8080`
+   - Supabase integration working
+   - API endpoints responding correctly
+
+3. **K8s Configuration Management (Secrets + ConfigMaps)**
+   - Created Secret pattern for sensitive data (database-key, pubsub-key)
+   - Created ConfigMap pattern for URLs (database-url, pubsub-addr)
+   - DaemonSet references these via valueFrom
+   - Works for any K8s cluster, any database/pub-sub
+
+4. **Generic eBPF Deployment Template**
+   - Created `scripts/deploy-ebpf-k8s.sh` — single canonical script for all services
+   - Downloads DaemonSet from GitHub, substitutes cluster info, applies to K8s
+   - No local repo dependency
+   - Used by health-ai, order-processor, any service
+
+5. **Deployment Documentation**
+   - Created `DEPLOYMENT.md` (root) — comprehensive guide
+   - Option 1: Add to Makefile (recommended, cleanest)
+   - Option 2: Standalone script
+   - Option 3: Integrate into deploy script
+   - Option 4: Manual kubectl
+   - Includes local Docker/VM deployment approach
+
+6. **Project Reorganization**
+   - Moved `k8s/deploy-template.sh` → `scripts/deploy-ebpf-k8s.sh`
+   - Deleted redundant `k8s/deploy.sh`
+   - Moved `DEPLOYMENT.md` from `k8s/` to root
+   - `k8s/` now contains only: `ebpf-edr-ds.yaml` (DaemonSet)
+
+7. **Health-AI Makefile Updates**
+   - Added `make deploy-ebpf-k8s` — K8s deployment
+   - Added `make deploy-ebpf-docker` — local VM deployment
+   - Both read from `docker/.env` for configuration
+
+8. **eBPF Agent Validation (Local Docker VM)**
+   - Built and tested eBPF agent locally on DigitalOcean VM
+   - Detected alerts: T1611_escape_to_host_ns (namespace detection)
+   - Confirmed: eBPF programs loading, rules firing, alerts generating
+   - Issue: False positives on legitimate system tools (/usr/bin/ps, /usr/sbin/apparmor_parser)
+   - Conclusion: Detection mechanism working, rules need refinement
+
+### Current Issues 🔴
+
+1. **Unit Tests Failing**
+   - `internal/internal/alert/alert_test.go` — old test code, incompatible with new Sink-based Handler
+   - Need to:
+     - Delete or update old test file
+     - Ensure tests match refactored Handler API
+   - Status: Not fixed yet
+
+2. **Supabase Sink Compilation**
+   - Fixed for PostgreSQL direct connection (not Supabase Go client API)
+   - Need to verify: add `github.com/lib/pq` dependency and test insert
+
+3. **False Positive Rule (T1611)**
+   - System tools detected as "escape to host namespace"
+   - Need to refine rule: add conditions for legitimate processes
+   - Decision pending: whitelist approach vs. better detection logic
+
+### Architecture Now
+
+```
+ebpf-edr-demo/
+├── DEPLOYMENT.md              ← All deployment docs (K8s + local)
+├── scripts/
+│   └── deploy-ebpf-k8s.sh     ← Canonical K8s script for all services
+├── k8s/
+│   └── ebpf-edr-ds.yaml       ← K8s DaemonSet (referenced by all)
+├── infra/
+│   ├── .env.example           ← Template
+│   ├── .env                   ← User config (gitignored)
+│   └── alerts_schema.sql      ← Supabase schema
+├── pkg/alertsink/
+│   ├── file_sink.go           ← Local file sink
+│   ├── redis_sink.go          ← Redis pub/sub sink
+│   └── supabase_sink.go       ← PostgreSQL sink (needs testing)
+└── internal/config/
+    └── config.go              ← Service-agnostic config loader
+
+Services can use this pattern:
+health-ai/Makefile:
+  make deploy-ebpf-k8s   # Calls scripts/deploy-ebpf-k8s.sh from GitHub
+  make deploy-ebpf-docker # Runs docker image locally
+```
+
+### For Next Session
+
+1. **Fix Unit Tests** (BLOCKING)
+   - Update `internal/internal/alert/alert_test.go` to match new Sink API
+   - Or delete if old/unused
+   - Verify: `make test` passes
+
+2. **Test Supabase Sink**
+   - Add `go get github.com/lib/pq`
+   - Build: `make build`
+   - Deploy to K8s: `make deploy-ebpf-k8s`
+   - Verify alerts reach Supabase database
+
+3. **Refine T1611 Rule** (optional)
+   - Adjust `T1611_escape_to_host_ns` detection
+   - Add conditions for legitimate system processes
+   - Re-test on Docker VM
+
+4. **Deploy eBPF DaemonSet to DO K8s**
+   - Once unit tests pass: `bash scripts/deploy-ebpf-k8s.sh`
+   - Verify: agents running on all K8s nodes
+   - Check: alerts flowing to Supabase + Redis
+
+---
+
+## Current State (as of 2026-06-27)
 
 **Coverage:** 15 of ~15 single-event-detectable MITRE techniques implemented and validated
 - Docker VM: 13/13 tests passing ✅

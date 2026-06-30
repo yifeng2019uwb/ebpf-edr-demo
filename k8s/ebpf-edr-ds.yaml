@@ -1,3 +1,5 @@
+# Note: Secret and ConfigMap are created by k8s/deploy.sh from k8s/.env
+# This file defines only the DaemonSet that consumes them
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -24,12 +26,35 @@ spec:
         imagePullPolicy: Always
         args: ["--runtime", "k8s"]
         env:
+        # K8s cluster/region info
         - name: REGION
           value: "${REGION}"
         - name: CLUSTER_NAME
           value: "${CLUSTER_NAME}"
         - name: CONTAINER_RUNTIME_ENDPOINT
           value: unix:///run/containerd/containerd.sock
+        # Alert infrastructure (from ConfigMap)
+        - name: DATABASE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: ebpf-alerts
+              key: database-url
+        - name: PUBSUB_ADDR
+          valueFrom:
+            configMapKeyRef:
+              name: ebpf-alerts
+              key: pubsub-addr
+        # Alert infrastructure secrets (from Secret)
+        - name: DATABASE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: ebpf-alerts
+              key: database-key
+        - name: PUBSUB_KEY
+          valueFrom:
+            secretKeyRef:
+              name: ebpf-alerts
+              key: pubsub-key
         securityContext:
           privileged: true
         resources:

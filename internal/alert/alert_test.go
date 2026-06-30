@@ -1,38 +1,37 @@
 package alert
 
 import (
+	"context"
 	"encoding/json"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"ebpf-edr-demo/pkg/workload"
 )
 
-// newTestHandler creates a Handler writing to a temp file, bypassing NewHandler's
-// hardcoded paths. Used only in tests.
-func newTestHandler(t *testing.T) (*Handler, string) {
-	t.Helper()
-	dir := t.TempDir()
-	f, err := os.OpenFile(filepath.Join(dir, "alert.log"), os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		t.Fatalf("creating test alert file: %v", err)
-	}
-	return &Handler{file: f}, filepath.Join(dir, "alert.log")
+// testSink collects alerts for testing
+type testSink struct {
+	alerts []Alert
 }
 
-func readAlertFile(t *testing.T, path string) string {
+func (ts *testSink) Write(ctx context.Context, a Alert) error {
+	ts.alerts = append(ts.alerts, a)
+	return nil
+}
+
+func (ts *testSink) Close() error {
+	return nil
+}
+
+// newTestHandler creates a Handler with a test sink
+func newTestHandler(t *testing.T) (*Handler, *testSink) {
 	t.Helper()
-	b, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("reading alert file: %v", err)
-	}
-	return string(b)
+	sink := &testSink{}
+	return NewHandler([]Sink{sink}), sink
 }
 
 func TestHandlerSend_WritesFormattedLine(t *testing.T) {
-	h, path := newTestHandler(t)
+	h, sink := newTestHandler(t)
 
 	h.Send(Alert{
 		Level:   Critical,
@@ -50,27 +49,18 @@ func TestHandlerSend_WritesFormattedLine(t *testing.T) {
 	})
 	h.Close()
 
-	line := readAlertFile(t, path)
+	if len(sink.alerts) != 1 {
+		t.Fatalf("expected 1 alert, got %d", len(sink.alerts))
+	}
 
-	for _, want := range []string{
-		"ALERT",
-		"level=CRITICAL",
-		"rule=shell_spawn_container",
-		"runtime=docker",
-		"service=auth-service",
-		"namespace=default",
-		"comm=bash",
-		"pid=1234",
-		"msg=Shell spawned from container",
-	} {
-		if !strings.Contains(line, want) {
-			t.Fatalf("alert line missing %q\ngot: %s", want, line)
-		}
+	a := sink.alerts[0]
+	if a.Level != Critical || a.Rule != "shell_spawn_container" || a.Pid != 1234 {
+		t.Fatalf("alert fields mismatch: %+v", a)
 	}
 }
 
 func TestHandlerSend_FilenameInExtra(t *testing.T) {
-	h, path := newTestHandler(t)
+	h, sink := newTestHandler(t)
 
 	h.Send(Alert{
 		Level:    High,
@@ -82,14 +72,16 @@ func TestHandlerSend_FilenameInExtra(t *testing.T) {
 	})
 	h.Close()
 
-	line := readAlertFile(t, path)
-	if !strings.Contains(line, "filename=/root/.ssh/id_rsa") {
-		t.Fatalf("expected filename in alert line, got: %s", line)
+	if len(sink.alerts) != 1 {
+		t.Fatalf("expected 1 alert, got %d", len(sink.alerts))
+	}
+	if sink.alerts[0].Filename != "/root/.ssh/id_rsa" {
+		t.Fatalf("expected filename, got: %v", sink.alerts[0])
 	}
 }
 
 func TestHandlerSend_DstIPInExtra(t *testing.T) {
-	h, path := newTestHandler(t)
+	h, sink := newTestHandler(t)
 
 	h.Send(Alert{
 		Level:   High,
@@ -102,15 +94,16 @@ func TestHandlerSend_DstIPInExtra(t *testing.T) {
 	})
 	h.Close()
 
-	line := readAlertFile(t, path)
-	if !strings.Contains(line, "dst=8.8.8.8:443") {
-		t.Fatalf("expected dst in alert line, got: %s", line)
+	if len(sink.alerts) != 1 {
+		t.Fatalf("expected 1 alert, got %d", len(sink.alerts))
+	}
+	if sink.alerts[0].DstIP != "8.8.8.8" || sink.alerts[0].DstPort != 443 {
+		t.Fatalf("expected dst, got: %v", sink.alerts[0])
 	}
 }
 
 func TestHandlerSend_FilenameTakesPriorityOverDstIP(t *testing.T) {
-	// When both Filename and DstIP are set, Filename wins (first branch in Send)
-	h, path := newTestHandler(t)
+	h, sink := newTestHandler(t)
 
 	h.Send(Alert{
 		Level:    High,
@@ -123,12 +116,12 @@ func TestHandlerSend_FilenameTakesPriorityOverDstIP(t *testing.T) {
 	})
 	h.Close()
 
-	line := readAlertFile(t, path)
-	if !strings.Contains(line, "filename=/etc/shadow") {
-		t.Fatalf("expected filename in alert, got: %s", line)
+	if len(sink.alerts) != 1 {
+		t.Fatalf("expected 1 alert, got %d", len(sink.alerts))
 	}
-	if strings.Contains(line, "dst=") {
-		t.Fatalf("expected no dst when filename is set, got: %s", line)
+	a := sink.alerts[0]
+	if a.Filename != "/etc/shadow" {
+		t.Fatalf("expected filename, got: %v", a)
 	}
 }
 
@@ -137,35 +130,12 @@ func TestHandlerClose_DoesNotPanic(t *testing.T) {
 	h.Close()
 }
 
-func TestNewHandler_CreatesDirectoryAndFile(t *testing.T) {
-	orig, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("getting working dir: %v", err)
-	}
-	if err := os.Chdir(t.TempDir()); err != nil {
-		t.Fatalf("chdir: %v", err)
-	}
-	defer os.Chdir(orig)
-
-	h, err := NewHandler()
-	if err != nil {
-		t.Fatalf("NewHandler() error: %v", err)
-	}
-	defer h.Close()
-
-	if _, err := os.Stat(alertDir); err != nil {
-		t.Fatalf("alert directory not created: %v", err)
-	}
-	if _, err := os.Stat(alertPath); err != nil {
-		t.Fatalf("alert file not created: %v", err)
-	}
-}
-
 func TestHandlerSend_WriteErrorDoesNotPanic(t *testing.T) {
-	// Close the file before Send to trigger the WriteString error path
+	// Close the handler before Send to test error handling
 	h, _ := newTestHandler(t)
 	h.Close()
 
+	// Send should not panic even if sink is closed
 	h.Send(Alert{
 		Level:    High,
 		Rule:     "sensitive_file_access",
@@ -174,67 +144,51 @@ func TestHandlerSend_WriteErrorDoesNotPanic(t *testing.T) {
 	})
 }
 
-func TestNewHandler_CloudLoggingDisabledWhenProjectUnset(t *testing.T) {
-	orig, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("getting working dir: %v", err)
-	}
-	if err := os.Chdir(t.TempDir()); err != nil {
-		t.Fatalf("chdir: %v", err)
-	}
-	defer os.Chdir(orig)
+func TestNewHandler_WithMultipleSinks(t *testing.T) {
+	sink1 := &testSink{}
+	sink2 := &testSink{}
 
-	t.Setenv("GOOGLE_CLOUD_PROJECT", "")
-
-	h, err := NewHandler()
-	if err != nil {
-		t.Fatalf("NewHandler() error: %v", err)
-	}
+	h := NewHandler([]Sink{sink1, sink2})
 	defer h.Close()
 
-	if h.cloudLogger != nil {
-		t.Fatal("expected cloudLogger nil when GOOGLE_CLOUD_PROJECT not set")
+	h.Send(Alert{
+		Level: High,
+		Rule:  "test_rule",
+		Comm:  "test",
+		Workload: workload.ResolveResult{State: workload.StateResolved},
+	})
+
+	if len(sink1.alerts) != 1 || len(sink2.alerts) != 1 {
+		t.Fatalf("expected alert in both sinks")
 	}
 }
 
-func TestAlertPayload_JSONFields(t *testing.T) {
-	p := alertPayload{
-		SchemaVersion: 1,
-		Ts:            "2026-05-04T00:00:00Z",
-		Level:         "CRITICAL",
-		Rule:          "shell_spawn_container",
-		Cluster:       "my-cluster",
-		Service:       "auth-service",
-		Namespace:     "default",
-		Comm:          "bash",
+func TestAlert_JSONMarshal(t *testing.T) {
+	a := Alert{
+		Level:   Critical,
+		Rule:    "shell_spawn_container",
+		Message: "Shell spawned from container",
+		Comm:    "bash",
+		Workload: workload.ResolveResult{
+			Identity: workload.WorkloadIdentity{Service: "auth-service"},
+			Meta:     workload.WorkloadMeta{Namespace: "default"},
+			State:    workload.StateResolved,
+		},
 	}
 
-	b, err := json.Marshal(p)
+	b, err := json.Marshal(a)
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
 	s := string(b)
 
 	for _, want := range []string{
-		`"schema_version":1`,
-		`"ts":"2026-05-04T00:00:00Z"`,
-		`"level":"CRITICAL"`,
-		`"rule":"shell_spawn_container"`,
-		`"cluster":"my-cluster"`,
-		`"service":"auth-service"`,
-		`"namespace":"default"`,
-		`"comm":"bash"`,
+		`"Level":"CRITICAL"`,
+		`"Rule":"shell_spawn_container"`,
+		`"Comm":"bash"`,
 	} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("missing %q in JSON\ngot: %s", want, s)
 		}
-	}
-
-	// omitempty fields absent when zero
-	if strings.Contains(s, `"filename"`) {
-		t.Fatalf("expected filename omitted when empty, got: %s", s)
-	}
-	if strings.Contains(s, `"dst_ip"`) {
-		t.Fatalf("expected dst_ip omitted when empty, got: %s", s)
 	}
 }

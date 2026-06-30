@@ -15,7 +15,9 @@ import (
 	"time"
 
 	"ebpf-edr-demo/internal/alert"
+	"ebpf-edr-demo/internal/config"
 	"ebpf-edr-demo/internal/processor"
+	"ebpf-edr-demo/pkg/alertsink"
 	"ebpf-edr-demo/pkg/bpf"
 	"ebpf-edr-demo/pkg/detector"
 	"ebpf-edr-demo/pkg/pipeline"
@@ -62,10 +64,42 @@ func main() {
 	runtime := flag.String("runtime", "auto", "docker | k8s")
 	flag.Parse()
 
-	handler, err := alert.NewHandler()
+	// Load configuration from environment
+	cfg := config.Load()
+
+	// Create alert sinks based on configuration
+	var sinks []alert.Sink
+
+	// File sink (always enabled)
+	fileSink, err := alertsink.NewFileSink(cfg.AlertLogPath)
 	if err != nil {
 		log.Fatalf("opening alert log: %v", err)
 	}
+	sinks = append(sinks, fileSink)
+
+	// Pub/Sub sink (if configured)
+	// Currently supports Redis, extensible to other pub/sub systems
+	if cfg.PubSubAddr != "" {
+		pubsubSink, err := alertsink.NewRedisSink(cfg.PubSubAddr)
+		if err != nil {
+			log.Printf("pub/sub sink disabled: %v", err)
+		} else {
+			sinks = append(sinks, pubsubSink)
+		}
+	}
+
+	// Database sink (if configured)
+	// Currently supports Supabase, extensible to other databases
+	if cfg.DatabaseURL != "" && cfg.DatabaseKey != "" {
+		dbSink, err := alertsink.NewSupabaseSink(cfg.DatabaseURL, cfg.DatabaseKey)
+		if err != nil {
+			log.Printf("database sink disabled: %v", err)
+		} else {
+			sinks = append(sinks, dbSink)
+		}
+	}
+
+	handler := alert.NewHandler(sinks)
 	defer handler.Close()
 
 	resolver := workload.NewResolver(*runtime)

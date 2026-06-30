@@ -36,6 +36,9 @@ alerts/*.log
 output/
 logs/
 
+# Ignore .env file with secrets (track .env.example instead)
+infra/.env
+
 # --- Temporary Files ---
 *.tmp
 *.bak
