@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -18,11 +19,16 @@ type SupabaseSink struct {
 }
 
 func NewSupabaseSink(url, key string) (*SupabaseSink, error) {
-	// Convert Supabase URL to PostgreSQL connection string
+	// Convert Supabase HTTPS URL to PostgreSQL connection string
 	// url format: https://project.supabase.co
-	// Convert to: postgres://postgres:key@project.supabase.co:5432/postgres
-	connStr := fmt.Sprintf("postgres://postgres:%s@%s:5432/postgres?sslmode=require",
-		url, key)
+	// Extract project name and build: postgres://postgres:key@db.project.supabase.co:5432/postgres
+
+	// Parse URL to extract project name: https://jkhwfobxtydpknsplvcv.supabase.co → jkhwfobxtydpknsplvcv
+	projectName := strings.TrimPrefix(url, "https://")
+	projectName = strings.TrimSuffix(projectName, ".supabase.co")
+
+	connStr := fmt.Sprintf("postgres://postgres:%s@db.%s.supabase.co:5432/postgres?sslmode=require",
+		key, projectName)
 
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {

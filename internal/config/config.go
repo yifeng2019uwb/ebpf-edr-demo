@@ -25,10 +25,10 @@ type Config struct {
 }
 
 func Load() *Config {
-	// Load .env file if it exists (optional — supports local development)
-	// If .env doesn't exist, falls back to environment variables
-	if err := godotenv.Load(); err != nil && !os.IsNotExist(err) {
-		log.Printf("warning: loading .env: %v", err)
+	// Load infra/.env if it exists (optional — supports local development)
+	// Falls back to environment variables if file doesn't exist
+	if err := godotenv.Load("infra/.env"); err != nil && !os.IsNotExist(err) {
+		log.Printf("warning: loading infra/.env: %v", err)
 	}
 
 	return &Config{

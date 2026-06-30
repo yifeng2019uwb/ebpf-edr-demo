@@ -18,15 +18,20 @@ type RedisSink struct {
 }
 
 func NewRedisSink(addr string) (*RedisSink, error) {
-	client := redis.NewClient(&redis.Options{
-		Addr: addr,
-	})
+	// Parse Redis URL (format: redis://user:pass@host:port)
+	opts, err := redis.ParseURL(addr)
+	if err != nil {
+		log.Printf("redis sink parse url failed: %v", err)
+		return nil, err
+	}
+
+	client := redis.NewClient(opts)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
 	if err := client.Ping(ctx).Err(); err != nil {
-		log.Printf("redis sink init failed: %v", err)
+		log.Printf("redis sink connection failed: %v", err)
 		return nil, err
 	}
 

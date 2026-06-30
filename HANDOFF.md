@@ -58,21 +58,44 @@
    - Issue: False positives on legitimate system tools (/usr/bin/ps, /usr/sbin/apparmor_parser)
    - Conclusion: Detection mechanism working, rules need refinement
 
-### Current Issues 🔴
+### Session 2026-06-30: Local Testing + Alert-Router Update
 
-1. **Unit Tests** ✅ FIXED
-   - Rewrote tests to use new Sink-based Handler
-   - All tests passing on VM and macOS
-   - Status: COMPLETE
+**Completed:**
+1. ✅ **Unit Tests Fixed** — Rewrote for Sink-based Handler, passing on VM + macOS
+2. ✅ **Alert-Router Updated** — Replaced GCP Pub/Sub with Redis, reads from infra/.env
+3. ✅ **Supabase Sink Fixed** — Parses HTTPS URL to build correct PostgreSQL connection string
+4. ✅ **Config Loader Fixed** — Now loads `infra/.env` directly (no need to copy to root)
+5. ✅ **Redis Sink Fixed** — Uses `redis.ParseURL()` to handle full redis:// URLs
+6. ✅ **eBPF Agent Local Testing** — Generates alerts to local file (alerts/alert.log)
+7. ✅ **Redis Pub/Sub Working** — Alerts flowing real-time through Redis channel `edr-alerts`
 
-2. **Supabase Sink Compilation**
-   - Fixed for PostgreSQL direct connection (not Supabase Go client API)
-   - Need to verify: add `github.com/lib/pq` dependency and test insert
+**Verified Working End-to-End:**
+- eBPF programs loading and detecting events ✅
+- Alert generation working (both local file + Redis) ✅
+- Redis sink publishing alerts ✅
+- Real-time alert delivery via Redis ✅
 
-3. **False Positive Rule (T1611)**
-   - System tools detected as "escape to host namespace"
-   - Need to refine rule: add conditions for legitimate processes
-   - Decision pending: whitelist approach vs. better detection logic
+**Code Changes (Ready to Commit):**
+- `internal/config/config.go` — Load infra/.env directly
+- `pkg/alertsink/redis_sink.go` — Use ParseURL for Redis URLs
+- `pkg/alertsink/supabase_sink.go` — URL parsing (already committed)
+- `cmd/alert-router/main.go` — Redis integration (already committed)
+- `internal/alert/alert_test.go` — Sink-based tests (already committed)
+- `Makefile` — Updated for deployments (already committed)
+
+**Known Issues:**
+1. Supabase IPv6 unreachable — PostgreSQL connection fails from DO VM
+   - Will retry when deploying to K8s (different network path)
+   - Fallback: local file sink + Redis working, Supabase optional
+2. T1611 false positives — too many system processes detected as container escapes
+   - Alert channel overflow when too many alerts generated
+   - Need to tune rule: whitelist or refine detection logic
+
+**Next Session:**
+1. Deploy eBPF DaemonSet to DO K8s
+2. Test alert-router dashboard with Redis
+3. Verify Supabase on K8s (likely better IPv6 connectivity)
+4. Tune T1611 rule to reduce false positives
 
 ### Architecture Now
 
