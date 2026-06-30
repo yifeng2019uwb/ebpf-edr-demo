@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"net"
+	"os"
 	"strings"
 	"time"
 
@@ -19,16 +21,35 @@ type SupabaseSink struct {
 }
 
 func NewSupabaseSink(url, key string) (*SupabaseSink, error) {
-	// Convert Supabase HTTPS URL to PostgreSQL connection string
-	// url format: https://project.supabase.co
-	// Extract project name and build: postgres://postgres:key@db.project.supabase.co:5432/postgres
-
 	// Parse URL to extract project name: https://jkhwfobxtydpknsplvcv.supabase.co → jkhwfobxtydpknsplvcv
 	projectName := strings.TrimPrefix(url, "https://")
 	projectName = strings.TrimSuffix(projectName, ".supabase.co")
 
-	connStr := fmt.Sprintf("postgres://postgres:%s@db.%s.supabase.co:5432/postgres?sslmode=require",
-		key, projectName)
+	hostname := fmt.Sprintf("db.%s.supabase.co", projectName)
+	username := "postgres"
+
+	// Use Supavisor pooler endpoint if DATABASE_REGION is set (IPv4-compatible, required for Supabase Free tier on IPv6-only networks)
+	// Otherwise try direct endpoint with IPv4 preference, or accept manual override via DATABASE_HOST
+	if region := os.Getenv("DATABASE_REGION"); region != "" {
+		hostname = fmt.Sprintf("aws-%s.pooler.supabase.com", region)
+		username = fmt.Sprintf("postgres.%s", projectName)
+	} else if override := os.Getenv("DATABASE_HOST"); override != "" {
+		hostname = override
+	} else {
+		// Fallback: try direct endpoint with IPv4 preference (if available)
+		ips, err := net.LookupHost(hostname)
+		if err == nil && len(ips) > 0 {
+			for _, ip := range ips {
+				if net.ParseIP(ip).To4() != nil {
+					hostname = ip
+					break
+				}
+			}
+		}
+	}
+
+	connStr := fmt.Sprintf("postgres://%s:%s@%s:5432/postgres?sslmode=require&connect_timeout=5",
+		username, key, hostname)
 
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {

@@ -26,9 +26,18 @@ type Config struct {
 
 func Load() *Config {
 	// Load infra/.env if it exists (optional — supports local development)
-	// Falls back to environment variables if file doesn't exist
-	if err := godotenv.Load("infra/.env"); err != nil && !os.IsNotExist(err) {
-		log.Printf("warning: loading infra/.env: %v", err)
+	// Try multiple paths since binary can be run from different directories
+	envPaths := []string{
+		"infra/.env",    // from repo root
+		"../infra/.env", // from bin/ directory
+	}
+
+	for _, path := range envPaths {
+		if err := godotenv.Load(path); err == nil {
+			break
+		} else if !os.IsNotExist(err) {
+			log.Printf("warning: loading %s: %v", path, err)
+		}
 	}
 
 	return &Config{
