@@ -42,7 +42,7 @@ run-docker:
 
 ## run-alert-router — run the Alert Router on laptop (open http://localhost:8888)
 run-alert-router:
-	go run ./cmd/alert-router/
+	@set -a && source infra/.env && set +a && go run ./cmd/alert-router/
 
 ## infra-up — provision GCP infra via Pulumi (Cloud Logging, Pub/Sub, IAM)
 ## Note: GCP free tier expires 2026-06-17

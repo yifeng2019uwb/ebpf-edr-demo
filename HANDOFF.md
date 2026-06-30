@@ -60,12 +60,10 @@
 
 ### Current Issues 🔴
 
-1. **Unit Tests Failing**
-   - `internal/internal/alert/alert_test.go` — old test code, incompatible with new Sink-based Handler
-   - Need to:
-     - Delete or update old test file
-     - Ensure tests match refactored Handler API
-   - Status: Not fixed yet
+1. **Unit Tests** ✅ FIXED
+   - Rewrote tests to use new Sink-based Handler
+   - All tests passing on VM and macOS
+   - Status: COMPLETE
 
 2. **Supabase Sink Compilation**
    - Fixed for PostgreSQL direct connection (not Supabase Go client API)
@@ -104,12 +102,11 @@ health-ai/Makefile:
 
 ### For Next Session
 
-1. **Fix Unit Tests** (BLOCKING)
-   - Update `internal/internal/alert/alert_test.go` to match new Sink API
-   - Or delete if old/unused
-   - Verify: `make test` passes
+1. **Unit Tests** ✅ DONE
+   - Tests rewritten for Sink-based Handler
+   - Passing on both VM and macOS
 
-2. **Test Supabase Sink**
+2. **Test Supabase Sink** (NEXT)
    - Add `go get github.com/lib/pq`
    - Build: `make build`
    - Deploy to K8s: `make deploy-ebpf-k8s`

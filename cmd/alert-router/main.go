@@ -5,19 +5,19 @@ import (
 	_ "embed"
 	"log"
 	"net/http"
+	"os"
 	"sync"
 
-	"cloud.google.com/go/pubsub/v2"
 	"github.com/gorilla/websocket"
+	"github.com/redis/go-redis/v9"
 )
 
 //go:embed index.html
 var indexHTML string
 
 const (
-	projectID  = "ebpfagent"
-	subID      = "edr-alerts-router-sub"
-	listenAddr = ":8888"
+	listenAddr    = ":8888"
+	alertsChannel = "edr-alerts"
 )
 
 const historySize = 100
@@ -78,21 +78,36 @@ var upgrader = websocket.Upgrader{
 func main() {
 	ctx := context.Background()
 
-	psClient, err := pubsub.NewClient(ctx, projectID)
-	if err != nil {
-		log.Fatalf("pubsub client init: %v", err)
+	// Get Redis address from environment
+	redisURL := os.Getenv("PUBSUB_ADDR")
+	if redisURL == "" {
+		redisURL = "redis://localhost:6379"
 	}
+
+	// Parse Redis URL
+	opts, err := redis.ParseURL(redisURL)
+	if err != nil {
+		log.Fatalf("parse redis url: %v", err)
+	}
+
+	// Connect to Redis
+	rdb := redis.NewClient(opts)
+
+	if err := rdb.Ping(ctx).Err(); err != nil {
+		log.Fatalf("redis ping: %v", err)
+	}
+	log.Printf("Connected to Redis: %s", redisURL)
 
 	h := newHub()
 
-	// Pull from Pub/Sub and broadcast to all connected browsers.
+	// Subscribe to Redis channel and broadcast to all connected browsers
 	go func() {
-		sub := psClient.Subscriber(subID)
-		if err := sub.Receive(ctx, func(_ context.Context, msg *pubsub.Message) {
-			h.broadcast(msg.Data)
-			msg.Ack()
-		}); err != nil && ctx.Err() == nil {
-			log.Fatalf("pubsub receive: %v", err)
+		sub := rdb.Subscribe(ctx, alertsChannel)
+		defer sub.Close()
+
+		ch := sub.Channel()
+		for msg := range ch {
+			h.broadcast([]byte(msg.Payload))
 		}
 	}()
 
