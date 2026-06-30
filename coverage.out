@@ -1,4 +1,16 @@
 mode: set
+ebpf-edr-demo/internal/alert/alert.go:52.40,54.2 1 1
+ebpf-edr-demo/internal/alert/alert.go:57.33,59.31 2 1
+ebpf-edr-demo/internal/alert/alert.go:59.31,60.44 1 1
+ebpf-edr-demo/internal/alert/alert.go:60.44,62.4 1 0
+ebpf-edr-demo/internal/alert/alert.go:67.27,68.31 1 1
+ebpf-edr-demo/internal/alert/alert.go:68.31,69.38 1 1
+ebpf-edr-demo/internal/alert/alert.go:69.38,71.4 1 0
+ebpf-edr-demo/internal/processor/processor.go:78.31,79.40 1 1
+ebpf-edr-demo/internal/processor/processor.go:79.40,81.3 1 1
+ebpf-edr-demo/internal/processor/processor.go:82.2,82.18 1 1
+ebpf-edr-demo/internal/processor/processor.go:87.29,89.2 1 1
+ebpf-edr-demo/internal/processor/processor.go:93.31,95.2 1 1
 ebpf-edr-demo/internal/config/config.go:27.21,35.32 2 0
 ebpf-edr-demo/internal/config/config.go:35.32,36.45 1 0
 ebpf-edr-demo/internal/config/config.go:36.45,37.9 1 0
@@ -173,15 +185,3 @@ ebpf-edr-demo/pkg/detector/yaml_detector.go:344.28,346.4 1 0
 ebpf-edr-demo/pkg/detector/yaml_detector.go:349.2,360.3 1 0
 ebpf-edr-demo/pkg/detector/yaml_detector.go:365.147,371.2 1 0
 ebpf-edr-demo/pkg/detector/yaml_detector.go:373.143,379.2 1 0
-ebpf-edr-demo/internal/alert/alert.go:52.40,54.2 1 1
-ebpf-edr-demo/internal/alert/alert.go:57.33,59.31 2 1
-ebpf-edr-demo/internal/alert/alert.go:59.31,60.44 1 1
-ebpf-edr-demo/internal/alert/alert.go:60.44,62.4 1 0
-ebpf-edr-demo/internal/alert/alert.go:67.27,68.31 1 1
-ebpf-edr-demo/internal/alert/alert.go:68.31,69.38 1 1
-ebpf-edr-demo/internal/alert/alert.go:69.38,71.4 1 0
-ebpf-edr-demo/internal/processor/processor.go:78.31,79.40 1 1
-ebpf-edr-demo/internal/processor/processor.go:79.40,81.3 1 1
-ebpf-edr-demo/internal/processor/processor.go:82.2,82.18 1 1
-ebpf-edr-demo/internal/processor/processor.go:87.29,89.2 1 1
-ebpf-edr-demo/internal/processor/processor.go:93.31,95.2 1 1
