@@ -288,9 +288,13 @@ func main() {
 					if expired {
 						ev := e.ev
 						nsID := mntNsIDOf(ev)
-						// DEBUG: log process expiring to unknown state
-						log.Printf("DEBUG pending-timeout: pid=%d comm=%s mntNsId=%d expired after %d retries, max_age=%v",
-							ev.Process.Pid, processor.CString(ev.Process.Comm[:]), nsID, e.retries, time.Since(e.firstSeen))
+						// DEBUG: log event expiring to unknown state (handle all event types)
+						comm := "unknown"
+						if ev.Process != nil {
+							comm = processor.CString(ev.Process.Comm[:])
+						}
+						log.Printf("DEBUG pending-timeout: ev_type=%T comm=%s mntNsId=%d expired after %d retries, max_age=%v",
+							ev, comm, nsID, e.retries, time.Since(e.firstSeen))
 						ev.Workload.State = workload.StateUnknown
 						unknownNs.Add(1)
 						select {

@@ -57,15 +57,15 @@ infra-down:
 infra-refresh:
 	cd infra && pulumi refresh --yes && pulumi up --yes
 
-## docker-push-ghcr — build binary + image and push to ghcr.io (run on GCP VM — needs Linux for BPF headers)
+## docker-push-ghcr — build binary + image and push to ghcr.io (run on Linux VM — needs Linux for BPF headers)
 docker-push-ghcr: build
-	docker build -t $(GHCR_IMAGE) .
-	docker push $(GHCR_IMAGE)
+	docker build -t ghcr.io/yifeng2019uwb/ebpf-edr:latest .
+	docker push ghcr.io/yifeng2019uwb/ebpf-edr:latest
 
 ## docker-push-ghcr-prebuilt — push image using committed binary (safe to run on Mac)
 docker-push-ghcr-prebuilt:
-	docker build -t $(GHCR_IMAGE) .
-	docker push $(GHCR_IMAGE)
+	docker build -t ghcr.io/yifeng2019uwb/ebpf-edr:latest .
+	docker push ghcr.io/yifeng2019uwb/ebpf-edr:latest
 
 ## github-release — build linux/amd64 binary and publish as a GitHub release
 ## Usage: make github-release VERSION=v0.1.0
