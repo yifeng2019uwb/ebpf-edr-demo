@@ -36,11 +36,15 @@ make test                 # Run unit tests
 
 ### DigitalOcean Kubernetes (primary)
 
+**Initial deploy:**
 ```bash
 bash scripts/deploy-ebpf-k8s.sh
-kubectl logs -n kube-system -l app=ebpf-edr -f
 ./validate-do-k8s.sh
 ```
+
+**Update existing deployment:**
+- If agent code changed → `make docker-push-ghcr` then `bash scripts/deploy-ebpf-k8s.sh`
+- If only config/rules changed → just `bash scripts/deploy-ebpf-k8s.sh` (no rebuild needed)
 
 See: [DEPLOYMENT.md](DEPLOYMENT.md#digitalocean-kubernetes)
 

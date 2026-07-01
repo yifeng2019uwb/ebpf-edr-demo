@@ -30,30 +30,23 @@
   - `validate-do-k8s.sh` — 12-test functional validation
   - Works on any K8s cluster (tested on DO)
 
-### Known Limitations ⚠️
+### Known Limitations & Future Work
 
-1. **T1105 (Tool Transfer)** — Not consistently detected as ProcessEvent
-   - T1041 (network connection) always fires and proves threat
-   - Current behavior acceptable for security purposes
-   - Status: Acceptable, not blocking production
+**✅ Resolved**
+- Docker Snap Detection — `findDockerDaemonNamespace()` working reliably
 
-2. **T1611 (Escape Detection)** — Transient false positives during container startup
-   - Appears in unknown namespace during init (runc, apt, dpkg, etc.)
-   - Promoted to CRITICAL after 60s timeout
-   - Not critical for controlled environments
-   - Status: Known issue, manageable in production
+**⚠️ Acceptable (Not Blocking)**
+1. **T1105 ProcessEvent** — Low priority (T1041 proves threat)
+2. **T1611 False Positives** — Manageable in controlled environments
+3. **blockIP IPv4-only** — Handles majority of threats
 
-3. **blockIP Response** — Limited to IPv4 only
-   - IPv6 addresses captured in alerts but cannot be blocked
-   - Requires kernel-side BPF map restructuring
-   - Status: Acceptable limitation, IPv4 handles majority of threats
+**🔍 Research Items (Optional, No Timeline)**
 
-### Resolved ✅
-
-4. **Docker Snap Detection** — ✅ Fixed
-   - `findDockerDaemonNamespace()` in docker_resolver.go
-   - Correctly identifies snap docker vs system docker
-   - Works reliably in all deployment scenarios
+| Issue | Current Behavior | Investigation Steps | Potential Fix |
+|-------|------------------|-------------------|---------------|
+| **T1105 Not Consistent** | T1041 always fires | 1. Run V8 test 20x, count T1105 firing rate<br>2. Compare kubectl exec vs direct execution<br>3. Check if ProcessEvent dropped in enricher | Skip T1105 detection (T1041 sufficient) |
+| **T1611 False Positives** | CRITICAL after 60s | 1. Capture container init logs<br>2. Correlate with unknown namespace alerts<br>3. Identify common false positive patterns | Option: Track parent PID = container init → demote to MEDIUM |
+| **Performance Under Load** | Unknown ceiling | 1. Generate burst of 1000 alerts<br>2. Monitor eBPF buffer loss %<br>3. Check K8s pod CPU/memory | Tune buffer size, resource limits |
 
 ---
 
@@ -79,33 +72,14 @@ Configuration
 
 ---
 
-## Issues in Queue
+## Work in Queue
 
-### Priority 1: None (Ready to Ship)
-- System is production-ready
+**Ready to Ship** ✅
 - All 12 tests passing
 - All alert sinks working
+- No blocking issues
 
-### Priority 2: Research/Optimization (Optional)
-
-1. **T1105 ProcessEvent Detection** 
-   - Why aren't ProcessEvents for network tools consistently generated?
-   - Does kubectl exec invoke different syscall path than direct execution?
-   - Low priority: T1041 already detects the threat
-
-2. **T1611 False Positive Research**
-   - Understand when transient processes in unknown namespace are legitimate
-   - Current: all logged as CRITICAL after 60s
-   - Options:
-     - A) Whitelist by tool name (risky)
-     - B) Track process ancestry (parent = container init?)
-     - C) Demote to MEDIUM + require persistence for CRITICAL
-     - D) Correlate with container logs
-
-3. **Performance Under Load**
-   - Alert throughput ceiling?
-   - eBPF buffer sizing for burst events?
-   - K8s resource limits per node?
+**Optional Future Work** (see table above for step-by-step approach)
 
 ---
 

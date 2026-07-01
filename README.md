@@ -1,55 +1,116 @@
 # eBPF EDR Demo
 
-eBPF-based runtime security monitor for containerized workloads. Detects and responds to threats at the kernel level — no agent inside containers, no application changes required.
-
-## Status
-
-| Environment | Tests | Status |
-|-------------|-------|--------|
-| **Docker VM** | 13 | ✅ 13/13 pass |
-| **GKE** | 11 | ✅ 11/11 pass |
+Runtime security monitor for Kubernetes. Detects container escapes, privilege abuse, and data exfiltration using eBPF kernel monitoring. Zero-footprint: no agent inside containers, no application changes.
 
 ---
 
-## How It Works
+## Quick Start
 
-Three eBPF programs attach to kernel hooks and stream events via ring buffer to a Go userspace pipeline:
+**Kubernetes Deployment:**
+```bash
+# Prerequisites: kubectl configured + any workloads deployed
+bash scripts/deploy-ebpf-k8s.sh
+./validate-do-k8s.sh
 
-```
-KERNEL
-─────────────────────────────────────────────────────
-execsnoop            lsm-file              lsm-connect
-sys_enter_execve     lsm/file_open         lsm/socket_connect
-     │                     │                     │
-     └─────────────────────┴─────────────────────┘
-                           │  ring buffer
-USERSPACE (Go)
-─────────────────────────────────────────────────────
-Enricher → Detector → Responder → AlertHandler
+# Optional: configure Redis/Supabase in infra/.env for real-time alerts
 ```
 
-**Pipeline:** Mount namespace ID → Workload identity → Detection rules → Response actions (kill, block) → Alerts (local file, monitoring service)
+**Docker VM Deployment:**
+```bash
+# Prerequisites: Linux VM with Docker
+make build && make run-docker
+tail -f alerts/alert.log
+
+# Optional: set PUBSUB_ADDR or DATABASE_URL for real-time/persistent alerts
+```
+
+**Alerts work without Redis/Supabase** — file sink always active. Optional backends enable real-time streaming and persistence.
+
+Full guide: [SETUP.md](SETUP.md)
 
 ---
 
-## Documentation
+## ⚙️ How It Works
 
-**Project Overview:**
-- [MITRE-COVERAGE.md](docs/MITRE-COVERAGE.md) — 15 techniques covered, detection rules
-- [DETECTION-POLICY.md](docs/DETECTION-POLICY.md) — whitelists, false positive handling
-- [CAPABILITY_CONSIDERATIONS.md](CAPABILITY_CONSIDERATIONS.md) — evaluate features to add next
+Three specialized eBPF programs monitor strategic kernel hooks and stream events via Linux ring buffer to a Go userspace pipeline:
 
-**Testing & Validation:**
-- [VALIDATION.md](docs/VALIDATION.md) — Docker VM test guide
-- [VALIDATION-GKE.md](docs/VALIDATION-GKE.md) — GKE test guide
+```
+KERNEL SPACE
+────────────────────────────────────────────────────────────
+    execsnoop              opensnoop            lsm-connect
+(sys_enter_execve)      (lsm/file_open)     (lsm/socket_connect)
+        │                      │                     │
+        └──────────────────────┴─────────────────────┘
+                               │ 
+                               ▼ BPF Ring Buffer
+USERSPACE (Go Agent)
+────────────────────────────────────────────────────────────
+ [Enricher] ──► [Detector] ──► [Responder] ──► [AlertHandler]
+```
 
-**Operations:**
-- [NOTES.md](docs/NOTES.md) — deployment, monitoring, troubleshooting
-- [ENV-FINDINGS.md](docs/ENV-FINDINGS.md) — environment observations, findings
+**Pipeline:** Event capture → Namespace resolution → YAML rule detection → Active response (kill, block) → Alert dispatch (file, Redis, Supabase)
 
-**Detailed Reference:**
-- [REPORT.md](docs/REPORT.md) — full architecture, pipeline, implementation details
-- [HANDOFF.md](HANDOFF.md) — session handoff, current state, next priorities
+---
 
-**Archived:**
-- `docs/archive/` — old designs, infrastructure setups, and work logs (see [NOTES.md](docs/NOTES.md) for reference links)
+## 🏗️ Architecture & Project Structure
+
+**Monitoring Layer:**
+- `kernel/` — C-based eBPF programs for process, file, and network monitoring via ring buffer
+
+**Resolution & Detection:**
+- `pkg/workload/` — Real-time container and pod identity resolution
+- `pkg/detector/` + `pkg/rules/` — Detection engine with YAML-based ruleset (`rules/default.yaml`)
+- `pkg/detector/responder.go` — Active mitigation (kill_process, blockIP)
+
+**Alert Distribution:**
+- `pkg/alertsink/` — Multi-destination alerting (file, Redis Pub/Sub, Supabase)
+
+**Deployment:**
+- `k8s/ebpf-edr-ds.yaml` — Kubernetes DaemonSet for node-level coverage
+- `scripts/deploy-ebpf-k8s.sh` — Generic K8s deployment script
+- `cmd/edr-monitor/` — Main agent binary and pipeline orchestration
+
+---
+
+## ✨ Key Features
+
+- ✅ **14 MITRE Techniques** — Container escape, privilege escalation, data exfiltration, discovery, and more
+- ✅ **Dynamic YAML Rules** — Update detection logic without recompiling BPF bytecode
+- ✅ **Environment-Aware** — Multi-cloud whitelisting (GCP, DigitalOcean, Kubernetes) to suppress noise
+- ✅ **Active Response** — Immediate automated actions: kill process, block IP (IPv4), with audit trail
+- ✅ **Real-Time Alerts** — Instant dispatch via Redis Pub/Sub + persistent storage in Supabase
+- ✅ **Zero Footprint** — No sidecar agents, no application changes
+
+---
+
+## 📚 Documentation
+
+**Getting Started:**
+- 🛠️ [SETUP.md](SETUP.md) — Quick build, deploy, and validate commands using Makefile and scripts.
+- 🌐 [DEPLOYMENT.md](DEPLOYMENT.md) — Detailed configuration for Kubernetes and Docker VM deployments with environment setup.
+- 🗺️ [HANDOFF.md](HANDOFF.md) — Current project state, known limitations, and future research roadmap.
+
+**Component Details:**
+- 🛡️ [rules/default.yaml](rules/default.yaml) — 14 MITRE detection rules with environment-aware whitelisting (self-documented).
+- 📊 [MITRE-COVERAGE.md](docs/MITRE-COVERAGE.md) — Full mapping of eBPF hooks to MITRE ATT&CK techniques.
+- 📖 `pkg/*/README.md` — Deep dives into each component (detector, rules, workload resolver, alertsink).
+- 🔧 `kernel/README.md` — eBPF C programs, limitations, and extending detection logic.
+
+---
+
+## 🤝 Contributing
+
+**Bug Reports & Features:**
+- Open an issue in the [Issue Tracker](../../issues)
+
+**Development:**
+- Reference [SETUP.md](SETUP.md) for build workflow
+- See [HANDOFF.md](HANDOFF.md) for current development state
+- Run tests: `./validate-do-k8s.sh`
+
+**Questions:**
+- See [HANDOFF.md](HANDOFF.md) for known limitations and research roadmap
+
+---
+
+**Last Updated:** 2026-06-30 (DigitalOcean K8s validation complete)
