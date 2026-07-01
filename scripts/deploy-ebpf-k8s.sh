@@ -27,6 +27,14 @@ error()   { echo "[ERROR] $*"; exit 1; }
 
 # ── MAIN ──────────────────────────────────────────────────────────────────────
 main() {
+    # Load credentials from .env if it exists
+    if [[ -f "infra/.env" ]]; then
+        info "Loading credentials from infra/.env..."
+        set -a; source infra/.env; set +a
+        info "✓ Loaded DATABASE_URL, PUBSUB_ADDR"
+        echo ""
+    fi
+
     info "Deploying eBPF agent to K8s cluster: $CLUSTER_NAME ($REGION)"
     echo ""
 
