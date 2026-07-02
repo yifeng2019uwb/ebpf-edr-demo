@@ -81,6 +81,31 @@ Configuration
 
 **Optional Future Work** (see table above for step-by-step approach)
 
+**Container Initialization False Positives** (False Positive Handling - Priority)
+- **Problem:** T1611 alerts on legitimate container startup processes (dpkg, apt-get, pip, Go compiler tools, iSCSI handlers)
+  - Cause: state=unknown during container initialization; processes can't be mapped to known container yet
+  - Example: `/usr/bin/dpkg` spawned from `/bin/sh` script during package installation
+  - Impact: ~80% of Docker alerts are initialization noise
+- **Research:** Analyzed Falco's approach (industry standard for container runtime security)
+  - Use parent process context (if parent is init/shell script, activity is expected)
+  - Track actual container creation time from resolver metadata (not guesses)
+  - Image-aware rules (different whitelists per container image)
+- **Three-phase solution:**
+  1. **Phase 1 (READY):** Parent process checking
+     - Skip/demote T1611 if parent is `/bin/sh`, `init`, or known system scripts
+     - Implementation: Add `getParentComm(pid)` in detector, check before alerting
+     - Expected reduction: 95% of false positives
+     - Effort: ~50 lines in `pkg/detector/yaml_detector.go`
+  2. **Phase 2 (DEFERRED):** Container creation time grace period
+     - Extend workload resolver to fetch container creation time from Docker/K8s
+     - Skip T1611 alerts if container created <60s ago (initialization window)
+     - More accurate than process counting; based on actual metadata
+     - Effort: extend Identity struct, cache creation time per namespace
+  3. **Phase 3 (DEFERRED):** Image-based rules
+     - Add image name to resolver Identity
+     - Different whitelists per image (e.g., Debian vs Alpine)
+     - Higher complexity; only if phases 1-2 insufficient
+
 **Optimize rule checking from O(N) to O(1)** (Performance - priority)
 - Current: checkProcessRules/checkFileRules loop through whitelists/patterns for each event
   - Line 147-152: T1036 prefix matching - `for _, prefix := range t1036Paths` + strings.HasPrefix (O(N*M))

@@ -5,6 +5,7 @@ package detector
 import (
 	"fmt"
 	"net"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -14,6 +15,19 @@ import (
 	"ebpf-edr-demo/pkg/rules"
 	"ebpf-edr-demo/pkg/workload"
 )
+
+// Known process names that indicate initialization context (shell scripts, init systems)
+var initializationProcs = map[string]bool{
+	"sh":       true, // POSIX shell
+	"bash":     true,
+	"dash":     true, // Debian default shell
+	"ksh":      true, // Korn shell
+	"zsh":      true,
+	"init":     true, // System init
+	"systemd":  true,
+	"runit":    true,
+	"s6-init":  true,
+}
 
 // YAMLDetector implements pipeline.Detector using rules loaded from YAML.
 type YAMLDetector struct {
@@ -133,6 +147,22 @@ func (d *YAMLDetector) isPrivateIP(ip net.IP) bool {
 	return false
 }
 
+func getParentComm(ppid int32) string {
+	// Read parent's executable name from /proc/[ppid]/comm
+	// Used to detect initialization context (shell scripts, init processes)
+	path := fmt.Sprintf("/proc/%d/comm", ppid)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
+}
+
+func isInitializationProcess(comm string) bool {
+	base := filepath.Base(comm)
+	return initializationProcs[base]
+}
+
 // ── Process rules ─────────────────────────────────────────────────────────────
 
 func (d *YAMLDetector) checkProcessRules(event processor.ProcessEvent, res workload.ResolveResult) *alert.Alert {
@@ -156,6 +186,13 @@ func (d *YAMLDetector) checkProcessRules(event processor.ProcessEvent, res workl
 	}
 
 	if res.State == workload.StateUnknown {
+		// Check if parent process is an initialization context (shell script, init, etc.)
+		// If so, this process is likely part of container startup, not an escape attempt
+		parentComm := getParentComm(event.Ppid)
+		if isInitializationProcess(parentComm) {
+			return nil
+		}
+
 		base := filepath.Base(comm)
 
 		// Load whitelists from YAML rules
