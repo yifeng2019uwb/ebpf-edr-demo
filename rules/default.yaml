@@ -386,8 +386,12 @@ rules:
 
   network:
     # Allowed destination ports — services that all containers may connect to.
+    # 53 — DNS (legitimate system traffic, exclude from T1041 exfiltration alerts).
+    # 123 — NTP (time synchronization, exclude from T1041).
     # 6543 — Supabase pgbouncer (all health-ai services use Supabase).
     allowed_ports:
+      - 53
+      - 123
       - 6543
 
     # Allowed services — services permitted to make external connections.

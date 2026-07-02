@@ -189,14 +189,6 @@ func main() {
 				continue
 			}
 
-			// DEBUG: trace file events
-			if ev.Type == pipeline.FileEventType {
-				log.Printf("DEBUG enricher: file=%s comm=%s state=%v",
-					processor.CString(ev.File.Filename[:]),
-					processor.CString(ev.File.Comm[:]),
-					ev.Workload.State)
-			}
-
 			if ev.Type == pipeline.ProcessEventType {
 				if processor.CString(ev.Process.Comm[:]) == "pause" {
 					continue
@@ -441,10 +433,6 @@ func startEventReader(cfg struct {
 			log.Printf("%s reader error (restarting): %v", cfg.logName, err)
 			time.Sleep(time.Second)
 			continue
-		}
-		// DEBUG: trace file events
-		if cfg.source == pipeline.SourceOpensnoop {
-			log.Printf("DEBUG reader: %s got %d bytes", cfg.logName, len(data))
 		}
 		select {
 		case rawCh <- pipeline.RawEvent{Source: cfg.source, Data: append([]byte(nil), data...)}:

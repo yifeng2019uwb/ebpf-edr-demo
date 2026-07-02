@@ -41,15 +41,18 @@ func Load() (*Loader, error) {
 	if err := loadProcessObjects(&l.processObjs, nil); err != nil {
 		return nil, fmt.Errorf("loading process objects: %w", err)
 	}
+
 	if err := loadFileObjects(&l.fileObjs, nil); err != nil {
 		l.processObjs.Close()
 		return nil, fmt.Errorf("loading file objects: %w", err)
 	}
+
 	if err := loadLsmObjects(&l.lsmObjs, nil); err != nil {
 		l.processObjs.Close()
 		l.fileObjs.Close()
 		return nil, fmt.Errorf("loading lsm objects: %w", err)
 	}
+
 	// ── Attach kernel hooks ────────────────────────────────────────────────────
 
 	if err := l.attachLinks(); err != nil {

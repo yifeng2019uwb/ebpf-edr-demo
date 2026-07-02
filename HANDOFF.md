@@ -35,15 +35,20 @@
 **✅ Resolved**
 - Docker Snap Detection — `findDockerDaemonNamespace()` working reliably
 
+**✅ Fixed (2026-07-02)**
+- **DNS port 53 excluded from T1041** — Added to allowed_ports to eliminate systemd-resolve false positives
+
 **⚠️ Acceptable (Not Blocking)**
 1. **T1105 ProcessEvent** — Low priority (T1041 proves threat)
 2. **T1611 False Positives** — Manageable in controlled environments
 3. **blockIP IPv4-only** — Handles majority of threats
+4. **systemd-resolve state=unknown** — Resolver can't identify system services in all namespace configurations (port 53 exception sufficient for now)
 
 **🔍 Research Items (Optional, No Timeline)**
 
 | Issue | Current Behavior | Investigation Steps | Potential Fix |
 |-------|------------------|-------------------|---------------|
+| **systemd-resolve resolver identification** | state=unknown instead of state=host | 1. Check if systemd-resolve runs in host namespace<br>2. Debug mntNsID mapping for system services<br>3. Compare host namespace detection across container runtimes | Extend resolver to recognize system service namespaces; or add service-based whitelist for systemd-resolve, coredns, etc. |
 | **T1105 Not Consistent** | T1041 always fires | 1. Run V8 test 20x, count T1105 firing rate<br>2. Compare kubectl exec vs direct execution<br>3. Check if ProcessEvent dropped in enricher | Skip T1105 detection (T1041 sufficient) |
 | **T1611 False Positives** | CRITICAL after 60s | 1. Capture container init logs<br>2. Correlate with unknown namespace alerts<br>3. Identify common false positive patterns | Option: Track parent PID = container init → demote to MEDIUM |
 | **Performance Under Load** | Unknown ceiling | 1. Generate burst of 1000 alerts<br>2. Monitor eBPF buffer loss %<br>3. Check K8s pod CPU/memory | Tune buffer size, resource limits |
