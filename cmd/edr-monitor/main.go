@@ -442,6 +442,10 @@ func startEventReader(cfg struct {
 			time.Sleep(time.Second)
 			continue
 		}
+		// DEBUG: trace file events
+		if cfg.source == pipeline.SourceOpensnoop {
+			log.Printf("DEBUG reader: %s got %d bytes", cfg.logName, len(data))
+		}
 		select {
 		case rawCh <- pipeline.RawEvent{Source: cfg.source, Data: append([]byte(nil), data...)}:
 		default:
