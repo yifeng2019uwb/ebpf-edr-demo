@@ -189,6 +189,14 @@ func main() {
 				continue
 			}
 
+			// DEBUG: trace file events
+			if ev.Type == pipeline.FileEventType {
+				log.Printf("DEBUG enricher: file=%s comm=%s state=%v",
+					processor.CString(ev.File.Filename[:]),
+					processor.CString(ev.File.Comm[:]),
+					ev.Workload.State)
+			}
+
 			if ev.Type == pipeline.ProcessEventType {
 				if processor.CString(ev.Process.Comm[:]) == "pause" {
 					continue

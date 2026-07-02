@@ -4,6 +4,7 @@ package detector
 
 import (
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"path/filepath"
@@ -53,6 +54,13 @@ func NewYAMLDetectorWithEnv(db *rules.RulesDB, env string) *YAMLDetector {
 // Note: Rule check order matters (CRITICAL → HIGH → MEDIUM → LOW).
 // Ensure YAML rules ordered by severity so critical threats are caught first.
 func (d *YAMLDetector) Detect(ev pipeline.EnrichedEvent) *alert.Alert {
+	// DEBUG: trace file events
+	if ev.Type == pipeline.FileEventType {
+		log.Printf("DEBUG detect: file=%s comm=%s",
+			processor.CString(ev.File.Filename[:]),
+			processor.CString(ev.File.Comm[:]))
+	}
+
 	if d.rules.IsIgnoredNamespace(ev.Workload.Meta.Namespace) {
 		return nil
 	}
@@ -256,6 +264,8 @@ func (d *YAMLDetector) checkProcessRules(event processor.ProcessEvent, res workl
 func (d *YAMLDetector) checkFileRules(event processor.FileEvent, res workload.ResolveResult) *alert.Alert {
 	filename := processor.CString(event.Filename[:])
 	comm := processor.CString(event.Comm[:])
+
+	log.Printf("DEBUG checkFileRules: file=%s comm=%s state=%v", filename, comm, res.State)
 
 	fileCommWhitelist := d.getListStrings("whitelisted_file_access_procs")
 	for _, w := range fileCommWhitelist {
