@@ -11,11 +11,10 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 )
 
-const dockerRefreshInterval = 30 * time.Second
+const dockerRefreshInterval = 10 * time.Second
 
 // dockerShortIDLen is the conventional short ID length shown by `docker ps` (first 12 hex chars).
 // Used as a display-name fallback when a container is running but not yet in docker ps output.
@@ -23,12 +22,12 @@ const dockerShortIDLen = 12
 
 type DockerResolver struct {
 	mu        sync.RWMutex
-	cache     map[uint32]ResolveResult
+	cache     map[uint32]ResolveResult // containerID → container identity; refreshed periodically (containers start/stop)
 	refreshMu sync.Mutex
-	node      string
-	region    string
-	cluster   string
-	env       string
+	// Immutable metadata set at startup (from environment)
+	hostname string // Docker host/VM name
+	region   string // Optional: cloud region
+	env      string // Optional: cloud provider (gcp-vm, do-vm, local)
 }
 
 func (r *DockerResolver) Start() error {
@@ -52,8 +51,8 @@ func (r *DockerResolver) bareResult(state ResolveState) ResolveResult {
 		service = "host"
 	}
 	return ResolveResult{
-		Identity: WorkloadIdentity{Runtime: "docker", Service: service, Env: r.env},
-		Meta:     WorkloadMeta{Node: r.node, Region: r.region, Cluster: r.cluster},
+		Identity: WorkloadIdentity{Runtime: RuntimeDocker, Service: service, Env: r.env},
+		Meta:     WorkloadMeta{Node: r.hostname, Region: r.region},
 		State:    state,
 	}
 }
@@ -103,25 +102,16 @@ func (r *DockerResolver) buildCache() map[uint32]ResolveResult {
 
 	idToInfo := dockerIDToInfo()
 
-	entries, err := filepath.Glob("/proc/[0-9]*/ns/mnt")
+	entries, err := filepath.Glob(procNsMntPattern)
 	if err != nil {
 		return m
 	}
 
 	for _, nsPath := range entries {
 		parts := strings.Split(nsPath, "/")
-		if len(parts) < 3 {
-			continue
-		}
+		pidStr := parts[2]
 
-		pid := parts[2]
-
-		var stat syscall.Stat_t
-		if err := syscall.Stat(nsPath, &stat); err != nil {
-			continue
-		}
-
-		nsID := uint32(stat.Ino)
+		nsID := getMntNsIDFromPath(nsPath)
 
 		if nsID == hostNsID {
 			continue
@@ -130,13 +120,19 @@ func (r *DockerResolver) buildCache() map[uint32]ResolveResult {
 			continue
 		}
 
-		containerID := containerIDFromDockerCgroup(pid)
+		containerID := containerIDFromDockerCgroup(pidStr)
 		if containerID == "" {
 			continue
 		}
 
-		rawName := containerID[:dockerShortIDLen] // short ID fallback when not in docker ps
+		// Initialize with fallback: use short ID (first 12 chars) for container display name.
+		// This handles containers that are transitioning: cgroup exists but docker ps hasn't caught up yet,
+		// or container is stopping and docker ps no longer shows it but cgroup lingers.
+		rawName := containerID[:dockerShortIDLen]
 		service := rawName
+
+		// Override fallback if docker ps has this container (idToInfo populated by dockerIDToInfo()).
+		// This gives us the full container name and resolved service name (from Docker Compose labels).
 		if info, ok := idToInfo[containerID]; ok {
 			rawName = info.name
 			service = info.service
@@ -144,16 +140,15 @@ func (r *DockerResolver) buildCache() map[uint32]ResolveResult {
 
 		m[nsID] = ResolveResult{
 			Identity: WorkloadIdentity{
-				Runtime: "docker",
+				Runtime: RuntimeDocker,
 				Service: service,
 				Env:     r.env,
 			},
 			Meta: WorkloadMeta{
 				Container: rawName,
 				Pod:       rawName,
-				Node:      r.node,
+				Node:      r.hostname,
 				Region:    r.region,
-				Cluster:   r.cluster,
 			},
 			State: StateResolved,
 		}
@@ -167,7 +162,7 @@ func (r *DockerResolver) buildCache() map[uint32]ResolveResult {
 // Returns 0 if not found.
 func findDockerDaemonNamespace() uint32 {
 	// Try to find dockerd process by searching /proc
-	entries, err := filepath.Glob("/proc/[0-9]*/cmdline")
+	entries, err := filepath.Glob(procCmdlinePattern)
 	if err != nil {
 		return 0
 	}
@@ -224,10 +219,15 @@ type containerIDInfo struct {
 }
 
 // dockerIDToInfo returns a map from full container ID to containerIDInfo.
-// It uses the Docker Compose service label (com.docker.compose.service) when present,
-// which correctly handles Compose v2 names like "sensor-env-sensor-1" → "env-sensor".
-// Falls back to normalizeServiceName for non-Compose containers.
-// Service names cannot contain spaces, so space-separated fields are safe here.
+// Runs `docker ps` to get running containers only (stopped containers excluded).
+// Maps each container ID to its full name and service name for detection rules.
+//
+// Service name priority:
+// 1. Docker Compose label (com.docker.compose.service) — most reliable for Compose services
+// 2. Full container name normalized — fallback for non-Compose containers
+//
+// Note: This snapshot is taken once per refresh (every 10s). Containers starting/stopping
+// between refreshes may not be in this map. Use short ID fallback if container not found.
 func dockerIDToInfo() map[string]containerIDInfo {
 	m := make(map[string]containerIDInfo)
 
@@ -242,7 +242,6 @@ func dockerIDToInfo() map[string]containerIDInfo {
 		return m
 	}
 
-	var containerIDs []string
 	scanner := bufio.NewScanner(strings.NewReader(string(out)))
 	for scanner.Scan() {
 		fields := strings.Fields(scanner.Text())
@@ -255,14 +254,13 @@ func dockerIDToInfo() map[string]containerIDInfo {
 			service = fields[2]
 		}
 		m[id] = containerIDInfo{name: name, service: service}
-		containerIDs = append(containerIDs, name)
 	}
 
 	return m
 }
 
 func containerIDFromDockerCgroup(pid string) string {
-	path := fmt.Sprintf("/proc/%s/cgroup", pid)
+	path := fmt.Sprintf(procCgroupPathFmt, pid)
 
 	f, err := os.Open(path)
 	if err != nil {
@@ -279,8 +277,8 @@ func containerIDFromDockerCgroup(pid string) string {
 			id := strings.TrimSpace(parts[len(parts)-1])
 			// cgroup v1 format: /docker/<container-id>
 			// e.g. /docker/a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2 (64 chars)
-			// Docker uses SHA256 → exactly 64 hex chars.
-			if len(id) >= containerIDLen {
+			// Docker uses SHA256 → exactly 64 hex chars
+			if len(id) == containerIDLen {
 				return id
 			}
 		}
@@ -293,7 +291,7 @@ func containerIDFromDockerCgroup(pid string) string {
 				// cgroup v2 systemd format: docker-<container-id>.scope
 				// e.g. docker-a1b2c3d4e5f6...64chars.scope → extract between "docker-" and ".scope"
 				// Docker uses SHA256 → exactly 64 hex chars.
-				if len(id) >= containerIDLen {
+				if len(id) == containerIDLen {
 					return id
 				}
 			}

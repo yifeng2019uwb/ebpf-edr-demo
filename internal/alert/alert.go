@@ -16,6 +16,15 @@ const (
 	Medium   Level = "MEDIUM"
 )
 
+// Action represents the response action taken by the responder.
+type Action string
+
+const (
+	ActionNone        Action = "none"
+	ActionKillProcess Action = "kill_process"
+	ActionBlockIP     Action = "block_ip"
+)
+
 // Alert represents a security detection event emitted by a detection rule.
 type Alert struct {
 	Level   Level
@@ -34,7 +43,7 @@ type Alert struct {
 	DstIP    string
 	DstPort  uint16
 
-	ResponseAction string // set by responder after detection; empty means no action taken
+	ResponseAction Action // set by responder after detection; ActionNone means no action taken
 }
 
 // Sink writes alerts to a destination (Redis, Supabase, file, etc.).

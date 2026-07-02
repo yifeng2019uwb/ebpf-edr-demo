@@ -24,19 +24,19 @@ func NewResponder(blockedIPs *ebpf.Map) *Responder {
 // Respond executes the response action for an alert.
 // Returns the action that was actually executed — empty string if skipped (e.g. nil map).
 // Called synchronously in the detector goroutine immediately after detection fires.
-func (r *Responder) Respond(a *alert.Alert, action ResponseAction) ResponseAction {
+func (r *Responder) Respond(a *alert.Alert, action alert.Action) alert.Action {
 	switch action {
-	case ActionKillProcess:
+	case alert.ActionKillProcess:
 		killProcess(a)
-		return ActionKillProcess
-	case ActionBlockIP:
+		return alert.ActionKillProcess
+	case alert.ActionBlockIP:
 		if r.blockIP(a) {
-			return ActionBlockIP
+			return alert.ActionBlockIP
 		}
-		return ActionNone
+		return alert.ActionNone
 	// Phase 2: ActionQuarantineFile: quarantineFile(a.Filename)
 	}
-	return ActionNone
+	return alert.ActionNone
 }
 
 // killProcess sends SIGKILL to the process that triggered the alert.

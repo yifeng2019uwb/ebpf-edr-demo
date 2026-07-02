@@ -38,35 +38,37 @@ Given a mount namespace ID from eBPF event, determine:
 ## Usage
 
 ```go
-// Create resolver
-resolver := workload.NewResolver("k8s")  // or "docker"
+// Create resolver (K8s or Docker)
+resolver := workload.NewResolver(workload.RuntimeK8s)
 resolver.Start()
 
-// Resolve namespace to workload
+// Resolve namespace ID to workload
 result := resolver.Resolve(mntNsID, pid)
 
-// Use in detection
+// Check resolution state
 if result.State == workload.StateResolved {
-    svc := result.Identity.Service
-    // Apply rules for this service
+    svc := result.Identity.Service  // Use service for detection rules
 }
 ```
 
 See: `cmd/edr-monitor/main.go` for full pipeline.
 
-## Architecture
+## How It Works
 
-**Resolver Cache:**
-- Maps namespace ID → workload identity
-- Refreshes every 30 seconds
-- K8s: reads from kubepods cgroup paths
-- Docker: runs `docker ps`, checks cgroup
+**K8s Resolver (5s refresh):**
+- Uses `crictl` to inspect containers directly from runtime
+- Maps cgroup paths → pod/container metadata
+- Handles cgroup v1 and v2 formats
 
-**Snap Docker Detection:**
-- Special handling for snap-packaged docker
-- `findDockerDaemonNamespace()` finds snap docker namespace
-- Prevents false positives from docker infrastructure
+**Docker Resolver (10s refresh):**
+- Runs `docker ps` for running containers
+- Reads cgroup to find container IDs
+- Detects snap docker vs system docker
+
+**Namespace Resolution:**
+- Parses `/proc/[pid]/ns/mnt` symlink to extract namespace ID
+- Maps namespace → service identity for detection
 
 ---
 
-**Last Updated:** 2026-06-30
+**Last Updated:** 2026-07-01

@@ -11,6 +11,11 @@ import (
 	"ebpf-edr-demo/internal/alert"
 )
 
+const (
+	redisChannel       = "edr-alerts"
+	redisConnTimeout   = 2 * time.Second
+)
+
 // RedisSink publishes alerts to a Redis channel for real-time monitoring.
 type RedisSink struct {
 	client  *redis.Client
@@ -21,13 +26,13 @@ func NewRedisSink(addr string) (*RedisSink, error) {
 	// Parse Redis URL (format: redis://user:pass@host:port)
 	opts, err := redis.ParseURL(addr)
 	if err != nil {
-		log.Printf("redis sink parse url failed: %v", err)
+		log.Printf("redis sink parse url failed: url=%s err=%v", addr, err)
 		return nil, err
 	}
 
 	client := redis.NewClient(opts)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), redisConnTimeout)
 	defer cancel()
 
 	if err := client.Ping(ctx).Err(); err != nil {
@@ -38,7 +43,7 @@ func NewRedisSink(addr string) (*RedisSink, error) {
 	log.Printf("redis sink connected: %s", addr)
 	return &RedisSink{
 		client:  client,
-		channel: "edr-alerts",
+		channel: redisChannel,
 	}, nil
 }
 

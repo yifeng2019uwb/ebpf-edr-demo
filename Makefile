@@ -12,7 +12,8 @@ generate:
 
 ## build — compile the EDR agent binary (cross-compiles to linux/amd64 from any host)
 build:
-	GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o $(BINARY) ./cmd/edr-monitor/
+	mkdir -p bin
+	GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o bin/$(BINARY) ./cmd/edr-monitor/
 
 ## rebuild — regenerate BPF wrappers then build (use after editing .bpf.c files on GCP VM)
 rebuild: generate build
@@ -28,17 +29,17 @@ vet:
 
 ## clean — remove built binary
 clean:
-	rm -f $(BINARY)
+	rm -rf bin/
 
 ## run_ebpf — detach any stale LSM links then run the agent (use on shared VMs to avoid BPF_MAX_TRAMP_LINKS)
 run_ebpf:
 	@sudo bpftool link list | awk '/^[0-9]+: tracing/{id=$$1; sub(":","",id)} /lsm_mac/{print id}' | \
 	  xargs -I{} sudo bpftool link detach id {} 2>/dev/null || true
-	sudo env GOOGLE_CLOUD_PROJECT=ebpfagent ./$(BINARY) --runtime=docker
+	sudo env GOOGLE_CLOUD_PROJECT=ebpfagent ./bin/$(BINARY) --runtime=docker
 
 ## run-docker — run the EDR agent on the Docker VM (sets GOOGLE_CLOUD_PROJECT, must run as root)
 run-docker:
-	sudo env GOOGLE_CLOUD_PROJECT=ebpfagent ./$(BINARY) --runtime=docker
+	sudo env GOOGLE_CLOUD_PROJECT=ebpfagent ./bin/$(BINARY) --runtime=docker
 
 ## run-alert-router — run the Alert Router on laptop (open http://localhost:8888)
 run-alert-router:
@@ -72,7 +73,7 @@ docker-push-ghcr-prebuilt:
 ## Requires: gh CLI authenticated (gh auth login)
 VERSION ?= $(shell git describe --tags --always --dirty)
 github-release: build
-	gh release create $(VERSION) $(BINARY) \
+	gh release create $(VERSION) bin/$(BINARY) \
 		--title "eBPF EDR $(VERSION)" \
 		--notes "linux/amd64 binary — deploy to any Linux env (GCP VM, GKE, etc.)"
 

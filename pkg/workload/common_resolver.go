@@ -4,8 +4,9 @@ package workload
 
 import (
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
-	"syscall"
 )
 
 // containerIDLen is the length of a full SHA256 container ID (64 hex chars).
@@ -13,17 +14,47 @@ import (
 // container IDs parsed from /proc/<pid>/cgroup paths.
 const containerIDLen = 64
 
-// getMntNsID returns the mount namespace inode for the given pid.
-// Returns 0 if the pid no longer exists or the stat fails.
-func getMntNsID(pid int) uint32 {
-	path := fmt.Sprintf("/proc/%d/ns/mnt", pid)
+// /proc paths for namespace and process discovery
+const (
+	procNsMntPattern    = "/proc/[0-9]*/ns/mnt"    // Find all process mount namespaces
+	procCmdlinePattern  = "/proc/[0-9]*/cmdline"   // Find all process command lines
+	procNsMntPathFmt    = "/proc/%d/ns/mnt"        // Get namespace for specific PID
+	procCgroupPathFmt   = "/proc/%s/cgroup"        // Get cgroup for process
+)
 
-	var stat syscall.Stat_t
-	if err := syscall.Stat(path, &stat); err != nil {
+// getMntNsIDFromPath returns the mount namespace ID from a namespace path.
+// Reads symlink target (format: "mnt:[ID]") and extracts the ID.
+// Returns 0 if the path doesn't exist or parsing fails.
+func getMntNsIDFromPath(nsPath string) uint32 {
+	// Read symlink target from /proc/[pid]/ns/mnt
+	// Symlink points to: "mnt:[4026531841]" where mnt=namespace type, 4026531841=namespace ID
+	target, err := os.Readlink(nsPath)
+	if err != nil {
 		return 0
 	}
 
-	return uint32(stat.Ino)
+	// Parse namespace ID from symlink target format "mnt:[4026531841]"
+	// Extract the numeric ID between brackets
+	start := strings.IndexByte(target, '[')
+	end := strings.IndexByte(target, ']')
+	if start < 0 || end < 0 || start >= end {
+		return 0
+	}
+
+	nsIDStr := target[start+1 : end]
+	nsID, err := strconv.ParseUint(nsIDStr, 10, 32)
+	if err != nil {
+		return 0
+	}
+
+	return uint32(nsID)
+}
+
+// getMntNsID returns the mount namespace ID for the given pid.
+// Builds the path and calls getMntNsIDFromPath.
+func getMntNsID(pid int) uint32 {
+	path := fmt.Sprintf(procNsMntPathFmt, pid)
+	return getMntNsIDFromPath(path)
 }
 
 // normalizeServiceName strips the project/stack prefix added by Docker Compose

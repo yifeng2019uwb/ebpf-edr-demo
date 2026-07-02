@@ -40,8 +40,8 @@ func (s *FileSink) Write(ctx context.Context, a alert.Alert) error {
 	} else if a.DstIP != "" {
 		extra = fmt.Sprintf(" dst=%s:%d", a.DstIP, a.DstPort)
 	}
-	if a.ResponseAction != "" && a.ResponseAction != "none" {
-		extra += " action=" + a.ResponseAction
+	if a.ResponseAction != alert.ActionNone {
+		extra += " action=" + string(a.ResponseAction)
 	}
 
 	id := a.Workload.Identity

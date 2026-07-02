@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -19,9 +18,10 @@ const k8sRefreshInterval = 5 * time.Second
 
 type K8sResolver struct {
 	mu        sync.RWMutex
-	cache     map[uint32]ResolveResult
+	cache     map[uint32]ResolveResult // mntNsID → pod identity; refreshed periodically (K8s auto-scales pods)
 	refreshMu sync.Mutex
 	selfNsID  uint32
+	// Immutable metadata set at startup (from environment)
 	node      string
 	region    string
 	cluster   string
@@ -52,7 +52,7 @@ func (r *K8sResolver) bareResult(state ResolveState) ResolveResult {
 		service = "host"
 	}
 	return ResolveResult{
-		Identity: WorkloadIdentity{Runtime: "k8s", Service: service, Env: r.env},
+		Identity: WorkloadIdentity{Runtime: RuntimeK8s, Service: service, Env: r.env},
 		Meta:     WorkloadMeta{Node: r.node, Region: r.region, Cluster: r.cluster},
 		State:    state,
 	}
@@ -102,31 +102,22 @@ func (r *K8sResolver) buildCache() map[uint32]ResolveResult {
 
 	containerMap := crictlContainerMap(r.node, r.region, r.cluster, r.env)
 
-	entries, err := filepath.Glob("/proc/[0-9]*/ns/mnt")
+	entries, err := filepath.Glob(procNsMntPattern)
 	if err != nil {
 		return m
 	}
 
 	for _, nsPath := range entries {
 		parts := strings.Split(nsPath, "/")
-		if len(parts) < 3 {
-			continue
-		}
+		pidStr := parts[2]
 
-		pid := parts[2]
-
-		var stat syscall.Stat_t
-		if err := syscall.Stat(nsPath, &stat); err != nil {
-			continue
-		}
-
-		nsID := uint32(stat.Ino)
+		nsID := getMntNsIDFromPath(nsPath)
 
 		if _, exists := m[nsID]; exists {
 			continue
 		}
 
-		containerID := containerIDFromK8sCgroup(pid)
+		containerID := containerIDFromK8sCgroup(pidStr)
 		if containerID == "" {
 			continue
 		}
@@ -140,7 +131,7 @@ func (r *K8sResolver) buildCache() map[uint32]ResolveResult {
 }
 
 func containerIDFromK8sCgroup(pid string) string {
-	path := fmt.Sprintf("/proc/%s/cgroup", pid)
+	path := fmt.Sprintf(procCgroupPathFmt, pid)
 
 	f, err := os.Open(path)
 	if err != nil {
@@ -152,6 +143,9 @@ func containerIDFromK8sCgroup(pid string) string {
 	for scanner.Scan() {
 		line := scanner.Text()
 
+		// Filter for K8s containers: cgroup v1 places K8s pods in "kubepods" hierarchy.
+		// Example cgroup line: "0::/kubepods.slice/kubepods-pod12345.slice/..."
+		// System containers (systemd, docker) won't have this path, so we skip them.
 		if !strings.Contains(line, "kubepods") {
 			continue
 		}
@@ -180,17 +174,23 @@ func containerIDFromK8sCgroup(pid string) string {
 		//   Docker-as-CRI (K8s <1.24 legacy):  "docker-<id>.scope"
 		for _, prefix := range []string{"cri-containerd-", "crio-", "docker-"} {
 			if strings.HasPrefix(containerID, prefix) && strings.HasSuffix(containerID, ".scope") {
-				containerID = strings.TrimSuffix(strings.TrimPrefix(containerID, prefix), ".scope")
+				stripped := strings.TrimSuffix(strings.TrimPrefix(containerID, prefix), ".scope")
+				// Validate length after stripping: container IDs are SHA256 → exactly 64 hex chars.
+				// K8s QoS tier names: burstable(9), guaranteed(10), besteffort(11).
+				// pod-uid format: pod8e18d5ef-1234-5678-abcd-ef0123456789 (39 chars).
+				// Both are shorter than a real container ID — 64 chars is the threshold.
+				if len(stripped) == containerIDLen {
+					return stripped  // ✓ Case 1: Matched format AND correct length → valid container ID
+				}
+				// ✓ Case 2: Matched format but wrong length → malformed or corrupted cgroup entry.
+				// We found the right runtime format (e.g., cri-containerd), so this containerID
+				// belongs to that runtime. Don't try other runtime prefixes — break and skip.
+				// If length is wrong, the data is unreliable (corrupted cgroup, manual edit, or bug).
 				break
 			}
 		}
-		// container IDs are SHA256 → exactly 64 hex chars.
-		// K8s QoS tier names: burstable(9), guaranteed(10), besteffort(11).
-		// pod-uid format: pod8e18d5ef-1234-5678-abcd-ef0123456789 (39 chars).
-		// Both are shorter than a real container ID — 64 chars filters them out.
-		if len(containerID) >= containerIDLen {
-			return containerID
-		}
+		// Case 3: No prefix matched → not a container, likely K8s infrastructure (QoS tier, pod UID).
+		// Continue to next cgroup segment.
 	}
 
 	return ""
@@ -206,6 +206,11 @@ type crictlOutput struct {
 func crictlContainerMap(node, region, cluster, env string) map[string]ResolveResult {
 	m := make(map[string]ResolveResult)
 
+	// Use crictl (Container Runtime Interface CLI) instead of kubectl:
+	// - crictl inspects containers directly at runtime level (lower-level access)
+	// - kubectl inspects pods through K8s API (higher-level, requires API availability)
+	// We need container-level details (container ID, namespace mapping) for cgroup resolution.
+	// Each K8s pod has multiple containers (init + app), and we need to map each one.
 	out, err := exec.Command("crictl", "ps", "--output", "json").Output()
 	if err != nil {
 		return m
@@ -225,11 +230,15 @@ func crictlContainerMap(node, region, cluster, env string) map[string]ResolveRes
 			continue
 		}
 
+		// Normalize service name: replace underscores with dashes.
+		// K8s naming conventions prefer dashes (DNS-friendly), but container names may use underscores.
+		// Detection rules are written expecting dashes, so normalize here for consistent matching.
+		// Example: "auth_service" → "auth-service"
 		service := strings.ReplaceAll(containerName, "_", "-")
 
 		m[c.ID] = ResolveResult{
 			Identity: WorkloadIdentity{
-				Runtime: "k8s",
+				Runtime: RuntimeK8s,
 				Service: service,
 				Env:     env,
 			},

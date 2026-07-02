@@ -34,8 +34,11 @@ func NewYAMLDetectorWithEnv(db *rules.RulesDB, env string) *YAMLDetector {
 	return &YAMLDetector{rules: db, env: env}
 }
 
-// Detect applies all rules to the enriched event and returns any triggered alerts.
-func (d *YAMLDetector) Detect(ev pipeline.EnrichedEvent) []alert.Alert {
+// Detect applies rules to the enriched event and returns first matching alert (or nil).
+// Design: Return on first match, not all matches — sufficient for current project scope.
+// Note: Rule check order matters (CRITICAL → HIGH → MEDIUM → LOW).
+// Ensure YAML rules ordered by severity so critical threats are caught first.
+func (d *YAMLDetector) Detect(ev pipeline.EnrichedEvent) *alert.Alert {
 	if d.rules.IsIgnoredNamespace(ev.Workload.Meta.Namespace) {
 		return nil
 	}
@@ -55,11 +58,7 @@ func (d *YAMLDetector) Detect(ev pipeline.EnrichedEvent) []alert.Alert {
 		a = d.checkNetworkRules(*ev.Net, ev.Workload, ip, port)
 	}
 
-	if a == nil {
-		return nil
-	}
-
-	return []alert.Alert{*a}
+	return a
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

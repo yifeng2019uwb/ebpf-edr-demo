@@ -1,8 +1,21 @@
 package workload
 
+// Runtime represents the container management system.
+type Runtime string
+
+const (
+	// RuntimeK8s: Kubernetes cluster (uses crictl, works with Docker/containerd/cri-o)
+	RuntimeK8s Runtime = "k8s"
+
+	// RuntimeDocker: Docker daemon (standalone VMs or Compose)
+	RuntimeDocker Runtime = "docker"
+
+	// RuntimeUnknown: Unrecognized runtime (possible future support: podman, containerd standalone, cri-o standalone)
+	// Standalone podman would require separate resolver (different cgroup paths, socket detection).
+	RuntimeUnknown Runtime = "unknown"
+)
+
 // ResolveState represents how well we resolved a mnt_ns_id → workload mapping.
-// Full explanation: NOTES.md "K8s pending-ns vs Docker unknown-ns"
-// Design rationale: gke-expansion-design.md Section 3 "Resolver design constraints"
 type ResolveState string
 
 const (
@@ -30,9 +43,12 @@ const (
 // WorkloadIdentity is the small identity used by detection rules.
 // Keep this intentionally minimal.
 type WorkloadIdentity struct {
-	Runtime string // "docker" | "k8s"
-	Service string // logical service name used by detection rules
-	Env     string // deployment environment, e.g. "gcp-vm", "gke" — set via ENV env var
+	Runtime Runtime // RuntimeK8s | RuntimeDocker
+	Service string  // logical service name used by detection rules
+	Env     string  // cloud provider + infrastructure, e.g. "gcp-vm", "gke" — set via ENV env var
+	// Note: Env currently captures cloud provider for alert whitelisting (suppress cloud-specific noise).
+	// Could split into Env (provider) + Stage (alpha/production) for deployment-stage-aware rules,
+	// but kept simple for now (single field, cloud provider filtering is sufficient).
 }
 
 // WorkloadMeta keeps raw/debug information.

@@ -15,8 +15,16 @@ const (
 	NetEventType     EventType = "network"
 )
 
+type Source string
+
+const (
+	SourceExecsnoop  Source = "execsnoop"
+	SourceOpensnoop  Source = "opensnoop"
+	SourceNetConnect Source = "lsm-connect"
+)
+
 type RawEvent struct {
-	Source string
+	Source Source
 	Data   []byte
 }
 

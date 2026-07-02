@@ -7,6 +7,29 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// Environment variable names used throughout the project
+const (
+	// Database configuration
+	EnvDatabaseURL    = "DATABASE_URL"
+	EnvDatabaseKey    = "DATABASE_KEY"
+	EnvDatabaseRegion = "DATABASE_REGION"
+	EnvDatabaseHost   = "DATABASE_HOST"
+
+	// Pub/Sub configuration
+	EnvPubSubAddr = "PUBSUB_ADDR"
+	EnvPubSubKey  = "PUBSUB_KEY"
+
+	// Workload identification
+	EnvRegion       = "REGION"
+	EnvClusterName  = "CLUSTER_NAME"
+	EnvEnv          = "ENV"
+	EnvServiceCIDR  = "SERVICE_CIDR"
+
+	// Sensor configuration (optional, for extended deployments)
+	EnvSensorType   = "SENSOR_TYPE"
+	EnvCollectorURL = "COLLECTOR_URL"
+)
+
 // Config holds alert infrastructure settings.
 // Service implementations are decoupled — same config works with different backends.
 type Config struct {
@@ -41,10 +64,10 @@ func Load() *Config {
 	}
 
 	return &Config{
-		DatabaseURL:  os.Getenv("DATABASE_URL"),
-		DatabaseKey:  os.Getenv("DATABASE_KEY"),
-		PubSubAddr:   os.Getenv("PUBSUB_ADDR"),
-		PubSubKey:    os.Getenv("PUBSUB_KEY"),
+		DatabaseURL:  os.Getenv(EnvDatabaseURL),
+		DatabaseKey:  os.Getenv(EnvDatabaseKey),
+		PubSubAddr:   os.Getenv(EnvPubSubAddr),
+		PubSubKey:    os.Getenv(EnvPubSubKey),
 		AlertLogPath: "alerts/alert.log",
 	}
 }

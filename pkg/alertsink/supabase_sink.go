@@ -13,6 +13,21 @@ import (
 	_ "github.com/lib/pq"
 
 	"ebpf-edr-demo/internal/alert"
+	"ebpf-edr-demo/internal/config"
+)
+
+const (
+	supabaseURLScheme       = "https://"
+	supabaseDomain          = ".supabase.co"
+	supabaseDirectEndpoint  = "db.%s.supabase.co"
+	supabasePoolerEndpoint  = "aws-%s.pooler.supabase.com"
+	supabasePoolerUsername  = "postgres.%s"
+	supabaseDefaultUsername = "postgres"
+	supabaseDefaultDB       = "postgres"
+	supabasePort            = 5432
+	supabaseSSLMode         = "require"
+	supabaseConnTimeout     = 5
+	sqlDriverPostgres       = "postgres"
 )
 
 // SupabaseSink writes alerts to Supabase PostgreSQL database for persistent storage.
@@ -22,18 +37,18 @@ type SupabaseSink struct {
 
 func NewSupabaseSink(url, key string) (*SupabaseSink, error) {
 	// Parse URL to extract project name: https://jkhwfobxtydpknsplvcv.supabase.co → jkhwfobxtydpknsplvcv
-	projectName := strings.TrimPrefix(url, "https://")
-	projectName = strings.TrimSuffix(projectName, ".supabase.co")
+	projectName := strings.TrimPrefix(url, supabaseURLScheme)
+	projectName = strings.TrimSuffix(projectName, supabaseDomain)
 
-	hostname := fmt.Sprintf("db.%s.supabase.co", projectName)
-	username := "postgres"
+	hostname := fmt.Sprintf(supabaseDirectEndpoint, projectName)
+	username := supabaseDefaultUsername
 
 	// Use Supavisor pooler endpoint if DATABASE_REGION is set (IPv4-compatible, required for Supabase Free tier on IPv6-only networks)
 	// Otherwise try direct endpoint with IPv4 preference, or accept manual override via DATABASE_HOST
-	if region := os.Getenv("DATABASE_REGION"); region != "" {
-		hostname = fmt.Sprintf("aws-%s.pooler.supabase.com", region)
-		username = fmt.Sprintf("postgres.%s", projectName)
-	} else if override := os.Getenv("DATABASE_HOST"); override != "" {
+	if region := os.Getenv(config.EnvDatabaseRegion); region != "" {
+		hostname = fmt.Sprintf(supabasePoolerEndpoint, region)
+		username = fmt.Sprintf(supabasePoolerUsername, projectName)
+	} else if override := os.Getenv(config.EnvDatabaseHost); override != "" {
 		hostname = override
 	} else {
 		// Fallback: try direct endpoint with IPv4 preference (if available)
@@ -48,10 +63,10 @@ func NewSupabaseSink(url, key string) (*SupabaseSink, error) {
 		}
 	}
 
-	connStr := fmt.Sprintf("postgres://%s:%s@%s:5432/postgres?sslmode=require&connect_timeout=5",
-		username, key, hostname)
+	connStr := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=%s&connect_timeout=%d",
+		username, key, hostname, supabasePort, supabaseDefaultDB, supabaseSSLMode, supabaseConnTimeout)
 
-	db, err := sql.Open("postgres", connStr)
+	db, err := sql.Open(sqlDriverPostgres, connStr)
 	if err != nil {
 		log.Printf("supabase sink init failed: %v", err)
 		return nil, err

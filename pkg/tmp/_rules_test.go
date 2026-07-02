@@ -50,8 +50,8 @@ func TestDetect_SystemNamespaceSuppressed(t *testing.T) {
 			}
 
 			alerts := d.Detect(ev)
-			if len(alerts) != 0 {
-				t.Fatalf("expected no alerts for system namespace %q, got %d", ns, len(alerts))
+			if alerts != nil {
+				t.Fatalf("expected no alerts for system namespace %q, got alert", ns)
 			}
 		})
 	}
@@ -70,11 +70,11 @@ func TestDetect_ReturnsAlertForShellSpawn(t *testing.T) {
 	}
 
 	alerts := d.Detect(ev)
-	if len(alerts) != 1 {
-		t.Fatalf("expected 1 alert, got %d", len(alerts))
+	if alerts == nil {
+		t.Fatalf("expected 1 alert, got nil")
 	}
-	if alerts[0].Rule != RuleT1059UnixShellExecution {
-		t.Fatalf("Rule = %q, want %s", alerts[0].Rule, RuleT1059UnixShellExecution)
+	if alerts.Rule != RuleT1059UnixShellExecution {
+		t.Fatalf("Rule = %q, want %s", alerts.Rule, RuleT1059UnixShellExecution)
 	}
 }
 
@@ -91,8 +91,8 @@ func TestDetect_NoAlertForNormalProcess(t *testing.T) {
 	}
 
 	alerts := d.Detect(ev)
-	if len(alerts) != 0 {
-		t.Fatalf("expected no alerts for normal process, got %d", len(alerts))
+	if alerts != nil {
+		t.Fatalf("expected no alerts for normal process, got alert")
 	}
 }
 
@@ -112,11 +112,11 @@ func TestDetect_FileEvent(t *testing.T) {
 	}
 
 	alerts := d.Detect(ev)
-	if len(alerts) != 1 {
-		t.Fatalf("expected 1 alert, got %d", len(alerts))
+	if alerts == nil {
+		t.Fatalf("expected 1 alert, got alert))
 	}
-	if alerts[0].Rule != RuleT1003OsCredentialDumping {
-		t.Fatalf("Rule = %q, want %s", alerts[0].Rule, RuleT1003OsCredentialDumping)
+	if alerts.Rule != RuleT1003OsCredentialDumping {
+		t.Fatalf("Rule = %q, want %s", alerts.Rule, RuleT1003OsCredentialDumping)
 	}
 }
 
@@ -137,11 +137,11 @@ func TestDetect_NetEvent(t *testing.T) {
 	}
 
 	alerts := d.Detect(ev)
-	if len(alerts) != 1 {
-		t.Fatalf("expected 1 alert, got %d", len(alerts))
+	if alerts == nil {
+		t.Fatalf("expected 1 alert, got alert))
 	}
-	if alerts[0].Rule != RuleT1041ExfiltrationOverC2 {
-		t.Fatalf("Rule = %q, want %s", alerts[0].Rule, RuleT1041ExfiltrationOverC2)
+	if alerts.Rule != RuleT1041ExfiltrationOverC2 {
+		t.Fatalf("Rule = %q, want %s", alerts.Rule, RuleT1041ExfiltrationOverC2)
 	}
 }
 

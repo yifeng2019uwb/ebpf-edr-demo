@@ -1,10 +1,5 @@
 # --- Binaries & Compiled Artifacts ---
-# The main executable
-ebpf-edr-demo
-ebpf-edr
-edr-monitor
-
-# Any other built binaries
+# All built binaries go to bin/ directory (see Makefile)
 bin/
 *.exe
 *.exe~

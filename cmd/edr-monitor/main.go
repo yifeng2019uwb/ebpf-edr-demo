@@ -1,3 +1,5 @@
+//go:build linux
+
 package main
 
 import (
@@ -27,7 +29,7 @@ import (
 
 const (
 	pendingRetryInterval = 3 * time.Second
-	pendingMaxRetries    = 20              // 20 × 3s = 60s max — covers K8s slow starts (image pull + init containers)
+	pendingMaxRetries    = 20               // 20 × 3s = 60s max — covers K8s slow starts (image pull + init containers)
 	pendingMaxAge        = 60 * time.Second // primary limiter; K8s pods can take 30–60s to appear in crictl
 
 	rawChCap      = 4096 // kernel event burst buffer
@@ -35,9 +37,13 @@ const (
 	alertChCap    = 64   // alerts are rare; small buffer is fine
 
 	// fileDedupWindow deduplicates file events from the same process within this window.
-	// Replaces the tgid==tid C filter — multi-threaded containers emit one event per
-	// thread for the same file open; we keep only the first within the window.
+	// Why: multi-threaded processes trigger lsm/file_open once per thread (N threads = N syscalls).
+	// But from detection perspective: file open happened once; threads share file descriptor & RAM.
+	// Solution: keep only first occurrence within window; discard thread duplicates as noise.
 	fileDedupWindow = time.Second
+
+	// Graceful shutdown timings
+	shutdownWaitInterval = 100 * time.Millisecond // time for goroutines to finish between channel closes
 )
 
 var (
@@ -54,14 +60,11 @@ type pendingEntry struct {
 
 func main() {
 	// --runtime selects the workload resolver.
-	// "k8s"    → K8sResolver (uses crictl, reads kubepods cgroup paths)
-	// "docker" → DockerResolver (uses docker ps, reads /docker/ cgroup paths)
-	// "auto"   → currently falls through to DockerResolver (default case in NewResolver).
-	// TODO: implement auto-detection — check if crictl or kubepods cgroup exists,
-	//       pick k8s or docker accordingly. Any unrecognized value also falls to docker.
+	// "k8s"    → K8sResolver (uses crictl, works with Docker/containerd/cri-o in K8s)
+	// "docker" → DockerResolver (Docker daemon, standalone VMs or Compose)
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
 
-	runtime := flag.String("runtime", "auto", "docker | k8s")
+	runtime := flag.String("runtime", defaultRuntime, validRuntimes)
 	flag.Parse()
 
 	// Load configuration from environment
@@ -102,7 +105,11 @@ func main() {
 	handler := alert.NewHandler(sinks)
 	defer handler.Close()
 
-	resolver := workload.NewResolver(*runtime)
+	rt := workload.RuntimeDocker
+	if *runtime == string(workload.RuntimeK8s) {
+		rt = workload.RuntimeK8s
+	}
+	resolver := workload.NewResolver(rt)
 	if err := resolver.Start(); err != nil {
 		log.Fatalf("starting resolver: %v", err)
 	}
@@ -113,7 +120,7 @@ func main() {
 	}
 	defer loader.Close()
 
-	rulesDB, err := rules.LoadRulesForEnvironment("rules/default.yaml")
+	rulesDB, err := rules.LoadRulesForEnvironment(rulesFilePath)
 	if err != nil {
 		log.Fatalf("loading rules from YAML: %v", err)
 	}
@@ -135,70 +142,44 @@ func main() {
 
 	// Load GKE-specific service CIDRs only if detected in GKE environment.
 	// Avoids unnecessary metadata server calls on Docker/bare-metal.
-	if string(rulesDB.Env) == "gcp" {
+	if string(rulesDB.Env) == envGCP {
 		detector.AddGKEServiceCIDR()
 	}
 
-	// Producers
-	go func() {
-		for {
+	// Producers: start readers for each eBPF event source
+	type eventReader struct {
+		source  pipeline.Source
+		logName string
+		read    func() ([]byte, error)
+	}
+
+	readers := []eventReader{
+		{pipeline.SourceExecsnoop, logNameProcess, func() ([]byte, error) {
 			rec, err := loader.ProcessRd.Read()
 			if err != nil {
-				if errors.Is(err, os.ErrClosed) {
-					return
-				}
-				log.Printf("process reader error (restarting): %v", err)
-				continue
+				return nil, err
 			}
-			select {
-			case rawCh <- pipeline.RawEvent{Source: "execsnoop", Data: append([]byte(nil), rec.RawSample...)}:
-			default:
-				if n := rawDropped.Add(1); n == 1 || n%100 == 0 {
-					log.Printf("warning: rawCh full, %d kernel events dropped", n)
-				}
-			}
-		}
-	}()
-	go func() {
-		for {
+			return rec.RawSample, nil
+		}},
+		{pipeline.SourceOpensnoop, logNameFile, func() ([]byte, error) {
 			rec, err := loader.FileRd.Read()
 			if err != nil {
-				if errors.Is(err, os.ErrClosed) {
-					return
-				}
-				log.Printf("file reader error (restarting): %v", err)
-				time.Sleep(time.Second)
-				continue
+				return nil, err
 			}
-			select {
-			case rawCh <- pipeline.RawEvent{Source: "opensnoop", Data: append([]byte(nil), rec.RawSample...)}:
-			default:
-				if n := rawDropped.Add(1); n == 1 || n%100 == 0 {
-					log.Printf("warning: rawCh full, %d kernel events dropped", n)
-				}
-			}
-		}
-	}()
-	go func() {
-		for {
+			return rec.RawSample, nil
+		}},
+		{pipeline.SourceNetConnect, logNameNet, func() ([]byte, error) {
 			rec, err := loader.NetRd.Read()
 			if err != nil {
-				if errors.Is(err, os.ErrClosed) {
-					return
-				}
-				log.Printf("net reader error (restarting): %v", err)
-				time.Sleep(time.Second)
-				continue
+				return nil, err
 			}
-			select {
-			case rawCh <- pipeline.RawEvent{Source: "lsm-connect", Data: append([]byte(nil), rec.RawSample...)}:
-			default:
-				if n := rawDropped.Add(1); n == 1 || n%100 == 0 {
-					log.Printf("warning: rawCh full, %d kernel events dropped", n)
-				}
-			}
-		}
-	}()
+			return rec.RawSample, nil
+		}},
+	}
+
+	for _, cfg := range readers {
+		go startEventReader(cfg, rawCh, &rawDropped)
+	}
 
 	// Enricher
 	go func() {
@@ -215,6 +196,10 @@ func main() {
 			}
 
 			if ev.Type == pipeline.FileEventType {
+				// Dedup file events: multi-threaded processes trigger lsm/file_open once per thread.
+				// From kernel's perspective: N threads = N syscalls = N hook firings.
+				// From detection's perspective: file open happened once; N threads share FD and RAM.
+				// Keep only first within fileDedupWindow (1s); rest are noise.
 				key := fmt.Sprintf("%s:%d:%s", processor.CString(ev.File.Comm[:]), ev.File.Pid, processor.CString(ev.File.Filename[:]))
 				fileDedupMu.Lock()
 				last, seen := fileDedupSeen[key]
@@ -226,7 +211,11 @@ func main() {
 				fileDedupMu.Unlock()
 			}
 
-			// pending-ns logic → NOW uses State
+			// Pending workload: resolver couldn't identify container yet (State=Pending).
+			// Buffer event and retry later when resolver catches up (K8s pod startup lag).
+			// Note: Dedup applied to file events only (multi-thread noise).
+			// Pending events (any type) skip dedup for now — if duplicates matter in production,
+			// create shared dedup func and apply to all pending types.
 			if ev.Workload.State == workload.StatePending {
 				nsID := mntNsIDOf(*ev)
 				pendingMu.Lock()
@@ -331,18 +320,23 @@ func main() {
 	// Detector
 	go func() {
 		for ev := range enrichedCh {
-			for _, a := range det.Detect(ev) {
-				action := detector.ResponseFor(a.Rule, a.Level)
-				if action != detector.ActionNone {
-					action = responder.Respond(&a, action)
-				}
-				a.ResponseAction = string(action)
-				select {
-				case alertCh <- a:
-				default:
-					alertDropped.Add(1)
-					log.Printf("ERROR: alertCh full, alert dropped: rule=%s level=%s comm=%s", a.Rule, a.Level, a.Comm)
-				}
+			a := det.Detect(ev)
+			if a == nil {
+				continue
+			}
+			// Compute response BEFORE sending alert to avoid data race:
+			// If we send alert first, then modify a.ResponseAction, handler goroutine
+			// may read partial/stale data. Compute response action first, then send complete alert.
+			action := detector.ResponseFor(a.Rule, a.Level)
+			if action != alert.ActionNone {
+				action = responder.Respond(a, action)
+			}
+			a.ResponseAction = action
+			select {
+			case alertCh <- *a:
+			default:
+				alertDropped.Add(1)
+				log.Printf("ERROR: alertCh full, alert dropped: rule=%s level=%s comm=%s", a.Rule, a.Level, a.Comm)
 			}
 		}
 	}()
@@ -360,13 +354,25 @@ func main() {
 	<-sig
 	log.Printf("shutdown: rawDropped=%d enrichedDropped=%d alertDropped=%d unknownNs=%d",
 		rawDropped.Load(), enrichedDropped.Load(), alertDropped.Load(), unknownNs.Load())
+
+	// Graceful shutdown: close channels in order (stops goroutines from top to bottom)
+	close(rawCh)       // Stop event readers → enricher stops receiving
+	time.Sleep(shutdownWaitInterval)  // Let enricher finish processing
+	close(enrichedCh)  // Stop enricher → detector stops receiving
+	time.Sleep(shutdownWaitInterval)  // Let detector finish processing
+	close(alertCh)     // Stop handler
+
+	// Close resources
+	handler.Close()
+	loader.Close()
 }
 
 func enrich(raw pipeline.RawEvent, r workload.WorkloadResolver) *pipeline.EnrichedEvent {
 	switch raw.Source {
 
-	case "execsnoop":
+	case pipeline.SourceExecsnoop:
 		var ev processor.ProcessEvent
+		// go standard library using binary.LittleEndian in encoding/binary
 		if err := binary.Read(bytes.NewReader(raw.Data), binary.LittleEndian, &ev); err != nil {
 			log.Printf("enrich: bad execsnoop event: %v", err)
 			return nil
@@ -380,7 +386,7 @@ func enrich(raw pipeline.RawEvent, r workload.WorkloadResolver) *pipeline.Enrich
 			Timestamp: time.Now(),
 		}
 
-	case "opensnoop":
+	case pipeline.SourceOpensnoop:
 		var ev processor.FileEvent
 		if err := binary.Read(bytes.NewReader(raw.Data), binary.LittleEndian, &ev); err != nil {
 			log.Printf("enrich: bad opensnoop event: %v", err)
@@ -394,7 +400,7 @@ func enrich(raw pipeline.RawEvent, r workload.WorkloadResolver) *pipeline.Enrich
 			Timestamp: time.Now(),
 		}
 
-	case "lsm-connect":
+	case pipeline.SourceNetConnect:
 		var ev processor.NetEvent
 		if err := binary.Read(bytes.NewReader(raw.Data), binary.LittleEndian, &ev); err != nil {
 			log.Printf("enrich: bad lsm-connect event: %v", err)
@@ -411,6 +417,31 @@ func enrich(raw pipeline.RawEvent, r workload.WorkloadResolver) *pipeline.Enrich
 	}
 
 	return nil
+}
+
+func startEventReader(cfg struct {
+	source  pipeline.Source
+	logName string
+	read    func() ([]byte, error)
+}, rawCh chan<- pipeline.RawEvent, rawDropped *atomic.Int64) {
+	for {
+		data, err := cfg.read()
+		if err != nil {
+			if errors.Is(err, os.ErrClosed) {
+				return
+			}
+			log.Printf("%s reader error (restarting): %v", cfg.logName, err)
+			time.Sleep(time.Second)
+			continue
+		}
+		select {
+		case rawCh <- pipeline.RawEvent{Source: cfg.source, Data: append([]byte(nil), data...)}:
+		default:
+			if n := rawDropped.Add(1); n == 1 || n%100 == 0 {
+				log.Printf("warning: rawCh full, %d kernel events dropped", n)
+			}
+		}
+	}
 }
 
 func mntNsIDOf(ev pipeline.EnrichedEvent) uint32 {
