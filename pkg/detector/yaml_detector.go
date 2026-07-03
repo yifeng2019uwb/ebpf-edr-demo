@@ -53,11 +53,6 @@ func NewYAMLDetectorWithEnv(db *rules.RulesDB, env string) *YAMLDetector {
 // Note: Rule check order matters (CRITICAL → HIGH → MEDIUM → LOW).
 // Ensure YAML rules ordered by severity so critical threats are caught first.
 func (d *YAMLDetector) Detect(ev pipeline.EnrichedEvent) *alert.Alert {
-	// Single debug trace to verify events flowing through pipeline
-	if ev.Type == pipeline.FileEventType {
-		fmt.Printf("DEBUG: file event file=%s\n", processor.CString(ev.File.Filename[:]))
-	}
-
 	if d.rules.IsIgnoredNamespace(ev.Workload.Meta.Namespace) {
 		return nil
 	}

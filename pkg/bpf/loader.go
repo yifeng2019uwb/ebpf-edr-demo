@@ -4,13 +4,19 @@ package bpf
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/perf"
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/cilium/ebpf/rlimit"
 )
+
+// ProcessEventBurstSize is the perf buffer size for process events.
+// Sized to absorb container startup bursts: typical container spawns 200-300 processes rapidly.
+// 256KB buffer can hold ~1770 ProcessEvent structs (144 bytes each), providing safe headroom
+// for concurrent process creation without kernel dropping/truncating events.
+// If "rawCh full" warnings appear, increase this constant.
+const ProcessEventBurstSize = 256 * 1024
 
 // Loader holds all loaded BPF objects, kernel attachments, and event readers.
 // Call Close() to detach all probes and release kernel resources.
@@ -64,7 +70,7 @@ func Load() (*Loader, error) {
 
 	var err error
 
-	l.ProcessRd, err = perf.NewReader(l.processObjs.Events, os.Getpagesize())
+	l.ProcessRd, err = perf.NewReader(l.processObjs.Events, ProcessEventBurstSize)
 	if err != nil {
 		l.Close()
 		return nil, fmt.Errorf("opening process perf reader: %w", err)

@@ -32,9 +32,9 @@ const (
 	pendingMaxRetries    = 20               // 20 × 3s = 60s max — covers K8s slow starts (image pull + init containers)
 	pendingMaxAge        = 60 * time.Second // primary limiter; K8s pods can take 30–60s to appear in crictl
 
-	rawChCap      = 4096 // kernel event burst buffer
-	enrichedChCap = 4096 // post-enrichment buffer
-	alertChCap    = 64   // alerts are rare; small buffer is fine
+	rawChCap      = 65536 // kernel event burst buffer — absorbs deployment spikes (10,000-50,000 events/sec)
+	enrichedChCap = 32768 // post-enrichment buffer
+	alertChCap    = 256   // alerts are rare; small buffer is fine
 
 	// fileDedupWindow deduplicates file events from the same process within this window.
 	// Why: multi-threaded processes trigger lsm/file_open once per thread (N threads = N syscalls).
@@ -356,11 +356,11 @@ func main() {
 		rawDropped.Load(), enrichedDropped.Load(), alertDropped.Load(), unknownNs.Load())
 
 	// Graceful shutdown: close channels in order (stops goroutines from top to bottom)
-	close(rawCh)       // Stop event readers → enricher stops receiving
-	time.Sleep(shutdownWaitInterval)  // Let enricher finish processing
-	close(enrichedCh)  // Stop enricher → detector stops receiving
-	time.Sleep(shutdownWaitInterval)  // Let detector finish processing
-	close(alertCh)     // Stop handler
+	close(rawCh)                     // Stop event readers → enricher stops receiving
+	time.Sleep(shutdownWaitInterval) // Let enricher finish processing
+	close(enrichedCh)                // Stop enricher → detector stops receiving
+	time.Sleep(shutdownWaitInterval) // Let detector finish processing
+	close(alertCh)                   // Stop handler
 
 	// Close resources
 	handler.Close()
@@ -392,7 +392,12 @@ func enrich(raw pipeline.RawEvent, r workload.WorkloadResolver) *pipeline.Enrich
 			log.Printf("enrich: bad opensnoop event: %v", err)
 			return nil
 		}
+		start := time.Now()
 		res := r.Resolve(uint32(ev.MntNsId), uint32(ev.Pid))
+		resolveTime := time.Since(start)
+		if resolveTime > 1*time.Millisecond {
+			log.Printf("DEBUG: resolve file took %v", resolveTime)
+		}
 		return &pipeline.EnrichedEvent{
 			Type:      pipeline.FileEventType,
 			File:      &ev,
@@ -406,7 +411,12 @@ func enrich(raw pipeline.RawEvent, r workload.WorkloadResolver) *pipeline.Enrich
 			log.Printf("enrich: bad lsm-connect event: %v", err)
 			return nil
 		}
+		start := time.Now()
 		res := r.Resolve(uint32(ev.MntNsId), uint32(ev.Pid))
+		resolveTime := time.Since(start)
+		if resolveTime > 1*time.Millisecond {
+			log.Printf("DEBUG: resolve net took %v", resolveTime)
+		}
 
 		return &pipeline.EnrichedEvent{
 			Type:      pipeline.NetEventType,
@@ -424,6 +434,18 @@ func startEventReader(cfg struct {
 	logName string
 	read    func() ([]byte, error)
 }, rawCh chan<- pipeline.RawEvent, rawDropped *atomic.Int64) {
+	var eventCount atomic.Int64
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	go func() {
+		for range ticker.C {
+			count := eventCount.Load()
+			log.Printf("DEBUG: %s produced %d events in last 10s (rate: %.0f/sec)", cfg.logName, count, float64(count)/10)
+			eventCount.Store(0)
+		}
+	}()
+
 	for {
 		data, err := cfg.read()
 		if err != nil {
@@ -434,6 +456,8 @@ func startEventReader(cfg struct {
 			time.Sleep(time.Second)
 			continue
 		}
+		eventCount.Add(1)
+
 		select {
 		case rawCh <- pipeline.RawEvent{Source: cfg.source, Data: append([]byte(nil), data...)}:
 		default:

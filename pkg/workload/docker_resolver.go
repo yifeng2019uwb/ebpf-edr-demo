@@ -4,7 +4,9 @@ package workload
 
 import (
 	"bufio"
+	"context"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,35 +14,59 @@ import (
 	"strings"
 	"sync"
 	"time"
-)
 
-const dockerRefreshInterval = 10 * time.Second
+	"github.com/docker/docker/api/types/events"
+	"github.com/docker/docker/client"
+)
 
 // dockerShortIDLen is the conventional short ID length shown by `docker ps` (first 12 hex chars).
 // Used as a display-name fallback when a container is running but not yet in docker ps output.
 const dockerShortIDLen = 12
 
 type DockerResolver struct {
-	mu        sync.RWMutex
-	cache     map[uint32]ResolveResult // containerID → container identity; refreshed periodically (containers start/stop)
-	refreshMu sync.Mutex
+	mu            sync.RWMutex
+	cache         map[uint32]ResolveResult  // mntNsID → container identity
+	containerToNs map[string]uint32         // containerID → mntNsID (O(1) reverse lookup for cleanup)
+	refreshMu     sync.Mutex
 	// Immutable metadata set at startup (from environment)
-	hostname string // Docker host/VM name
-	region   string // Optional: cloud region
-	env      string // Optional: cloud provider (gcp-vm, do-vm, local)
+	hostname      string // Docker host/VM name
+	region        string // Optional: cloud region
+	env           string // Optional: cloud provider (gcp-vm, do-vm, local)
+	// Docker event listener
+	cli           *client.Client // Docker daemon client
+	eventCtx      context.Context
+	eventCancel   context.CancelFunc
+	// Async worker pool controls (prevent goroutine explosion, protect /proc from concurrent scans)
+	resolvingTasks sync.Map     // mntNsID -> bool (deduplicates: only one lookup per namespace)
+	lookupSem      chan struct{} // Semaphore: limits concurrent /proc reads to 10
 }
 
 func (r *DockerResolver) Start() error {
+	// Initialize reverse lookup map
+	r.containerToNs = make(map[string]uint32)
+	// Initialize worker pool semaphore (limits concurrent /proc scans to 10)
+	r.lookupSem = make(chan struct{}, 10)
+	// Initial cache build
+	start := time.Now()
 	r.cache = r.buildCache()
+	elapsed := time.Since(start)
+	log.Printf("docker resolver: initial buildCache took %v (found %d namespaces)", elapsed, len(r.cache))
+	r.syncContainerToNs()
 
-	go func() {
-		ticker := time.NewTicker(dockerRefreshInterval)
-		defer ticker.Stop()
+	// Connect to Docker daemon for event-driven refresh
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		log.Printf("warning: Docker client failed: %v (will rely on on-demand lookup)", err)
+		// No fallback — rely on on-demand lookupNamespace() for unknown containers
+		return nil
+	}
+	r.cli = cli
 
-		for range ticker.C {
-			r.refresh()
-		}
-	}()
+	// Start Docker event listener (primary mechanism for real-time container lifecycle detection)
+	r.eventCtx, r.eventCancel = context.WithCancel(context.Background())
+	go r.listenDockerEvents()
+
+	log.Printf("docker resolver: started (listening to Docker events)")
 
 	return nil
 }
@@ -57,7 +83,7 @@ func (r *DockerResolver) bareResult(state ResolveState) ResolveResult {
 	}
 }
 
-func (r *DockerResolver) Resolve(mntNsID uint32, _ uint32) ResolveResult {
+func (r *DockerResolver) Resolve(mntNsID uint32, pid uint32) ResolveResult {
 	r.mu.RLock()
 	result, ok := r.cache[mntNsID]
 	r.mu.RUnlock()
@@ -66,9 +92,83 @@ func (r *DockerResolver) Resolve(mntNsID uint32, _ uint32) ResolveResult {
 		return result
 	}
 
-	go r.refresh()
+	// Dedup: Only one async worker per namespace (sync.Map LoadOrStore).
+	// If already resolving this namespace, skip (prevents goroutine explosion).
+	if _, loading := r.resolvingTasks.LoadOrStore(mntNsID, true); !loading {
+		// New namespace: spin up worker to resolve it asynchronously.
+		// Pass pid so we can read /proc/[pid]/cgroup directly (fast + atomic).
+		go r.asyncResolvePID(mntNsID, pid)
+	}
 
+	// Return immediately (< 1 microsecond, RAM-only path).
 	return r.bareResult(StatePending)
+}
+
+// asyncResolvePID resolves a container from a specific PID's cgroup (targeted, fast).
+// Reads /proc/[pid]/cgroup directly instead of scanning all of /proc/*/ns/mnt.
+// This is atomic and captures container metadata before process is completely reaped (handles docker destroy).
+// Runs with semaphore to limit concurrent disk I/O (max 10 workers).
+// Guarantees cache entry is set to prevent memory leaks and infinite pending retries.
+func (r *DockerResolver) asyncResolvePID(mntNsID uint32, pid uint32) {
+	// Always clean up the task tracking to allow future retries if needed
+	defer r.resolvingTasks.Delete(mntNsID)
+
+	// Acquire worker slot (semaphore limits to 10 concurrent /proc readers)
+	r.lookupSem <- struct{}{}
+	defer func() { <-r.lookupSem }()
+
+	// Read container ID from target PID's cgroup (direct, atomic, no glob scan)
+	containerID := containerIDFromDockerCgroup(strconv.Itoa(int(pid)))
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	// Prevent race: another goroutine may have resolved this namespace already
+	if _, exists := r.cache[mntNsID]; exists {
+		return
+	}
+
+	if containerID == "" {
+		// Process already cleaned up (docker destroy in progress).
+		// Set fallback state to prevent infinite retry loops in pending buffer.
+		// Mark as Unknown so pending events transition out cleanly.
+		r.cache[mntNsID] = ResolveResult{State: StateUnknown}
+		return
+	}
+
+	// Extract service name from container ID
+	// Use docker ps if available for full name, fallback to short ID
+	rawName := containerID
+	service := containerID
+	if len(containerID) >= dockerShortIDLen {
+		rawName = containerID[:dockerShortIDLen]
+		service = rawName
+	}
+
+	// Try to get full name from docker ps (async, so delay doesn't block main pipeline)
+	idToInfo := dockerIDToInfo()
+	if info, ok := idToInfo[containerID]; ok {
+		rawName = info.name
+		service = info.service
+	}
+
+	// Atomically update cache with resolved identity
+	r.cache[mntNsID] = ResolveResult{
+		Identity: WorkloadIdentity{
+			Runtime: RuntimeDocker,
+			Service: service,
+			Env:     r.env,
+		},
+		Meta: WorkloadMeta{
+			Container: rawName,
+			Pod:       rawName,
+			Node:      r.hostname,
+			Region:    r.region,
+		},
+		State: StateResolved,
+	}
+	r.containerToNs[containerID] = mntNsID
+	log.Printf("docker resolver: discovered container %s (ns %d)", containerID[:12], mntNsID)
 }
 
 func (r *DockerResolver) refresh() {
@@ -77,11 +177,123 @@ func (r *DockerResolver) refresh() {
 	}
 	defer r.refreshMu.Unlock()
 
+	start := time.Now()
 	m := r.buildCache()
+	elapsed := time.Since(start)
 
 	r.mu.Lock()
 	r.cache = m
+	r.syncContainerToNs()
 	r.mu.Unlock()
+
+	log.Printf("docker resolver: buildCache took %v (found %d namespaces)", elapsed, len(m))
+}
+
+// syncContainerToNs rebuilds the containerID→mntNsID reverse lookup map from cache.
+// Must be called with mu locked.
+func (r *DockerResolver) syncContainerToNs() {
+	r.containerToNs = make(map[string]uint32)
+	for nsID, result := range r.cache {
+		if result.Meta.Container != "" {
+			r.containerToNs[result.Meta.Container] = nsID
+		}
+	}
+}
+
+// listenDockerEvents subscribes to Docker events and refreshes cache on container lifecycle changes.
+// This is the primary mechanism for detecting new/removed containers in real-time.
+func (r *DockerResolver) listenDockerEvents() {
+	if r.cli == nil {
+		return
+	}
+
+	for {
+		select {
+		case <-r.eventCtx.Done():
+			return
+		default:
+		}
+
+		// Subscribe to container lifecycle events
+		opts := events.ListOptions{}
+		eventsChan, errChan := r.cli.Events(r.eventCtx, opts)
+
+		for {
+			select {
+			case <-r.eventCtx.Done():
+				return
+			case event := <-eventsChan:
+				// Trigger lightweight refresh on container lifecycle events
+				// This verifies cache consistency (catches event ordering issues, missed events)
+				if event.Action == "start" || event.Action == "stop" || event.Action == "die" {
+					go r.lightweightRefresh()
+				}
+
+				if event.Action == "stop" || event.Action == "die" || event.Action == "remove" {
+					// Grace period before cleanup (TEMPORARY: 5s hardcoded):
+					// Race condition: Docker sends stop/die event immediately, but eBPF is still seeing
+					// processes from that container spawning/exiting (in-flight syscalls). If we delete
+					// from cache immediately, those processes become "unknown namespace" → false T1611
+					// container escape alerts. By keeping the namespace in cache for 5s, in-flight
+					// events resolve correctly against cached metadata.
+					// TODO: Replace with activity-based cleanup (track last event time per namespace,
+					// clean up only after 2+ seconds of inactivity + minimum grace time). This avoids
+					// time-guessing and handles both quick shutdowns and graceful shutdowns elegantly.
+					nsID := r.containerToNs[event.ID]
+					go func(containerID string, ns uint32) {
+						time.Sleep(5 * time.Second)
+						r.mu.Lock()
+						if current, exists := r.containerToNs[containerID]; exists && current == ns {
+							delete(r.cache, ns)
+							delete(r.containerToNs, containerID)
+							log.Printf("docker resolver: cleaned up container %s (ns %d)", containerID[:12], ns)
+						}
+						r.mu.Unlock()
+					}(event.ID, nsID)
+				}
+			case err := <-errChan:
+				// Event stream disconnected, reconnect with backoff
+				if err != nil {
+					log.Printf("docker resolver: events error: %v (reconnecting...)", err)
+				}
+				time.Sleep(1 * time.Second) // Backoff to avoid busy loop
+				break // Break inner loop to reconnect
+			}
+		}
+	}
+}
+
+// lightweightRefresh verifies cache consistency after Docker events.
+// Triggered on container lifecycle events (start/stop/die), not on a timer.
+// Uses only docker ps output to catch containers missed by Docker events.
+func (r *DockerResolver) lightweightRefresh() {
+	start := time.Now()
+	idToInfo := dockerIDToInfo()
+	elapsed := time.Since(start)
+
+	if elapsed > 5*time.Second {
+		log.Printf("docker resolver: refresh took %v (slow docker ps)", elapsed)
+	}
+
+	// Verify cache consistency: check if any running containers are missing from cache
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for containerID, info := range idToInfo {
+		// Check if this container is in cache
+		found := false
+		for _, result := range r.cache {
+			if result.Meta.Container == info.name {
+				found = true
+				break
+			}
+		}
+		if !found {
+			// Container in docker ps but not in cache — missed by events
+			log.Printf("docker resolver: cache miss detected for container %s (will discover on next event)", containerID[:12])
+			// No action needed here — on-demand lookupNamespace will find it when events arrive
+		}
+	}
 }
 
 func (r *DockerResolver) buildCache() map[uint32]ResolveResult {
