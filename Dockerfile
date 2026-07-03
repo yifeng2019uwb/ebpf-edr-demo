@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
     apt-get remove -y curl && apt-get autoremove -y && \
     rm -rf /var/lib/apt/lists/*
 RUN mkdir -p /alerts /app/rules
-COPY ebpf-edr /usr/local/bin/ebpf-edr
+COPY bin/ebpf-edr /usr/local/bin/ebpf-edr
 COPY rules/default.yaml /app/rules/default.yaml
 WORKDIR /app
 ENTRYPOINT ["/usr/local/bin/ebpf-edr", "-runtime=k8s"]
