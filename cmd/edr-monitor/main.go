@@ -3,11 +3,8 @@
 package main
 
 import (
-	"bytes"
-	"encoding/binary"
 	"errors"
 	"flag"
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -15,6 +12,7 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+	"unsafe"
 
 	"ebpf-edr-demo/internal/alert"
 	"ebpf-edr-demo/internal/config"
@@ -34,7 +32,7 @@ const (
 
 	rawChCap      = 65536 // kernel event burst buffer — absorbs deployment spikes (10,000-50,000 events/sec)
 	enrichedChCap = 32768 // post-enrichment buffer
-	alertChCap    = 256   // alerts are rare; small buffer is fine
+	alertChCap    = 1024  // alerts are rare; small buffer is fine
 
 	// fileDedupWindow deduplicates file events from the same process within this window.
 	// Why: multi-threaded processes trigger lsm/file_open once per thread (N threads = N syscalls).
@@ -46,10 +44,26 @@ const (
 	shutdownWaitInterval = 100 * time.Millisecond // time for goroutines to finish between channel closes
 )
 
-var (
-	fileDedupMu   sync.Mutex
-	fileDedupSeen = map[string]time.Time{}
-)
+type fileDedupKey struct {
+	Pid      uint32
+	Comm     [128]byte // TASK_COMM_LEN from kernel eBPF
+	Filename [256]byte // MAX_FILENAME_LEN from kernel eBPF
+}
+
+const fileDedupShards = 32 // shard count: distributes lock contention across cores
+
+type fileDedupShard struct {
+	mu   sync.Mutex
+	seen map[fileDedupKey]time.Time
+}
+
+var fileDedupShards_array [fileDedupShards]fileDedupShard
+
+func init() {
+	for i := range fileDedupShards_array {
+		fileDedupShards_array[i].seen = make(map[fileDedupKey]time.Time)
+	}
+}
 
 type pendingEntry struct {
 	ev        pipeline.EnrichedEvent
@@ -200,15 +214,22 @@ func main() {
 				// From kernel's perspective: N threads = N syscalls = N hook firings.
 				// From detection's perspective: file open happened once; N threads share FD and RAM.
 				// Keep only first within fileDedupWindow (1s); rest are noise.
-				key := fmt.Sprintf("%s:%d:%s", processor.CString(ev.File.Comm[:]), ev.File.Pid, processor.CString(ev.File.Filename[:]))
-				fileDedupMu.Lock()
-				last, seen := fileDedupSeen[key]
+				// Optimization: Use sharded locks (32 shards indexed by PID) to reduce contention on multi-core systems.
+				key := fileDedupKey{
+					Pid:      uint32(ev.File.Pid),
+					Comm:     ev.File.Comm,
+					Filename: ev.File.Filename,
+				}
+				shardIdx := uint32(ev.File.Pid) % fileDedupShards
+				shard := &fileDedupShards_array[shardIdx]
+				shard.mu.Lock()
+				last, seen := shard.seen[key]
 				if seen && time.Since(last) < fileDedupWindow {
-					fileDedupMu.Unlock()
+					shard.mu.Unlock()
 					continue
 				}
-				fileDedupSeen[key] = time.Now()
-				fileDedupMu.Unlock()
+				shard.seen[key] = time.Now()
+				shard.mu.Unlock()
 			}
 
 			// Pending workload: resolver couldn't identify container yet (State=Pending).
@@ -307,13 +328,16 @@ func main() {
 		defer ticker.Stop()
 		for range ticker.C {
 			cutoff := time.Now().Add(-fileDedupWindow * 2)
-			fileDedupMu.Lock()
-			for k, t := range fileDedupSeen {
-				if t.Before(cutoff) {
-					delete(fileDedupSeen, k)
+			for i := range fileDedupShards_array {
+				shard := &fileDedupShards_array[i]
+				shard.mu.Lock()
+				for k, t := range shard.seen {
+					if t.Before(cutoff) {
+						delete(shard.seen, k)
+					}
 				}
+				shard.mu.Unlock()
 			}
-			fileDedupMu.Unlock()
 		}
 	}()
 
@@ -371,27 +395,26 @@ func enrich(raw pipeline.RawEvent, r workload.WorkloadResolver) *pipeline.Enrich
 	switch raw.Source {
 
 	case pipeline.SourceExecsnoop:
-		var ev processor.ProcessEvent
-		// go standard library using binary.LittleEndian in encoding/binary
-		if err := binary.Read(bytes.NewReader(raw.Data), binary.LittleEndian, &ev); err != nil {
-			log.Printf("enrich: bad execsnoop event: %v", err)
+		if len(raw.Data) < int(unsafe.Sizeof(processor.ProcessEvent{})) {
+			log.Printf("enrich: execsnoop event too small: %d bytes", len(raw.Data))
 			return nil
 		}
+		ev := (*processor.ProcessEvent)(unsafe.Pointer(&raw.Data[0]))
 		res := r.Resolve(ev.MntNsId, uint32(ev.Pid))
 
 		return &pipeline.EnrichedEvent{
 			Type:      pipeline.ProcessEventType,
-			Process:   &ev,
+			Process:   ev,
 			Workload:  res,
 			Timestamp: time.Now(),
 		}
 
 	case pipeline.SourceOpensnoop:
-		var ev processor.FileEvent
-		if err := binary.Read(bytes.NewReader(raw.Data), binary.LittleEndian, &ev); err != nil {
-			log.Printf("enrich: bad opensnoop event: %v", err)
+		if len(raw.Data) < int(unsafe.Sizeof(processor.FileEvent{})) {
+			log.Printf("enrich: opensnoop event too small: %d bytes", len(raw.Data))
 			return nil
 		}
+		ev := (*processor.FileEvent)(unsafe.Pointer(&raw.Data[0]))
 		start := time.Now()
 		res := r.Resolve(uint32(ev.MntNsId), uint32(ev.Pid))
 		resolveTime := time.Since(start)
@@ -400,17 +423,17 @@ func enrich(raw pipeline.RawEvent, r workload.WorkloadResolver) *pipeline.Enrich
 		}
 		return &pipeline.EnrichedEvent{
 			Type:      pipeline.FileEventType,
-			File:      &ev,
+			File:      ev,
 			Workload:  res,
 			Timestamp: time.Now(),
 		}
 
 	case pipeline.SourceNetConnect:
-		var ev processor.NetEvent
-		if err := binary.Read(bytes.NewReader(raw.Data), binary.LittleEndian, &ev); err != nil {
-			log.Printf("enrich: bad lsm-connect event: %v", err)
+		if len(raw.Data) < int(unsafe.Sizeof(processor.NetEvent{})) {
+			log.Printf("enrich: lsm-connect event too small: %d bytes", len(raw.Data))
 			return nil
 		}
+		ev := (*processor.NetEvent)(unsafe.Pointer(&raw.Data[0]))
 		start := time.Now()
 		res := r.Resolve(uint32(ev.MntNsId), uint32(ev.Pid))
 		resolveTime := time.Since(start)
@@ -420,7 +443,7 @@ func enrich(raw pipeline.RawEvent, r workload.WorkloadResolver) *pipeline.Enrich
 
 		return &pipeline.EnrichedEvent{
 			Type:      pipeline.NetEventType,
-			Net:       &ev,
+			Net:       ev,
 			Workload:  res,
 			Timestamp: time.Now(),
 		}
