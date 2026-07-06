@@ -266,4 +266,44 @@ See `docs/DESIGN_DECISIONS.md` for detailed tradeoff analysis and risk assessmen
 
 ---
 
+## Architectural Issue: Multi-Runtime Support (Investigation)
+
+**Current State:** eBPF agent accepts `-runtime` flag to choose ONE resolver type:
+```
+-runtime=host  (HostResolver)
+-runtime=docker (DockerResolver)
+-runtime=k8s   (K8sResolver)
+```
+
+**Problem:** Real deployments often have multiple runtimes coexisting:
+- **Bare-metal VM:** Host processes + Docker containers simultaneously
+- **K8s node:** Host processes (systemd) + containerd/CRI-O + kubelet + user pods
+- **Single agent can't handle all** with current design
+
+**Industry Practice** (Falco, Sysdig, Datadog):
+1. Single eBPF agent per node/VM (one agent monitors everything)
+2. Container identification via cgroups (works across Docker, containerd, CRI-O)
+3. Multi-runtime enrichment:
+   - Query Docker API for Docker containers
+   - Query crictl (container runtime CLI) for K8s pods  
+   - Query systemd for host processes
+   - If Docker AND K8s both running → query both simultaneously
+4. Namespace-based fast path to distinguish host vs containers
+
+**Current Workaround:** 
+- Run separate agents per runtime type
+- Or choose whichever runtime is dominant and accept blind spots for others
+
+**Recommendation:**
+- Do NOT redesign immediately (blocking performance optimization work)
+- Document architectural constraint in deployment guide
+- After performance bottleneck is fixed, evaluate if multi-runtime support is needed
+- Design may require: multiple resolvers running simultaneously, trying each per event
+
+**Related Files:**
+- `pkg/workload/coordinator.go` - Already has fast path for host, could support multi-resolver
+- `cmd/edr-monitor/main.go:135-138` - Runtime selection logic (fixed today to respect flag value)
+
+---
+
 **All optimizations are production-ready. Ready for deployment and performance validation.**

@@ -15,10 +15,9 @@ package processor
 import (
 	"bytes"
 	"net"
-)
 
-// TaskCommLen must match #define TASK_COMM_LEN 128 in all .h files.
-const TaskCommLen = 128
+	"ebpf-edr-demo/pkg"
+)
 
 // ── Event structs ─────────────────────────────────────────────────────────────
 
@@ -29,19 +28,19 @@ type ProcessEvent struct {
 	Ppid    int32             // parent process ID
 	Uid     int32             // user ID (0=root)
 	MntNsId uint32            // mount namespace ID — identifies container
-	Comm    [TaskCommLen]byte // full executable path (e.g. /usr/bin/bash)
+	Comm    [pkg.TaskCommLen]byte // full executable path (e.g. /usr/bin/bash)
 }
 
 // FileEvent matches opensnoop.h struct file_event.
 // sizeof = 8+4+4+4+4+128+256 = 408 bytes, no implicit padding.
 type FileEvent struct {
-	MntNsId  uint64            // offset 0   — mount namespace ID
-	Pid      int32             // offset 8   — process ID
-	Ppid     int32             // offset 12  — parent process ID
-	Uid      uint32            // offset 16  — user ID
-	Pad      uint32            // offset 20  — explicit padding (see opensnoop.h)
-	Comm     [TaskCommLen]byte // offset 24  — process name
-	Filename [256]byte         // offset 152 — file path being opened
+	MntNsId  uint64                     // offset 0   — mount namespace ID
+	Pid      int32                      // offset 8   — process ID
+	Ppid     int32                      // offset 12  — parent process ID
+	Uid      uint32                     // offset 16  — user ID
+	Pad      uint32                     // offset 20  — explicit padding (see opensnoop.h)
+	Comm     [pkg.TaskCommLen]byte          // offset 24  — process name
+	Filename [pkg.MaxFilenameLen]byte   // offset 152 — file path being opened
 }
 
 // ExitEvent matches exitsnoop.h struct event.
@@ -53,7 +52,7 @@ type ExitEvent struct {
 	Ppid       uint32            // offset 12
 	ExitCode   uint32            // offset 16
 	Pad        uint32            // offset 20 — explicit pad matches C struct
-	Comm       [TaskCommLen]byte // offset 24
+	Comm       [pkg.TaskCommLen]byte // offset 24
 }
 
 // NetEvent matches lsm-connect.h struct net_event.
@@ -67,7 +66,7 @@ type NetEvent struct {
 	Ppid    int32             // offset 20
 	Uid     uint32            // offset 24
 	Pad2    uint32            // offset 28 — explicit padding
-	Comm    [TaskCommLen]byte // offset 32
+	Comm    [pkg.TaskCommLen]byte // offset 32
 }
 
 // ── Converters ────────────────────────────────────────────────────────────────

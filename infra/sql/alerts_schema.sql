@@ -6,7 +6,7 @@ CREATE TABLE alerts (
 
     -- Alert metadata
     timestamp TIMESTAMPTZ NOT NULL,        -- When threat was detected (kernel time)
-    level TEXT NOT NULL,                   -- CRITICAL, HIGH, MEDIUM
+    level TEXT NOT NULL,                   -- CRITICAL, HIGH, MEDIUM, LOW
     rule TEXT NOT NULL,                    -- Rule name (e.g., T1059_unix_shell_execution)
     message TEXT NOT NULL,                 -- Human readable message
 
@@ -41,7 +41,7 @@ CREATE TABLE alerts (
     created_at TIMESTAMPTZ DEFAULT NOW(),  -- When inserted into database
 
     -- For efficient queries
-    CONSTRAINT level_check CHECK (level IN ('CRITICAL', 'HIGH', 'MEDIUM'))
+    CONSTRAINT level_check CHECK (level IN ('CRITICAL', 'HIGH', 'MEDIUM', 'LOW'))
 );
 
 -- Indexes for common queries

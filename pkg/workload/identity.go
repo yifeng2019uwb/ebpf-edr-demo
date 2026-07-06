@@ -10,28 +10,32 @@ const (
 	// RuntimeDocker: Docker daemon (standalone VMs or Compose)
 	RuntimeDocker Runtime = "docker"
 
+	// RuntimeHost: Native host process (not in a container)
+	RuntimeHost Runtime = "host"
+
 	// RuntimeUnknown: Unrecognized runtime (possible future support: podman, containerd standalone, cri-o standalone)
 	// Standalone podman would require separate resolver (different cgroup paths, socket detection).
 	RuntimeUnknown Runtime = "unknown"
+)
+
+// Service name constants for whitelisted host/infrastructure processes
+const (
+	HostProcessService = "host-process"
+	K8sInfraService    = "k8s-infra"
 )
 
 // ResolveState represents how well we resolved a mnt_ns_id → workload mapping.
 type ResolveState string
 
 const (
-	// StateResolved — mnt_ns_id matched a known container/pod in cache. Normal path.
-	// Detection rules run fully.
+	// StateResolved — Successfully identified the workload (container, pod, or host process).
+	// Detection rules run normally. Host processes have RuntimeHost; containers have RuntimeDocker/RuntimeK8s.
 	StateResolved ResolveState = "resolved"
 
-	// StateHost — mnt_ns_id matches the host (PID 1 or agent's own namespace).
-	// Most detection rules are skipped — host processes are expected.
-	// Exception: host_reads_container_fs still fires on /var/lib/docker/overlay2/.
-	StateHost ResolveState = "host"
-
-	// StatePending — container not yet in resolver cache (new pod/container starting up).
+	// StatePending — Container/pod not yet in resolver cache (starting up).
 	// Buffered and retried every 3s, up to 20 retries / 60s max.
 	// Escalates to StateUnknown if still unresolved after grace period.
-	// Prevents false CRITICAL alerts during normal pod/container startup.
+	// Prevents false CRITICAL alerts during normal startup.
 	StatePending ResolveState = "pending"
 
 	// StateUnknown — mnt_ns_id unresolved after all retries.
@@ -70,6 +74,6 @@ type ResolveResult struct {
 }
 
 type WorkloadResolver interface {
-	Resolve(mntNsID uint32, pid uint32) ResolveResult
+	Resolve(event interface{}) ResolveResult // EnrichedEvent from pipeline package (avoids circular import)
 	Start() error
 }

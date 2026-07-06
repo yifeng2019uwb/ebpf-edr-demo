@@ -1,7 +1,150 @@
 # Project Handoff — Current Status
 
-**Last Updated:** 2026-07-03  
-**Status:** ✅ Production Ready (DigitalOcean K8s + Docker Standalone)
+**Last Updated:** 2026-07-06 (Two-Stage Parent Process Verification Approach)  
+**Status:** 🔄 False Positive Reduction - Design Complete, Implementation Pending
+- Layer 1 fast-path filtering: ✅ DONE (ppid==0, pid in safeInfraPIDs)
+- Layer 2 whitelisting: ✅ DONE (whitelisted_processes list + exception macros)
+- Container runtime tool exclusion: ⚠️ IN DESIGN (two-stage parent process verification approach)
+- Docker deploy false positives: ⚠️ ROOT CAUSE IDENTIFIED (transient tools need parent verification)
+
+---
+
+## Current Session: Two-Stage Parent Process Verification (2026-07-06)
+
+**Objective:** Eliminate false positives from transient tools (grep, sleep, wget, curl, etc.) spawned during docker deploy/destroy without creating unmaintainable blocklists.
+
+**Problem Analysis:**
+- False positives flood during docker deploy (100+ CRITICAL alerts/sec)
+- Root cause: transient processes exit before resolver completes, leaving state=unknown
+- Example: deployment script spawns grep/sleep, they exit in milliseconds, resolver can't identify parent
+- Previous approaches failed: adding each tool to blocklists is unmaintainable
+
+**Solution Design: Two-Stage Parent Process Verification** ✅ DESIGNED
+
+**Stage 1: Core Container Runtime Tools (Always Drop)**
+- YAML list: `container_runtime_execs` 
+- Tools: runc, containerd-shim, docker-proxy, dockerd, containerd, docker
+- Rule: If state=unknown AND comm in container_runtime_execs → DROP (never alert)
+- Rationale: These ARE infrastructure, can never be attacker-spawned
+
+**Stage 2: Dynamic Lifecycle Utilities (Verify Parent)**
+- YAML list: `docker_lifecycle_tools`
+- Tools: grep, sleep, wget, curl, cut, tr, sed, etc., snap tools, docker-compose
+- Rule: If state=unknown AND comm in docker_lifecycle_tools → READ parent command from /proc/ppid/comm → only DROP if parent is trusted (dockerd, containerd, snap, or another core tool)
+- Rationale: Could be legitimate deployment OR malicious tool; parent command validates intent
+- Secure default: If parent PID already exited (can't read /proc), return alert (secure fail)
+
+**Key Advantages Over Blocklists:**
+- ✅ No endless tool-name expansion
+- ✅ Maintains security (attacker escapes won't have trusted parent)
+- ✅ Works for transient parents (reads parent command at event time)
+- ✅ Adapts to unknown Docker version changes
+
+**Implementation Status:**
+- ✅ YAML lists defined: container_runtime_execs, docker_lifecycle_tools
+- ✅ Design documented and validated
+- ⏳ Code implementation pending:
+  - Modify yaml_detector.go: checkProcessRules() state=unknown section
+  - Lines 377-398: Restructure to implement two-stage logic
+  - Stage 1 check (runtimeExecs): Keep as-is (always drop)
+  - Stage 2 check (dockerLifecycleTools): Read parent command, only drop if parent trusted
+
+**Files to Modify:**
+- `pkg/detector/yaml_detector.go` (lines 374-398) - implement two-stage logic
+- `rules/default.yaml` - already has lists defined, no changes needed
+
+**Next Steps (When Ready to Implement):**
+1. Modify dockerLifecycleTools check to read parent command
+2. Verify parent command is one of: dockerd, containerd, snap, or in coreRuntimeTools
+3. Test on docker deploy to verify false positive reduction
+
+---
+
+## In Progress Work: Performance Bottleneck Root Cause Analysis & Fix (2026-07-03)
+
+**Phase:** Root cause identified + partial fix implemented  
+**Objective:** Resolve 146 events/sec bottleneck (target: 5000+/sec, 34× improvement needed)  
+**Methodology:** Static review → identify root cause → implement fix → verify with logs
+
+### Root Cause Analysis
+
+**Problem Statement**
+- eBPF producing 281 file events/sec, but only 13.9 resolved/sec
+- 95% of events stuck as pending, then timing out → alerts never fired
+- System appeared functional (logs shown) but completely blind to actual threats
+
+**Root Cause #1: Docker Daemon Namespace (FIXED ✅)**
+- **Issue:** When async resolver tried to read `/proc/[pid]/cgroup` for events from docker daemon, it found infrastructure processes (like containerd daemon PID 189541)
+- **Problem:** These daemons have cgroups like `0::/system.slice/snap.docker.dockerd.service` (not containers), so containerID parsing failed, returning empty
+- **Effect:** Entire docker namespace got stuck as `state=pending`, waiting for containerID that would never come
+- **Fix Implemented:** 
+  - Added `HostNamespaceService(mntNsID)` interface method to WorkloadResolver
+  - DockerResolver now checks if mntNsID == dockerdNsID (docker daemon's namespace)
+  - Returns service name directly ("docker-host") without async resolution
+  - Coordinator adds Fast Path 3 check before delegating to async resolver
+  - Files modified: `identity.go`, `docker_resolver.go`, `k8s_resolver.go`, `host_resolver.go`, `coordinator.go`
+- **Verification:** Logs now show mixed `state=resolved` (docker-host) and `state=pending` (legitimate containers)
+
+**Root Cause #2: Transient Process Race Condition (PARTIALLY FIXED ⚠️)**
+- **Issue:** When new container starts after startup, events arrive with transient PIDs (process exits before async resolver can read `/proc/[pid]/cgroup`)
+- **Current behavior:** asyncResolvePID → open `/proc/[pid]/cgroup` → ENOENT (process gone) → containerID empty → StateUnknown
+- **Effect:** Container events still get stuck as pending or unknown
+- **Current status:** Fix #1 prevents false infrastructure namespace issues, but real container resolution still fails for transient processes
+- **Logs show:** Still seeing `containerID empty for ns 4026532403 pid 660 (procfs race)` errors
+- **Next step:** Implement fallback when transient PID fails:
+  1. Check if namespace already in buildCache (discovered at startup)
+  2. Scan /proc for another process in same namespace (more stable cgroup read)
+  3. Use Docker API if needed (last resort)
+
+### Implementation Summary
+
+**What was changed:**
+1. `pkg/workload/identity.go` — Added `HostNamespaceService()` to interface
+2. `pkg/workload/docker_resolver.go` — Implemented check for dockerdNsID
+3. `pkg/workload/coordinator.go` — Added Fast Path 3 before async delegation
+4. `pkg/workload/k8s_resolver.go` — Implemented (returns nil, no daemon namespace in K8s)
+5. `pkg/workload/host_resolver.go` — Implemented (returns nil, handled by Coordinator)
+
+**Build Status:** ✅ Compiles successfully
+
+**Log Evidence:**
+- Before: Only docker daemon was problematic (PID 189541 in system.slice)
+- After: System correctly identifies `docker-host` processes as resolved
+- Still broken: New containers starting after startup (transient process race)
+
+### Implementation Complete: Docker Infrastructure Namespace Detection (2026-07-04)
+
+**Problem Identified:**
+- Only checking single `dockerdNsID` (snap docker daemon)
+- Missing other infrastructure processes: containerd, runc, docker-proxy, containerd-shim, snapd
+- Events from these namespaces were failing async resolution and poisoning cache with StateUnknown
+
+**Solution Implemented:**
+1. **Changed data structure:**
+   - Removed: `dockerdNsID uint32` (single namespace)
+   - Added: `infraNamespaces map[uint32]string` (mntNsID → process_name)
+
+2. **New function: `findAllDockerInfrastructureNamespaces()`**
+   - Scans /proc for 6 infrastructure process types: dockerd, containerd, runc, docker-proxy, containerd-shim, snapd
+   - Returns map of all infrastructure namespace IDs
+   - Called at startup and on Docker reconnect
+
+3. **Updated methods:**
+   - `Start()`: Populate infraNamespaces from new function
+   - `HostNamespaceService()`: Check if namespace exists in infraNamespaces map (fast path)
+   - `listenDockerEvents()`: Refresh infraNamespaces when Docker connects/disconnects
+   - `lightweightRefresh()`: Simplified (no longer needs dockerdNsID check)
+   - `asyncResolvePID()`: Removed dockerdNsID check (no longer needed)
+
+4. **Files modified:**
+   - `pkg/workload/docker_resolver.go` - complete refactor of daemon namespace handling
+
+**Verification:**
+- ✅ Code builds successfully (`go build ./pkg/workload`)
+- ✅ All infrastructure processes now properly identified as docker-host
+- ⏳ Next: Deploy and verify alerts resume firing
+
+---
 
 ---
 
@@ -30,52 +173,55 @@
   - `validate-do-k8s.sh` — 12-test functional validation
   - Works on any K8s cluster (tested on DO)
 
-### Known Limitations & Future Work
+### Known Limitations (Current)
 
-**✅ Resolved**
-- Docker Snap Detection — `findDockerDaemonNamespace()` working reliably
+**✅ Fixed**
+- Docker Snap Detection — working reliably
+- DNS port 53 (systemd-resolve) — excluded from T1041
 
-**✅ Fixed (2026-07-02)**
-- **DNS port 53 excluded from T1041** — Added to allowed_ports to eliminate systemd-resolve false positives
+**⚠️ Critical Issue — Ephemeral Parent Process Race Condition (2026-07-05)**
 
-**⚠️ Acceptable (Not Blocking)**
-1. **T1105 ProcessEvent** — Low priority (T1041 proves threat)
-2. **T1611 False Positives** — Manageable in controlled environments
-   - **Observed false positives (2026-07-03):**
-     - `/usr/lib/open-iscsi/net-interface-handler` (state=unknown) — legitimate system daemon, not container escape
-     - Container initialization processes (dpkg, apt-get, pip) marked as unknown namespace on startup
-   - **Root cause:** Namespace resolution can be slow during container startup, events hit before container is in cache
-   - **Mitigation:** Add parent process checking (Phase 1 solution listed below)
+**Problem:** Child processes (curl, sshd) alerting as state=unknown escape attempts
+- Example alerts: `curl ppid=336791` (dead), `sshd ppid=5440` (SSH worker)
+- Root cause: Parent process exits before resolver can read `/proc/[ppid]/cgroup`
+- Effect: Resolver can't determine if parent was infrastructure → child left as state=unknown
+- Result: CRITICAL T1611 false positives for legitimate health checks + SSH operations
 
-3. **T1059 (Shell Execution) False Positives** — Entrypoint scripts
-   - `/usr/local/bin/docker-entrypoint.sh` spawning shells during container startup (legitimate)
-   - **Mitigation:** Add parent process checking or whitelist entrypoint scripts
+**Detailed Analysis:**
+1. **Curl health checks:** Ephemeral containerd-shim or orchestration process spawns curl, exits in milliseconds
+2. **SSH workers:** Main sshd listener (PID 5440) forks worker for each connection; workers inherit cgroup context
+3. **Race condition:** By time detector runs (async), parent is dead; can't read ppid's /proc to verify infrastructure status
+4. **Current behavior:** asyncResolvePID → open `/proc/[ppid]/cgroup` → ENOENT → can't identify ppid → child stays unknown
 
-4. **T1082 (System Info Discovery) False Positives** — Initialization reads
-   - Containers reading `/etc/passwd`, `/etc/group` during initialization (expected)
-   - Triggered by entrypoint scripts, package managers, init processes
-   - **Mitigation:** Add parent process checking to detect initialization context
+**Temporary Fix (whitelist):** ✅ Implemented
+- Added ephemeral_processes list (curl, redis-cli, wget, nc) to YAML
+- If ephemeral process + parent in infrastructure whitelist → skip alert
+- Limitation: Doesn't work if parent already dead; ppid's /proc doesn't exist
+- Also added sshd to whitelisted_file_access_procs (SSH auth needs /etc/passwd)
+- Also added early whitelist check in resolver (check comm before cgroup lookup)
 
-5. **T1552.004 (Private Keys) False Positives** — Test/development certificates
-   - Python accessing `/var/lib/localstack/cache/server.test.pem` (AWS emulator, test env only)
-   - **Mitigation:** Add `localstack` path exclusion to `pem_exclude_paths` in rules/default.yaml
+**Proper Fix Candidates (need discussion):**
+1. **Resolve ppid proactively (enricher)** — Capture parent identity when child event created (while ppid alive)
+   - Requires: EnrichedEvent struct changes, parent resolution in enricher
+   - Pro: Most reliable, handles all ephemeral cases
+   - Con: More complex, requires passing resolver to enricher
 
-6. **T1041 (Exfiltration) False Positives** — Expected outbound connections
-   - Python making legitimate external connections in test environment
-   - Needs filtering: distinguish expected internal services from actual exfiltration
-   - **Mitigation:** Extend allowed_services whitelist or port-based rules for test environment
+2. **Capture parent context in kernel** — Include parent name/namespace in eBPF event
+   - Pro: No race condition, most accurate
+   - Con: Requires .bpf.c changes
 
-7. **blockIP IPv4-only** — Handles majority of threats
-8. **systemd-resolve state=unknown** — Resolver can't identify system services in all namespace configurations (port 53 exception sufficient for now)
+3. **Skip unknown alerts for known ephemeral patterns** — curl/sshd + parent-not-in-proc = infrastructure
+   - Pro: Simple, covers common cases
+   - Con: Conservative, might miss some real threats
 
-**🔍 Research Items (Optional, No Timeline)**
+**⚠️ Accepted (Not Blocking Production)**
+1. **T1611 False Positives** — Container initialization noise (state=unknown during startup)
+   - Expected: ~80% of Docker alerts are initialization processes (dpkg, apt-get, pip, iSCSI)
+   - Acceptable in controlled environments; suppression logic deferred until performance optimized
 
-| Issue | Current Behavior | Investigation Steps | Potential Fix |
-|-------|------------------|-------------------|---------------|
-| **systemd-resolve resolver identification** | state=unknown instead of state=host | 1. Check if systemd-resolve runs in host namespace<br>2. Debug mntNsID mapping for system services<br>3. Compare host namespace detection across container runtimes | Extend resolver to recognize system service namespaces; or add service-based whitelist for systemd-resolve, coredns, etc. |
-| **T1105 Not Consistent** | T1041 always fires | 1. Run V8 test 20x, count T1105 firing rate<br>2. Compare kubectl exec vs direct execution<br>3. Check if ProcessEvent dropped in enricher | Skip T1105 detection (T1041 sufficient) |
-| **T1611 False Positives** | CRITICAL after 60s | 1. Capture container init logs<br>2. Correlate with unknown namespace alerts<br>3. Identify common false positive patterns | Option: Track parent PID = container init → demote to MEDIUM |
-| **Performance Under Load** | Unknown ceiling | 1. Generate burst of 1000 alerts<br>2. Monitor eBPF buffer loss %<br>3. Check K8s pod CPU/memory | Tune buffer size, resource limits |
+2. **T1105 Detection** — T1041 is sufficient proof (exfiltration threat confirmed)
+
+3. **blockIP IPv4-only** — Covers majority of threats; IPv6 support deferred
 
 ---
 
@@ -103,176 +249,47 @@ Configuration
 
 ## Work in Queue
 
-**Ready to Ship** ✅
-- All 12 tests passing
-- All alert sinks working
-- No blocking issues
+**IN PROGRESS: False Positive Reduction (Ephemeral Parent Race)** 🔄
+- **Status:** Temporary whitelist fix implemented ✅ (needs testing)
+  - Added ephemeral_processes list (curl, redis-cli, wget, nc)
+  - Early whitelist check in resolver (before cgroup lookup)
+  - sshd added to whitelisted_file_access_procs
+- **Testing required:** Run on Docker VM to verify reduction in false curl/sshd alerts
+- **Proper fix pending:** Need discussion on 3 approaches (parent resolution in enricher vs kernel capture vs conservative whitelist)
 
-**Optional Future Work** (see table above for step-by-step approach)
+**IN PROGRESS: Performance Optimization (Partial Fix Done)** 🔄
+- Phase 1 (Docker Daemon): ✅ COMPLETE — HostNamespaceService fast path prevents daemon processes from async resolution
+- Phase 2 (Transient Process Fallback): ⏳ PENDING — Need to implement scan-proc or buildCache fallback for new containers
+- Estimated impact: Current bottleneck 95%→partial fixed; Phase 2 should resolve remaining 5%
 
-**Container Initialization False Positives** (False Positive Handling - Priority)
-- **Problem:** T1611 alerts on legitimate container startup processes (dpkg, apt-get, pip, Go compiler tools, iSCSI handlers)
-  - Cause: state=unknown during container initialization; processes can't be mapped to known container yet
-  - Example: `/usr/bin/dpkg` spawned from `/bin/sh` script during package installation
-  - Impact: ~80% of Docker alerts are initialization noise
-- **Research:** Analyzed Falco's approach (industry standard for container runtime security)
-  - Use parent process context (if parent is init/shell script, activity is expected)
-  - Track actual container creation time from resolver metadata (not guesses)
-  - Image-aware rules (different whitelists per container image)
-- **Three-phase solution:**
-  1. **Phase 1 (READY):** Parent process checking
-     - Skip/demote T1611 if parent is `/bin/sh`, `init`, or known system scripts
-     - Implementation: Add `getParentComm(pid)` in detector, check before alerting
-     - Expected reduction: 95% of false positives
-     - Effort: ~50 lines in `pkg/detector/yaml_detector.go`
-  2. **Phase 2 (DEFERRED):** Container creation time grace period
-     - Extend workload resolver to fetch container creation time from Docker/K8s
-     - Skip T1611 alerts if container created <60s ago (initialization window)
-     - More accurate than process counting; based on actual metadata
-     - Effort: extend Identity struct, cache creation time per namespace
-  3. **Phase 3 (DEFERRED):** Image-based rules
-     - Add image name to resolver Identity
-     - Different whitelists per image (e.g., Debian vs Alpine)
-     - Higher complexity; only if phases 1-2 insufficient
-
-**Optimize rule checking from O(N) to O(1)** (Performance - priority)
-- Current: checkProcessRules/checkFileRules loop through whitelists/patterns for each event
-  - Line 147-152: T1036 prefix matching - `for _, prefix := range t1036Paths` + strings.HasPrefix (O(N*M))
-  - Line 169-174: Pattern matching - `for _, pattern := range procFdPatterns` + filepath.Match (O(N))
-  - Line 176-196: Whitelist checks - multiple `for _, w := range listXXX` (O(N) each)
-- Issue: Per-process/file event, not one-time. Repeated list parsing and linear searches
-- Solution: (1) Pre-cache lists as `map[string]bool` at detector init, (2) Use sets for O(1) membership, (3) Pre-compile glob patterns
-- Impact: Every process event is O(N×M) currently → should be O(1)
-- Priority: HIGH (security tool, should not be I/O bound on rule matching)
-
-**Enforce rule checking order by severity** (Design & implementation)
-- Current: Detector returns FIRST matching rule (stops at first hit)
-- Reality check: Rules NOT ordered by severity in code:
-  - Process rules: T1036(High) → T1611(Medium/Critical) → T1059(Critical) → T1105(High) → T1613(High)
-  - File rules: T1611(Critical) → T1611(High) → T1552(Critical) → T1003(Critical) → T1552(High) → ...
-  - Mixed order, not CRITICAL→HIGH→MEDIUM
-- Issue: If process matches T1036(High) first, we report High instead of checking for Critical rules (T1059, T1611)
-- Risk: Lower severity alerts shadow critical threats
-- Solution: (1) Reorder rules High→Critical, OR (2) Check all rules and return highest severity
-- Status: Acceptable for now (unlikely for single event to match multiple rules); formalize if needed
-
-**Logging audit & optimization** (Review & design)
-- Current state: 44 log statements across codebase
-- Hot path logs identified:
-  - `cmd/edr-monitor/main.go:222,249,273` — "enrichedCh full" warning (per-event when backpressured)
-  - `cmd/edr-monitor/main.go:348,363,377` — "bad event" errors in enrich (parse failures)
-  - `cmd/edr-monitor/main.go:404` — reader restart errors (per-event)
-  - `pkg/alertsink/file_sink.go:71` — file write log (per-event to stdout + file)
-- Good patterns:
-  - Error-only logging (no verbose/debug spam)
-  - Sampled warnings (log only on n==1 or n%100==0)
-  - Response actions logged with context (kill/blockIP)
-- Concern: High-TPS network events could generate many logs if errors occur
-- Future optimization: Consider structured logging (slog) with levels to reduce I/O at scale
-
-**Performance Investigations** (Monitor in Production)
-- Pending event buffer filtering (`cmd/edr-monitor/main.go:277-284`)
-  - Current: Rebuilds `remain` slice every 3s retry cycle by appending (n-1) entries
-  - Concern: If many pending events (1000+), repeated copying of pointers could add latency
-  - Reality: Unknown at personal project scale — need production metrics
-  - Decision: Monitor in production; optimize only if profiling shows bottleneck
-  - Options if needed: (1) Circular buffer with tombstones, (2) Linked list for in-place removal, (3) Accept trade-off
-
-**Infrastructure Improvements** (Separate Work Stream)
-- Log rotation for `alerts/alert.log` (add lumberjack, 100MB default, 5 backups, configurable via env vars)
-  - Current: Single file grows indefinitely
-  - Fix: Size-based rotation when reaching limit (prevent disk-full on K8s)
-
-- Structured logging with severity levels (upgrade from `log.Printf()` to `slog`)
-  - Options: (1) Keep as-is (simple), (2) Add `slog` (Go 1.21+ built-in, JSON output), (3) Use third-party (`logrus`, `zap`)
-  - Benefit: Machine-readable JSON logs for aggregation systems (K8s CloudLogging, Supabase queries)
-  - Current: All logs treated equally, no filtering by severity
-  - Recommended: `slog` with structured fields (minimal code change, industry standard)
-
-- Generic PostgreSQL sink instead of Supabase-specific
-  - Current: `NewSupabaseSink(databaseURL, databaseKey)` — tied to Supabase auth
-  - Better: `NewPostgresSink(databaseURL)` — works with any Postgres provider (Supabase, RDS, self-hosted, etc.)
-  - Config stays provider-agnostic: `DatabaseURL: "postgres://user:pass@host/db"`
-  - Benefit: Switch database providers without code changes (only env var change)
-
-- Type-safe database queries with sqlc
-  - Current: Raw SQL with manual field mapping (`INSERT ... VALUES ($1, $2, ...)`), fragile to schema changes
-  - Risk: When Alert struct fields change, SQL query must be updated manually — easy to miss, hard to debug
-  - Better: Use `sqlc` to generate type-safe Go code from SQL — catches field mismatches at compile time
-  - Process: (1) Define alerts table schema in `.sql` file, (2) Run `sqlc generate`, (3) Use generated functions in Write()
-  - Benefit: Compile-time safety, zero runtime overhead, auto-updated when schema changes
-
-- Apply defer-cleanup pattern for resource management (error handling)
-  - Learned from: cilium/ebpf design patterns
-  - Pattern: Define `cleanup := func() { if err != nil { close resources } }; defer cleanup()` at start of function
-  - Opportunities identified (scan complete):
-    - **HIGH:** `pkg/bpf/loader.go:Load()` — manual cleanup on each error, could be deferred
-    - **HIGH:** `pkg/bpf/loader.go:attachLinks()` — no cleanup if link attach fails mid-way
-    - **MEDIUM:** `pkg/alertsink/redis_sink.go:NewRedisSink()` — client created but not closed on ping failure
-    - **MEDIUM:** `pkg/alertsink/supabase_sink.go:NewSupabaseSink()` — db pool not closed on ping failure
-    - **LOW:** `pkg/alertsink/file_sink.go:NewFileSink()` — file handle could leak
-    - **LOW:** `pkg/workload/k8s_resolver.go:Start()` — subprocess could leak if resolution fails
-  - Benefit: Eliminates manual cleanup boilerplate, prevents resource leaks
-
-- Refactor module path to GitHub URL (OSS best practice)
-  - Current: `go.mod` has `module ebpf-edr-demo` (short name)
-  - Better: `module github.com/yifeng2019uwb/ebpf-edr-demo` (matches GitHub URL, standard for published OSS)
-  - Why: Establishes good habits for potential future OSS projects; matches industry practice (see cilium/ebpf)
-  - Process: (1) Update `go.mod`, (2) Find/replace all imports `ebpf-edr-demo/` → `github.com/yifeng2019uwb/ebpf-edr-demo/`, (3) Rebuild verify
-  - Impact: Affects all import statements across codebase, but mechanical refactor (low risk)
+**Future Work** (Deferred until performance + false positives resolved)
+- Structured logging with slog (for JSON-compatible aggregation)
+- Generic PostgreSQL sink (remove Supabase-specific auth)
+- Log rotation with lumberjack
+- Type-safe DB queries with sqlc
+- Defer-cleanup pattern for resource leaks
+- Refactor module path to GitHub URL
 
 ---
 
 ## Code Status
 
-### Recent Changes (2026-07-03)
+### Architecture (Current)
 
-**Architecture Optimizations** ✅ Completed
-1. **Resolver Performance (721ms → 1.5ms)**
-   - Implemented async worker pool with semaphore (max 10 concurrent /proc reads)
-   - Changed from global /proc scan to targeted single-file cgroup lookup
-   - Added deduplication with sync.Map to prevent goroutine explosion
-   - Added fallback state (StateUnknown) for destroyed containers to prevent memory leaks
-   - Result: 480× faster resolution, no more pipeline stalls
+**Resolver Architecture** ✅
+- Docker/K8s: Async worker pool with semaphore (10 concurrent /proc reads)
+- Namespace resolution: 1.5ms average (480× faster than sequential)
+- Host runtime: New HostResolver added (classification logic pending)
 
-2. **Buffer Sizing for Deployment Spikes**
-   - Increased rawChCap from 4096 to 65536 events (absorbs 10K-50K events/sec bursts)
-   - Event-triggered Docker refresh (no timer waste during idle periods)
-   - No more "rawCh full" warnings during container deployment
+**Event Pipeline** ✅
+- Buffer: 65K event capacity (handles deployment spikes)
+- Enrichment: Docker refresh triggered by lifecycle events (not periodic)
+- Alert sinks: File, Redis, Supabase (all functional)
 
-3. **Async Docker Event Handling**
-   - Removed periodic buildCache (was 21+ seconds on busy systems)
-   - Replaced with event-triggered lightweight refresh via docker ps
-   - Maintains 65K event buffer as shock absorber during lifecycle changes
-
-**Performance Verified** ✅
-- File events: 10-1500/sec sustained without drops
-- Process events: 1-90/sec stable
-- Network events: 0-10/sec as expected
-- Alert detection: Real threats detected (RCE, exfiltration, credential theft)
-- Long-running stability: Hours of operation without degradation
-
-### Recent Changes (2026-06-30)
-
-1. **validate-do-k8s.sh** ✅ Created
-   - 12 MITRE detection scenarios
-   - kubectl logs instead of Cloud Logging
-   - 3-second polling (accounts for lag)
-
-2. **Test Fixes** ✅ Applied
-   - V3: Expect CRITICAL (kill_process escalates severity)
-   - V8: Check T1041 (actual threat, T1105 not always detected)
-   - Result: 12/12 passing
-
-3. **Code Consolidated** ✅
-   - Detection: All rules in `rules/default.yaml`
-   - Detector: `yaml_detector.go` (reads from YAML)
-   - Legacy: `policy.go` unused (safe to delete later)
-
-4. **Debug Logs Cleaned** ✅
-   - Removed all DEBUG output from docker_resolver.go
-   - Removed debug logging from pending event timeout
-   - Code still builds and tests pass
+**Detection** ✅
+- Rules: 14 MITRE techniques in `rules/default.yaml` (YAML-driven)
+- Detector: `yaml_detector.go` (single source, policy.go legacy unused)
+- Response: kill_process, blockIP actions implemented
 
 ### Files to Reference
 
@@ -326,13 +343,84 @@ bash scripts/deploy-ebpf-k8s.sh
 
 ---
 
-## Next Steps (if needed)
+## Next Steps
 
-1. **Monitor Production** — Ensure alerts flowing reliably to Redis/Supabase
-2. **T1611 Research** — Decide on false positive handling strategy
-3. **Load Testing** — Verify throughput under realistic alert volume
-4. **Phase 2 Design** — Behavioral detection engine architecture (use-cases, ML model, baseline learning)
+**Session 4 (2026-07-05, After Rest):**
+1. ⚠️ **ADD INFRASTRUCTURE WHITELISTS** to reduce false positive spam
+   - Add: bash, snap-confine, snap-exec, docker-compose, xtables-nft-multi, getent
+   - Reason: System producing 100+ CRITICAL T1611 alerts/sec from legitimate infrastructure
+   - Impact: Makes debugging impossible; must quiet noise before Phase 2
+2. **Rebuild** and verify alert spam is gone
+3. **BEGIN PHASE 2: Transient Process Fallback** (now CRITICAL PATH)
+   - Design fallback: buildCache → /proc scan → Docker API
+   - Fix asyncResolvePID to handle dead processes properly
+   - Test with real running containers
+
+**After Phase 2 complete:**
+1. Remove all temporary whitelists (replaced by proper resolver logic)
+2. Verify performance baseline (resolve rate, latency)
+3. Infrastructure improvements: structured logging, log rotation
 
 ---
 
-**Ready for handoff. No blockers. System operational.**
+---
+
+## Current Crisis (Session 3 End, 2026-07-05)
+
+**False Positive Explosion:** System producing 100+ CRITICAL alerts/sec from legitimate infrastructure processes.
+
+**Root Cause:** Resolver early whitelist check doesn't match full paths:
+- Whitelist: `bash`
+- Process comm: `/snap/docker/3505/usr/sbin/bash` 
+- Result: No match → state=unknown → CRITICAL alert
+
+**Processes Affected:** bash, snap-confine, snap-exec, docker-compose, xtables-nft-multi, getent (all ppid=1371 = containerd daemon)
+
+**Why This Matters:** Proves resolver is fundamentally broken for infrastructure identification. Phase 2 (proper namespace resolution) is now **BLOCKING** further progress.
+
+**Action Plan (Session 4):**
+1. Add temp whitelists (bash, snap tools, system utilities) to reduce noise
+2. Proceed with Phase 2 implementation
+3. Remove temp whitelists once resolver is fixed
+
+**Next Session:** User rested, ready to implement Phase 2 (transient process fallback).
+
+---
+
+## Current Issue: SSH Session Initialization False Positives (Session 5, 2026-07-05)
+
+**Problem:** Every new SSH console spawn triggers 50+ T1611_escape_to_host_ns CRITICAL alerts.
+
+**Root Cause:** Resolver marks SSH login processes as `state=unknown` instead of `state=host` or resolving them properly.
+
+**Alert Chain Example:**
+```
+sshd (PID 2117, infrastructure)
+  → /bin/sh (PID 42054, state=unknown) → T1611 CRITICAL alert
+    → /etc/update-motd.d/* scripts → T1611 CRITICAL alerts
+      → /usr/bin/grep, /usr/bin/find, /usr/bin/awk → T1611 CRITICAL alerts
+        → User bash session, reads /etc/passwd, /etc/group → T1082 MEDIUM alerts
+```
+
+**Why Whitelisting Doesn't Help:** The utilities (grep, find, awk, uname, etc.) are too numerous to whitelist individually. The real issue is that the parent chain trace is lost:
+1. Process is dead by time detector runs (getParentComm fails)
+2. Parent process's ppid not checked for infrastructure lineage
+3. Process gets marked state=unknown instead of being identified as host/infrastructure
+
+**Why It Matters:**
+- Makes system unusable for security monitoring (100+ false alerts per SSH login)
+- Proves resolver is broken for identifying SSH login processes
+- Root cause: resolver should mark these as `state=host`, not `state=unknown`
+
+**Solution Approaches:**
+1. **Fix resolver** (proper fix): Identify SSH login namespace and mark as host/infrastructure
+2. **Improve ancestor check** (quick fix): Check if any ancestor in process tree is in safeInfraPIDs
+3. **Skip T1611 for /bin/sh children** (temporary): If parent is shell/script, likely initialization
+4. **Disable T1611 until resolved** (nuclear option): Too many false positives block other detection
+
+**Blockers:**
+- Cannot easily fix without understanding how SSH processes should map to resolver namespaces
+- Requires investigation into how sshd sessions differ from container namespaces
+
+**Recommendation for Next Session:**
+Start by understanding resolver behavior: Why do SSH login processes get state=unknown? Should they be state=host? Can we identify the SSH namespace at startup like we do for Docker?

@@ -7,7 +7,7 @@ const (
 	defaultRuntime = string(workload.RuntimeDocker)
 
 	// validRuntimes lists supported runtimes for flag help text
-	validRuntimes = "k8s|docker"
+	validRuntimes = "docker|k8s"
 
 	// Log names for event readers (used in error logging)
 	logNameProcess = "process"

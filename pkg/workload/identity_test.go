@@ -9,7 +9,6 @@ func TestResolveStateConstants(t *testing.T) {
 		want ResolveState
 	}{
 		{"resolved", StateResolved, "resolved"},
-		{"host", StateHost, "host"},
 		{"pending", StatePending, "pending"},
 		{"unknown", StateUnknown, "unknown"},
 	}

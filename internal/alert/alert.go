@@ -14,6 +14,7 @@ const (
 	Critical Level = "CRITICAL"
 	High     Level = "HIGH"
 	Medium   Level = "MEDIUM"
+	Low      Level = "LOW"
 )
 
 // Action represents the response action taken by the responder.

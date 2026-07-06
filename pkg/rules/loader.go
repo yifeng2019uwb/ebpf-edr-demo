@@ -16,13 +16,37 @@ type Config struct {
 	Rules RulesSection `yaml:"rules"`
 }
 
+// InfrastructureCategory defines a category of infrastructure processes with path validation
+type InfrastructureCategory struct {
+	AllowedComms    []string `yaml:"allowed_comms"`
+	TrustedPrefixes []string `yaml:"trusted_prefixes"`
+}
+
+// InfrastructureFilters defines Layer 1 fast-path infrastructure whitelist by category
+type InfrastructureFilters struct {
+	HostSystem     InfrastructureCategory `yaml:"host_system"`
+	DockerRuntime  InfrastructureCategory `yaml:"docker_runtime"`
+	Kubernetes     InfrastructureCategory `yaml:"kubernetes"`
+	Agent          InfrastructureCategory `yaml:"agent"`
+}
+
+// GlobalException defines a Layer 2 pre-filter exception (context-aware whitelist)
+type GlobalException struct {
+	Description   string   `yaml:"description"`
+	ProcessIn     []string `yaml:"process_in"`
+	ParentContext string   `yaml:"parent_context"` // "init" or "infrastructure"
+	FilePrefixes  []string `yaml:"file_prefixes"`
+}
+
 // RulesSection contains all rule definitions (lists, macros, detections).
 type RulesSection struct {
-	Lists            []ListDef            `yaml:"lists"`
-	Macros           []MacroDef           `yaml:"macros"`
-	Detections       map[string]Detection `yaml:"detections"`
-	Network          Network              `yaml:"network"`
-	IgnoreNamespaces []string             `yaml:"ignore_namespaces"`
+	InfrastructureFilters InfrastructureFilters `yaml:"infrastructure_filters"`
+	GlobalExceptions      []GlobalException     `yaml:"global_exceptions"`
+	Lists                 []ListDef             `yaml:"lists"`
+	Macros                []MacroDef            `yaml:"macros"`
+	Detections            map[string]Detection  `yaml:"detections"`
+	Network               Network               `yaml:"network"`
+	IgnoreNamespaces      []string              `yaml:"ignore_namespaces"`
 }
 
 // ListDef defines a named list (reusable collection).
@@ -68,12 +92,14 @@ type Network struct {
 
 // RulesDB is the compiled rules database.
 type RulesDB struct {
-	Lists      map[string][]interface{}
-	Macros     map[string]string
-	Detections map[string]Detection
-	Network    Network
-	IgnoreNs   map[string]bool
-	Env        Environment // detected environment: "k8s", "docker", "bare-metal", "unknown"
+	InfrastructureFilters InfrastructureFilters     // Layer 1: fast-path infrastructure whitelist
+	GlobalExceptions      []GlobalException         // Layer 2 pre-filter: context-aware exceptions
+	Lists                 map[string][]interface{}
+	Macros                map[string]string
+	Detections            map[string]Detection
+	Network               Network
+	IgnoreNs              map[string]bool
+	Env                   Environment // detected environment: "k8s", "docker", "bare-metal", "unknown"
 }
 
 // LoadRules loads and compiles rules from YAML file.
@@ -121,11 +147,13 @@ func CompileRules(cfg *Config) *RulesDB {
 	}
 
 	return &RulesDB{
-		Lists:      lists,
-		Macros:     macros,
-		Detections: r.Detections,
-		Network:    r.Network,
-		IgnoreNs:   ignoreNs,
+		InfrastructureFilters: r.InfrastructureFilters,
+		GlobalExceptions:      r.GlobalExceptions,
+		Lists:                 lists,
+		Macros:                macros,
+		Detections:            r.Detections,
+		Network:               r.Network,
+		IgnoreNs:              ignoreNs,
 	}
 }
 
