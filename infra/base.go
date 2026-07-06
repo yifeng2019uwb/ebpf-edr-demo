@@ -31,9 +31,9 @@ func deployBase(ctx *pulumi.Context, agentMembers pulumi.StringArray) (*pubsub.T
 	// Route ebpf-edr-alerts into the custom bucket.
 	// UniqueWriterIdentity=true gives the sink its own SA (least-privilege).
 	_, err = logging.NewProjectSink(ctx, "ebpf-edr-to-logging-bucket", &logging.ProjectSinkArgs{
-		Name:        pulumi.String("ebpf-edr-to-logging-bucket-" + region),
-		Destination: pulumi.String("logging.googleapis.com/projects/" + project + "/locations/" + region + "/buckets/ebpf-edr-security-logs-" + region),
-		Filter:      pulumi.String(`logName="projects/` + project + `/logs/` + logName + `"`),
+		Name:                 pulumi.String("ebpf-edr-to-logging-bucket-" + region),
+		Destination:          pulumi.String("logging.googleapis.com/projects/" + project + "/locations/" + region + "/buckets/ebpf-edr-security-logs-" + region),
+		Filter:               pulumi.String(`logName="projects/` + project + `/logs/` + logName + `"`),
 		UniqueWriterIdentity: pulumi.Bool(true),
 	})
 	if err != nil {

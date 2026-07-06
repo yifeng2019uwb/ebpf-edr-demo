@@ -34,7 +34,7 @@ func (r *Responder) Respond(a *alert.Alert, action alert.Action) alert.Action {
 			return alert.ActionBlockIP
 		}
 		return alert.ActionNone
-	// Phase 2: ActionQuarantineFile: quarantineFile(a.Filename)
+		// Phase 2: ActionQuarantineFile: quarantineFile(a.Filename)
 	}
 	return alert.ActionNone
 }

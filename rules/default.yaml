@@ -217,7 +217,7 @@ rules:
     # These tools operate at namespace boundaries and may appear in unknown namespaces.
     # Excluded from T1611 escape detection.
     - name: network_management_tools
-      items: [nft, xtables-nft-multi, ip, iptables, iptables-legacy, ip6tables, grep, readlink, sleep]
+      items: [nft, xtables-nft-multi, ip, iptables, iptables-legacy, ip6tables, grep, readlink, sleep, curl]
 
     # Docker lifecycle and deployment tools
     # Spawned during docker deploy/destroy, exit too fast for resolver to complete
@@ -255,6 +255,11 @@ rules:
         - systemd-sysctl           # node sysctl configuration
         - bridge-network-interface # udev network bridge setup
 
+    # gcp-specific infrastructure processes.
+    # Conditionally merged at runtime when environment is detected as DigitalOcean.
+    - name: gcp_cloud_agents
+      items: []
+
     # GKE-specific infrastructure processes.
     # Conditionally merged at runtime when environment is detected as GCP.
     - name: gke_infrastructure_procs
@@ -267,7 +272,7 @@ rules:
 
     # Whitelisted unknown namespace procs — merged from base + environment-specific lists.
     # Built at runtime by combining k8s_infrastructure_procs + environment-specific items.
-    - name: whitelisted_unknown_ns_procs
+    - name: compiled_infra_runtime_whitelist
       items: []
 
     # Customer applications — non-infrastructure apps that should not trigger alerts.

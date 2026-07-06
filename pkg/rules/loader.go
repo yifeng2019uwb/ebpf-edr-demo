@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"ebpf-edr-demo/pkg/workload"
 )
 
 // Config is the top-level rules configuration.
@@ -24,10 +26,10 @@ type InfrastructureCategory struct {
 
 // InfrastructureFilters defines Layer 1 fast-path infrastructure whitelist by category
 type InfrastructureFilters struct {
-	HostSystem     InfrastructureCategory `yaml:"host_system"`
-	DockerRuntime  InfrastructureCategory `yaml:"docker_runtime"`
-	Kubernetes     InfrastructureCategory `yaml:"kubernetes"`
-	Agent          InfrastructureCategory `yaml:"agent"`
+	HostSystem    InfrastructureCategory `yaml:"host_system"`
+	DockerRuntime InfrastructureCategory `yaml:"docker_runtime"`
+	Kubernetes    InfrastructureCategory `yaml:"kubernetes"`
+	Agent         InfrastructureCategory `yaml:"agent"`
 }
 
 // GlobalException defines a Layer 2 pre-filter exception (context-aware whitelist)
@@ -92,14 +94,14 @@ type Network struct {
 
 // RulesDB is the compiled rules database.
 type RulesDB struct {
-	InfrastructureFilters InfrastructureFilters     // Layer 1: fast-path infrastructure whitelist
-	GlobalExceptions      []GlobalException         // Layer 2 pre-filter: context-aware exceptions
+	InfrastructureFilters InfrastructureFilters // Layer 1: fast-path infrastructure whitelist
+	GlobalExceptions      []GlobalException     // Layer 2 pre-filter: context-aware exceptions
 	Lists                 map[string][]interface{}
 	Macros                map[string]string
 	Detections            map[string]Detection
 	Network               Network
 	IgnoreNs              map[string]bool
-	Env                   Environment // detected environment: "k8s", "docker", "bare-metal", "unknown"
+	Env                   Environment // detected environment: gcp, digitalocean, local
 }
 
 // LoadRules loads and compiles rules from YAML file.
@@ -117,11 +119,6 @@ func LoadRules(path string) (*RulesDB, error) {
 
 	// Compile to RulesDB
 	return CompileRules(&cfg), nil
-}
-
-// LoadDefaultRules loads from default location.
-func LoadDefaultRules() (*RulesDB, error) {
-	return LoadRules("rules/default.yaml")
 }
 
 // CompileRules converts Config to RulesDB (preprocessed for fast lookup).
@@ -230,7 +227,8 @@ func tryMetadata(ctx context.Context, method, url string, headers map[string]str
 }
 
 // MergeWhitelists adds environment-specific whitelists to the rules database.
-func (db *RulesDB) MergeWhitelists(env Environment) {
+// runtime determines which infrastructure processes to include (RuntimeK8s or RuntimeDocker).
+func (db *RulesDB) MergeWhitelists(env Environment, runtime workload.Runtime) {
 	var cloudAgents []interface{}
 	var infraProcs []interface{}
 
@@ -245,20 +243,23 @@ func (db *RulesDB) MergeWhitelists(env Environment) {
 		return
 	}
 
-	// Merge cloud agents into whitelisted processes
-	if cloudAgents != nil {
-		if baseWhitelist, ok := db.Lists["whitelisted_processes"]; ok {
-			db.Lists["whitelisted_processes"] = append(baseWhitelist, cloudAgents...)
+	// Build compiled_infra_runtime_whitelist: always include environment-specific infraProcs,
+	// additionally include K8s infrastructure only if runtime is RuntimeK8s
+	result := []interface{}{}
+
+	if runtime == workload.RuntimeK8s {
+		baseK8s := db.Lists["k8s_infrastructure_procs"]
+		if baseK8s != nil {
+			result = append(result, baseK8s...)
 		}
 	}
 
-	// Build whitelisted_unknown_ns_procs from base K8s + environment-specific infrastructure
-	baseK8s := db.Lists["k8s_infrastructure_procs"]
-	if baseK8s != nil {
-		db.Lists["whitelisted_unknown_ns_procs"] = append([]interface{}{}, baseK8s...)
-		if infraProcs != nil {
-			db.Lists["whitelisted_unknown_ns_procs"] = append(db.Lists["whitelisted_unknown_ns_procs"], infraProcs...)
-		}
+	if infraProcs != nil {
+		result = append(result, infraProcs...)
+	}
+
+	if len(result) > 0 {
+		db.Lists["compiled_infra_runtime_whitelist"] = result
 	}
 
 	logMsg := fmt.Sprintf("rules: merged %d cloud agents", len(cloudAgents))
@@ -269,7 +270,7 @@ func (db *RulesDB) MergeWhitelists(env Environment) {
 }
 
 // LoadRulesForEnvironment loads rules and merges environment-specific whitelists.
-func LoadRulesForEnvironment(path string) (*RulesDB, error) {
+func LoadRulesForEnvironment(path string, runtime workload.Runtime) (*RulesDB, error) {
 	db, err := LoadRules(path)
 	if err != nil {
 		return nil, err
@@ -277,7 +278,7 @@ func LoadRulesForEnvironment(path string) (*RulesDB, error) {
 
 	env := DetectEnvironment()
 	db.Env = env // store detected environment for detector use
-	db.MergeWhitelists(env)
+	db.MergeWhitelists(env, runtime)
 
 	return db, nil
 }

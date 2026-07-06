@@ -84,12 +84,12 @@ func TestHandlerSend_DstIPInExtra(t *testing.T) {
 	h, sink := newTestHandler(t)
 
 	h.Send(Alert{
-		Level:   High,
-		Rule:    "unauthorized_external_connect",
-		Message: "Unauthorized external connection",
-		Comm:    "python3",
-		DstIP:   "8.8.8.8",
-		DstPort: 443,
+		Level:    High,
+		Rule:     "unauthorized_external_connect",
+		Message:  "Unauthorized external connection",
+		Comm:     "python3",
+		DstIP:    "8.8.8.8",
+		DstPort:  443,
 		Workload: workload.ResolveResult{State: workload.StateResolved},
 	})
 	h.Close()
@@ -152,9 +152,9 @@ func TestNewHandler_WithMultipleSinks(t *testing.T) {
 	defer h.Close()
 
 	h.Send(Alert{
-		Level: High,
-		Rule:  "test_rule",
-		Comm:  "test",
+		Level:    High,
+		Rule:     "test_rule",
+		Comm:     "test",
 		Workload: workload.ResolveResult{State: workload.StateResolved},
 	})
 

@@ -9,20 +9,15 @@ import (
 	"strings"
 )
 
-// containerIDLen is the length of a full SHA256 container ID (64 hex chars).
-// All runtimes (Docker, containerd, CRI-O) use SHA256. Used to validate
-// container IDs parsed from /proc/<pid>/cgroup paths.
-const containerIDLen = 64
-
 // /proc paths for namespace and process discovery
 const (
-	procNsMntPattern      = "/proc/[0-9]*/ns/mnt"      // Find all process mount namespaces
-	procCmdlinePattern    = "/proc/[0-9]*/cmdline"     // Find all process command lines
-	procNsMntPathFmt      = "/proc/%d/ns/mnt"          // Get namespace for specific PID (int)
-	procCmdlinePathFmt    = "/proc/%d/cmdline"         // Get command line for specific PID (int)
-	procCgroupPathFmt     = "/proc/%s/cgroup"          // Get cgroup for process (string)
+	procNsMntPattern   = "/proc/[0-9]*/ns/mnt"  // Find all process mount namespaces
+	procCmdlinePattern = "/proc/[0-9]*/cmdline" // Find all process command lines
+	procNsMntPathFmt   = "/proc/%d/ns/mnt"      // Get namespace for specific PID (int)
+	procCmdlinePathFmt = "/proc/%d/cmdline"     // Get command line for specific PID (int)
+	procCgroupPathFmt  = "/proc/%s/cgroup"      // Get cgroup for process (string)
 	// String-based path formats (for direct concatenation without fmt.Sprintf)
-	procNsMntPathStr      = "/proc/%s/ns/mnt"          // Get namespace for specific PID (string pidStr)
+	procNsMntPathStr = "/proc/%s/ns/mnt" // Get namespace for specific PID (string pidStr)
 )
 
 // getMntNsIDFromPath returns the mount namespace ID from a namespace path.

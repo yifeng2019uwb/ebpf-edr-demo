@@ -2,7 +2,11 @@
 
 package workload
 
-import "testing"
+import (
+	"testing"
+
+	"ebpf-edr-demo/internal/processor"
+)
 
 func TestNormalizeServiceName(t *testing.T) {
 	tests := []struct {
@@ -65,12 +69,11 @@ func TestDockerResolverResolveCacheHit(t *testing.T) {
 				State: StateResolved,
 			},
 		},
-		node:    "docker-node",
-		region:  "us-west1",
-		cluster: "docker-vm",
+		hostname: "docker-node",
+		region:   "us-west1",
 	}
 
-	got := resolver.Resolve(12345, 999)
+	got := resolver.Resolve(&processor.ProcessEvent{MntNsId: 12345, Pid: 999})
 
 	if got.State != StateResolved {
 		t.Fatalf("State = %q, want %q", got.State, StateResolved)
@@ -91,12 +94,12 @@ func TestDockerResolverResolveCacheHit(t *testing.T) {
 
 func TestDockerResolverResolveCacheMissReturnsPending(t *testing.T) {
 	resolver := &DockerResolver{
-		cache:  map[uint32]ResolveResult{},
-		node:   "docker-node",
-		region: "us-west1",
+		cache:    map[uint32]ResolveResult{},
+		hostname: "docker-node",
+		region:   "us-west1",
 	}
 
-	got := resolver.Resolve(99999, 123)
+	got := resolver.Resolve(&processor.ProcessEvent{MntNsId: 99999, Pid: 123})
 
 	if got.State != StatePending {
 		t.Fatalf("State = %q, want %q", got.State, StatePending)

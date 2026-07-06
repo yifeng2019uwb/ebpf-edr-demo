@@ -20,10 +20,10 @@ const (
 	EnvPubSubKey  = "PUBSUB_KEY"
 
 	// Workload identification
-	EnvRegion       = "REGION"
-	EnvClusterName  = "CLUSTER_NAME"
-	EnvEnv          = "ENV"
-	EnvServiceCIDR  = "SERVICE_CIDR"
+	EnvRegion      = "REGION"
+	EnvClusterName = "CLUSTER_NAME"
+	EnvEnv         = "ENV"
+	EnvServiceCIDR = "SERVICE_CIDR"
 
 	// Sensor configuration (optional, for extended deployments)
 	EnvSensorType   = "SENSOR_TYPE"

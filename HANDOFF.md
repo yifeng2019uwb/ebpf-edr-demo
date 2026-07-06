@@ -9,6 +9,19 @@
 
 ---
 
+## Known Issue: Docker Container Cache Never Evicts (2026-07-06)
+
+**Status:** `listenDockerEvents()` is commented out in `DockerResolver.Start()` (`pkg/workload/docker_resolver.go`). Disabled today because its recovery/reconnect logic had unresolved issues and is hard to test reliably without a live Docker daemon to script event sequences against.
+
+**Effect:** The only cache-cleanup code (removing `r.cache`/`r.containerToNs` entries on container stop/die/remove) lived inside `listenDockerEvents()`. With it disabled:
+- `r.cache` and `r.containerToNs` only grow, via `asyncResolvePID` on new namespaces.
+- Stopped/removed containers are never purged — slow unbounded growth plus stale entries if a namespace ID is ever reused.
+- `lightweightRefresh()` (also only called from `listenDockerEvents()`) is currently unreachable.
+
+**Why deferred:** Containers currently get discovered fine on-demand via `asyncResolvePID` (used at `Start()` for the initial `buildCache()` snapshot and per-event thereafter), so this doesn't block correctness of detection today — it's a slow memory/staleness leak, not a false positive/negative source. Revisit once the event-listener recovery path is redesigned and testable.
+
+---
+
 ## Current Session: Two-Stage Parent Process Verification (2026-07-06)
 
 **Objective:** Eliminate false positives from transient tools (grep, sleep, wget, curl, etc.) spawned during docker deploy/destroy without creating unmaintainable blocklists.

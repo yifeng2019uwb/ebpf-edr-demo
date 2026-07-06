@@ -8,6 +8,9 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -17,6 +20,7 @@ import (
 	"ebpf-edr-demo/internal/alert"
 	"ebpf-edr-demo/internal/config"
 	"ebpf-edr-demo/internal/processor"
+	"ebpf-edr-demo/pkg"
 	"ebpf-edr-demo/pkg/alertsink"
 	"ebpf-edr-demo/pkg/bpf"
 	"ebpf-edr-demo/pkg/detector"
@@ -46,8 +50,8 @@ const (
 
 type fileDedupKey struct {
 	Pid      uint32
-	Comm     [128]byte // TASK_COMM_LEN from kernel eBPF
-	Filename [256]byte // MAX_FILENAME_LEN from kernel eBPF
+	Comm     [pkg.TaskCommLen]byte    // matches kernel/opensnoop.h
+	Filename [pkg.MaxFilenameLen]byte // matches kernel/opensnoop.h
 }
 
 const fileDedupShards = 32 // shard count: distributes lock contention across cores
@@ -119,25 +123,36 @@ func main() {
 	handler := alert.NewHandler(sinks)
 	defer handler.Close()
 
-	rt := workload.RuntimeDocker
-	if *runtime == string(workload.RuntimeK8s) {
-		rt = workload.RuntimeK8s
-	}
-	resolver := workload.NewResolver(rt)
-	if err := resolver.Start(); err != nil {
-		log.Fatalf("starting resolver: %v", err)
-	}
-
 	loader, err := bpf.Load()
 	if err != nil {
 		log.Fatalf("loading eBPF programs: %v", err)
 	}
 	defer loader.Close()
 
-	rulesDB, err := rules.LoadRulesForEnvironment(rulesFilePath)
+	// Create runtime-specific resolver
+	rt := workload.RuntimeDocker
+	if *runtime == string(workload.RuntimeK8s) {
+		rt = workload.RuntimeK8s
+	}
+
+	rulesDB, err := rules.LoadRulesForEnvironment(rulesFilePath, rt)
 	if err != nil {
 		log.Fatalf("loading rules from YAML: %v", err)
 	}
+
+	// Layer 1: Scan /proc to discover safe infrastructure PIDs in this environment
+	safeInfraPIDs := buildSafeInfraPIDs(rulesDB.InfrastructureFilters)
+	log.Printf("Layer 1: Discovered %d safe infrastructure PIDs for fast-path filtering:", len(safeInfraPIDs))
+	for pid, comm := range safeInfraPIDs {
+		log.Printf("  PID %d: %s", pid, comm)
+	}
+
+	resolver := workload.NewResolver(rt)
+
+	if err := resolver.Start(); err != nil {
+		log.Fatalf("starting resolver: %v", err)
+	}
+	log.Printf("INFO: Resolver started with runtime=%s", rt)
 
 	rawCh := make(chan pipeline.RawEvent, rawChCap)
 	enrichedCh := make(chan pipeline.EnrichedEvent, enrichedChCap)
@@ -147,11 +162,13 @@ func main() {
 	var enrichedDropped atomic.Int64 // enriched events lost before detection
 	var alertDropped atomic.Int64    // alerts lost before handler
 	var unknownNs atomic.Int64       // pending events that expired without resolving
+	var resolvedEvents atomic.Int64  // events successfully processed from rawCh → enrichedCh (temp debug)
 
 	var pendingMu sync.Mutex
 	pendingBuf := make(map[uint32][]pendingEntry)
 
-	det := detector.NewYAMLDetectorWithEnv(rulesDB, string(rulesDB.Env))
+	det := detector.NewYAMLDetectorWithRuntime(rulesDB, rt)
+	det.SetInfrastructurePIDs(safeInfraPIDs) // Pass Layer 1 infrastructure PIDs for Layer 2 pre-filter
 	responder := detector.NewResponder(nil)
 
 	// Load GKE-specific service CIDRs only if detected in GKE environment.
@@ -192,21 +209,20 @@ func main() {
 	}
 
 	for _, cfg := range readers {
-		go startEventReader(cfg, rawCh, &rawDropped)
+		go startEventReader(cfg, rawCh, &rawDropped, &resolvedEvents)
 	}
 
 	// Enricher
 	go func() {
 		for raw := range rawCh {
-			ev := enrich(raw, resolver)
-			if ev == nil {
+			// Layer 1: Fast-path filtering (before enrichment/resolver)
+			if shouldSkipLayer1(raw, safeInfraPIDs) {
 				continue
 			}
 
-			if ev.Type == pipeline.ProcessEventType {
-				if processor.CString(ev.Process.Comm[:]) == "pause" {
-					continue
-				}
+			ev := enrich(raw, resolver)
+			if ev == nil {
+				continue
 			}
 
 			if ev.Type == pipeline.FileEventType {
@@ -249,6 +265,7 @@ func main() {
 
 			select {
 			case enrichedCh <- *ev:
+				resolvedEvents.Add(1)
 			default:
 				n := enrichedDropped.Add(1)
 				if n == 1 || n%100 == 0 {
@@ -258,7 +275,9 @@ func main() {
 		}
 	}()
 
-	// Retry pending
+	// Retry pending events that are waiting for namespace resolution
+	// pendingBuf: map[nsID][]pendingEntry — groups events by namespace ID
+	// All events with same nsID share one resolution (one namespace = one state)
 	go func() {
 		ticker := time.NewTicker(pendingRetryInterval)
 		defer ticker.Stop()
@@ -267,10 +286,17 @@ func main() {
 			pendingMu.Lock()
 
 			for nsID, entries := range pendingBuf {
-				// pid=0: original PID is gone by retry time; resolve by namespace only.
-				res := resolver.Resolve(nsID, 0)
+				// Skip if somehow all entries were deleted (race condition cleanup)
+				if len(entries) == 0 {
+					delete(pendingBuf, nsID)
+					continue
+				}
 
-				// resolved
+				// Resolve using first event: all events in this nsID group should resolve the same way
+				// (they all come from the same namespace, just different processes)
+				res := resolver.Resolve(&entries[0].ev)
+
+				// Success: namespace resolved — apply resolution to all events in this group
 				if res.State == workload.StateResolved {
 					for _, e := range entries {
 						ev := e.ev
@@ -287,16 +313,49 @@ func main() {
 					continue
 				}
 
-				// still pending
+				// Still unresolved: check if any entries have exceeded timeout/retry limits
 				var remain []pendingEntry
 				for _, e := range entries {
+					// Fast-drop dead processes: if /proc/[pid] no longer exists, process is gone
+					// Don't wait 60s for resolver timeout on ephemeral processes (grep, readlink, etc.)
+					ev := e.ev
+					var pid int32
+					switch ev.Type {
+					case pipeline.ProcessEventType:
+						pid = ev.Process.Pid
+					case pipeline.FileEventType:
+						pid = ev.File.Pid
+					case pipeline.NetEventType:
+						pid = ev.Net.Pid
+					}
+
+					if pid > 0 {
+						// Use syscall.Kill(pid, 0) to check if process exists without sending signal
+						if err := syscall.Kill(int(pid), 0); err != nil {
+							// Process is dead: mark as unknown and send immediately (don't wait for timeout)
+							ev.Workload.State = workload.StateUnknown
+							unknownNs.Add(1)
+							select {
+							case enrichedCh <- ev:
+							default:
+								if n := enrichedDropped.Add(1); n == 1 || n%100 == 0 {
+									log.Printf("warning: enrichedCh full, %d enriched events dropped", n)
+								}
+							}
+							continue // Skip this entry, move to next
+						}
+					}
+
+					// Check absolute timeout (pendingMaxAge = 60s)
 					expired := time.Since(e.firstSeen) > pendingMaxAge
 					if !expired {
+						// Check retry limit (pendingMaxRetries = 20 retries × 3s = 60s)
 						e.retries++
 						expired = e.retries >= pendingMaxRetries
 					}
+
 					if expired {
-						ev := e.ev
+						// Timeout exceeded: give up, mark as unknown, send to detector
 						ev.Workload.State = workload.StateUnknown
 						unknownNs.Add(1)
 						select {
@@ -307,6 +366,7 @@ func main() {
 							}
 						}
 					} else {
+						// Still within timeout: keep in pending for next retry
 						remain = append(remain, e)
 					}
 				}
@@ -344,10 +404,17 @@ func main() {
 	// Detector
 	go func() {
 		for ev := range enrichedCh {
+			detectStart := time.Now()
 			a := det.Detect(ev)
+			detectTime := time.Since(detectStart)
+			if detectTime > 5*time.Millisecond {
+				log.Printf("DEBUG: det.Detect took %v (slow detection)", detectTime)
+			}
+
 			if a == nil {
 				continue
 			}
+
 			// Compute response BEFORE sending alert to avoid data race:
 			// If we send alert first, then modify a.ResponseAction, handler goroutine
 			// may read partial/stale data. Compute response action first, then send complete alert.
@@ -376,8 +443,8 @@ func main() {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	<-sig
-	log.Printf("shutdown: rawDropped=%d enrichedDropped=%d alertDropped=%d unknownNs=%d",
-		rawDropped.Load(), enrichedDropped.Load(), alertDropped.Load(), unknownNs.Load())
+	log.Printf("shutdown: resolved=%d (dropped: raw=%d enriched=%d alert=%d unknown=%d)",
+		resolvedEvents.Load(), rawDropped.Load(), enrichedDropped.Load(), alertDropped.Load(), unknownNs.Load())
 
 	// Graceful shutdown: close channels in order (stops goroutines from top to bottom)
 	close(rawCh)                     // Stop event readers → enricher stops receiving
@@ -400,14 +467,19 @@ func enrich(raw pipeline.RawEvent, r workload.WorkloadResolver) *pipeline.Enrich
 			return nil
 		}
 		ev := (*processor.ProcessEvent)(unsafe.Pointer(&raw.Data[0]))
-		res := r.Resolve(ev.MntNsId, uint32(ev.Pid))
-
-		return &pipeline.EnrichedEvent{
+		enriched := &pipeline.EnrichedEvent{
 			Type:      pipeline.ProcessEventType,
 			Process:   ev,
-			Workload:  res,
 			Timestamp: time.Now(),
 		}
+		start := time.Now()
+		enriched.Workload = r.Resolve(enriched)
+		resolveTime := time.Since(start)
+		if resolveTime > 10*time.Microsecond {
+			log.Printf("DEBUG: resolve process took %v", resolveTime)
+		}
+
+		return enriched
 
 	case pipeline.SourceOpensnoop:
 		if len(raw.Data) < int(unsafe.Sizeof(processor.FileEvent{})) {
@@ -415,18 +487,18 @@ func enrich(raw pipeline.RawEvent, r workload.WorkloadResolver) *pipeline.Enrich
 			return nil
 		}
 		ev := (*processor.FileEvent)(unsafe.Pointer(&raw.Data[0]))
-		start := time.Now()
-		res := r.Resolve(uint32(ev.MntNsId), uint32(ev.Pid))
-		resolveTime := time.Since(start)
-		if resolveTime > 1*time.Millisecond {
-			log.Printf("DEBUG: resolve file took %v", resolveTime)
-		}
-		return &pipeline.EnrichedEvent{
+		enriched := &pipeline.EnrichedEvent{
 			Type:      pipeline.FileEventType,
 			File:      ev,
-			Workload:  res,
 			Timestamp: time.Now(),
 		}
+		start := time.Now()
+		enriched.Workload = r.Resolve(enriched)
+		resolveTime := time.Since(start)
+		if resolveTime > 10*time.Microsecond {
+			log.Printf("DEBUG: resolve file took %v", resolveTime)
+		}
+		return enriched
 
 	case pipeline.SourceNetConnect:
 		if len(raw.Data) < int(unsafe.Sizeof(processor.NetEvent{})) {
@@ -434,37 +506,202 @@ func enrich(raw pipeline.RawEvent, r workload.WorkloadResolver) *pipeline.Enrich
 			return nil
 		}
 		ev := (*processor.NetEvent)(unsafe.Pointer(&raw.Data[0]))
+		enriched := &pipeline.EnrichedEvent{
+			Type:      pipeline.NetEventType,
+			Net:       ev,
+			Timestamp: time.Now(),
+		}
 		start := time.Now()
-		res := r.Resolve(uint32(ev.MntNsId), uint32(ev.Pid))
+		enriched.Workload = r.Resolve(enriched)
 		resolveTime := time.Since(start)
-		if resolveTime > 1*time.Millisecond {
+		if resolveTime > 10*time.Millisecond {
 			log.Printf("DEBUG: resolve net took %v", resolveTime)
 		}
 
-		return &pipeline.EnrichedEvent{
-			Type:      pipeline.NetEventType,
-			Net:       ev,
-			Workload:  res,
-			Timestamp: time.Now(),
-		}
+		return enriched
 	}
 
 	return nil
+}
+
+// buildSafeInfraPIDs scans /proc at startup to find actual infrastructure process PIDs
+// Returns map[pid]comm of all safe infrastructure processes in this environment
+func buildSafeInfraPIDs(infraFilters rules.InfrastructureFilters) map[uint32]string {
+	safeProcs := make(map[uint32]string)
+
+	// Pre-process categories into dedicated lookup maps to preserve boundaries
+	type processedCategory struct {
+		allowedComms map[string]bool
+		prefixes     []string
+		isContainer  bool // Flag to toggle cgroup namespace checking
+	}
+
+	// Helper to build truncated maps
+	buildCat := func(comms []string, prefixes []string, isContainer bool) processedCategory {
+		m := make(map[string]bool)
+		for _, c := range comms {
+			if len(c) > 15 {
+				c = c[:15]
+			}
+			m[c] = true
+		}
+		return processedCategory{allowedComms: m, prefixes: prefixes, isContainer: isContainer}
+	}
+
+	pcats := []processedCategory{
+		buildCat(infraFilters.HostSystem.AllowedComms, infraFilters.HostSystem.TrustedPrefixes, false),
+		buildCat(infraFilters.DockerRuntime.AllowedComms, infraFilters.DockerRuntime.TrustedPrefixes, true),
+		buildCat(infraFilters.Kubernetes.AllowedComms, infraFilters.Kubernetes.TrustedPrefixes, true),
+		buildCat(infraFilters.Agent.AllowedComms, infraFilters.Agent.TrustedPrefixes, false),
+	}
+
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		log.Printf("Layer 1: failed to scan /proc: %v", err)
+		return safeProcs
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		pidStr := entry.Name()
+		pid, err := strconv.ParseUint(pidStr, 10, 32)
+		if err != nil {
+			continue
+		}
+
+		commData, err := os.ReadFile(filepath.Join("/proc", pidStr, "comm"))
+		if err != nil {
+			continue
+		}
+		comm := strings.TrimSpace(string(commData))
+
+		realPath, err := os.Readlink(filepath.Join("/proc", pidStr, "exe"))
+		if err != nil {
+			continue
+		}
+
+		// Validate strictly within category bounds
+		for _, pcat := range pcats {
+			if !pcat.allowedComms[comm] {
+				continue
+			}
+
+			// Path validation: directory prefixes (ending /) use HasPrefix; exact binaries use exact match
+			if !pathAllowed(realPath, pcat.prefixes) {
+				continue
+			}
+
+			// Apply complex validation contextually for container/k8s daemons
+			if pcat.isContainer && isIsolatedWorkload(pidStr) {
+				continue // Reject if it belongs to a tenant cgroup/namespace
+			}
+
+			safeProcs[uint32(pid)] = comm
+			break // Handled by this category, move to next PID
+		}
+	}
+
+	return safeProcs
+}
+
+func pathAllowed(realPath string, patterns []string) bool {
+	for _, pattern := range patterns {
+		if realPath == pattern {
+			return true
+		} else if strings.HasSuffix(pattern, "/") {
+			if strings.HasPrefix(realPath, pattern) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// isIsolatedWorkload checks if a process belongs to a container/pod namespace
+// Returns true if process is isolated (inside a container), false if it's host infrastructure
+func isIsolatedWorkload(pidStr string) bool {
+	data, err := os.ReadFile(filepath.Join("/proc", pidStr, "cgroup"))
+	if err != nil {
+		return true // Treat errors as untrusted
+	}
+	content := string(data)
+	return strings.Contains(content, "docker-") || strings.Contains(content, "kubepods")
+}
+
+// extractPPidFromStatus parses ppid from /proc/[pid]/status content
+func extractPPidFromStatus(status string) uint32 {
+	for _, line := range strings.Split(status, "\n") {
+		if strings.HasPrefix(line, "PPid:") {
+			parts := strings.Fields(line)
+			if len(parts) >= 2 {
+				ppid, _ := strconv.ParseUint(parts[1], 10, 32)
+				return uint32(ppid)
+			}
+		}
+	}
+	return 0
+}
+
+// shouldSkipLayer1 checks if event should be skipped by Layer 1 fast-path filter
+// eBPF kernel code already validates data size, so no length checks needed
+// Returns true if event matches Layer 1 filters (ppid==0 or pid in safe list)
+// Returns false if event should be processed (enrich and detect)
+func shouldSkipLayer1(raw pipeline.RawEvent, safeInfraPIDs map[uint32]string) bool {
+	var pid, ppid uint32
+
+	switch raw.Source {
+	case pipeline.SourceExecsnoop:
+		ev := (*processor.ProcessEvent)(unsafe.Pointer(&raw.Data[0]))
+		pid = uint32(ev.Pid)
+		ppid = uint32(ev.Ppid)
+
+	case pipeline.SourceOpensnoop:
+		ev := (*processor.FileEvent)(unsafe.Pointer(&raw.Data[0]))
+		pid = uint32(ev.Pid)
+		ppid = uint32(ev.Ppid)
+
+	case pipeline.SourceNetConnect:
+		ev := (*processor.NetEvent)(unsafe.Pointer(&raw.Data[0]))
+		pid = uint32(ev.Pid)
+		ppid = uint32(ev.Ppid)
+
+	default:
+		return false
+	}
+
+	// Layer 1 filters
+	if ppid == 0 {
+		return true // Kernel thread
+	}
+
+	if _, isSafe := safeInfraPIDs[pid]; isSafe {
+		return true // Known safe infrastructure process
+	}
+
+	return false // Process normally (fall through to Layer 2)
 }
 
 func startEventReader(cfg struct {
 	source  pipeline.Source
 	logName string
 	read    func() ([]byte, error)
-}, rawCh chan<- pipeline.RawEvent, rawDropped *atomic.Int64) {
+}, rawCh chan<- pipeline.RawEvent, rawDropped *atomic.Int64, resolvedEvents *atomic.Int64) {
 	var eventCount atomic.Int64
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
+	// log the number of events and resolved events in last 10s for debugging
+	var prevResolvedEvents int64
 	go func() {
 		for range ticker.C {
 			count := eventCount.Load()
-			log.Printf("DEBUG: %s produced %d events in last 10s (rate: %.0f/sec)", cfg.logName, count, float64(count)/10)
+			currentResolved := resolvedEvents.Load()
+			resolvedDelta := currentResolved - prevResolvedEvents
+			prevResolvedEvents = currentResolved
+			log.Printf("DEBUG: %s produced %d events, resolved=%d in last 10s", cfg.logName, count, resolvedDelta)
 			eventCount.Store(0)
 		}
 	}()

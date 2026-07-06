@@ -49,34 +49,19 @@ func TestNewResolverUsesRegionFromEnvironment(t *testing.T) {
 	}
 }
 
+// DockerResolver has no cluster field — NewResolver reads CLUSTER_NAME but only
+// wires it into K8sResolver (see resolver.go); Docker is VM/standalone, no cluster concept.
 func TestNewResolverUsesClusterFromEnvironment(t *testing.T) {
 	t.Setenv("CLUSTER_NAME", "order-processor-cluster-us-west1")
 
-	tests := []struct {
-		name    string
-		runtime Runtime
-	}{
-		{"k8s", RuntimeK8s},
-		{"docker", RuntimeDocker},
+	resolver := NewResolver(RuntimeK8s)
+
+	k8sResolver, ok := resolver.(*K8sResolver)
+	if !ok {
+		t.Fatalf("NewResolver(k8s) returned %T, want *K8sResolver", resolver)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			resolver := NewResolver(tt.runtime)
-
-			var cluster string
-			switch r := resolver.(type) {
-			case *K8sResolver:
-				cluster = r.cluster
-			case *DockerResolver:
-				cluster = r.cluster
-			default:
-				t.Fatalf("unexpected resolver type %T", resolver)
-			}
-
-			if cluster != "order-processor-cluster-us-west1" {
-				t.Fatalf("cluster = %q, want order-processor-cluster-us-west1", cluster)
-			}
-		})
+	if k8sResolver.cluster != "order-processor-cluster-us-west1" {
+		t.Fatalf("cluster = %q, want order-processor-cluster-us-west1", k8sResolver.cluster)
 	}
 }

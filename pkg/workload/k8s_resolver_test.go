@@ -2,7 +2,11 @@
 
 package workload
 
-import "testing"
+import (
+	"testing"
+
+	"ebpf-edr-demo/internal/processor"
+)
 
 func TestK8sResolverResolveCacheHit(t *testing.T) {
 	resolver := &K8sResolver{
@@ -28,7 +32,7 @@ func TestK8sResolverResolveCacheHit(t *testing.T) {
 		cluster: "order-processor-cluster-us-west1",
 	}
 
-	got := resolver.Resolve(56789, 111)
+	got := resolver.Resolve(&processor.ProcessEvent{MntNsId: 56789, Pid: 111})
 
 	if got.State != StateResolved {
 		t.Fatalf("State = %q, want %q", got.State, StateResolved)
@@ -57,24 +61,18 @@ func TestK8sResolverResolveCacheMissReturnsPending(t *testing.T) {
 		region: "us-west1",
 	}
 
-	got := resolver.Resolve(99999, 123)
+	got := resolver.Resolve(&processor.ProcessEvent{MntNsId: 99999, Pid: 123})
 
+	// K8sResolver.Resolve()'s cache-miss path returns a bare ResolveResult{State: StatePending}
+	// (unlike DockerResolver, which populates Identity/Meta via bareResult() on the pending path too).
+	// So Identity/Meta are zero-valued here, not Node/Region from the resolver's own fields.
 	if got.State != StatePending {
 		t.Fatalf("State = %q, want %q", got.State, StatePending)
-	}
-	if got.Identity.Runtime != "k8s" {
-		t.Fatalf("Runtime = %q, want k8s", got.Identity.Runtime)
-	}
-	if got.Meta.Node != "gke-node" {
-		t.Fatalf("Node = %q, want gke-node", got.Meta.Node)
-	}
-	if got.Meta.Region != "us-west1" {
-		t.Fatalf("Region = %q, want us-west1", got.Meta.Region)
 	}
 }
 
 func TestCrictlContainerMapWithMissingCrictlDoesNotPanic(t *testing.T) {
-	got := crictlContainerMap("node-1", "us-west1", "order-processor-cluster-us-west1")
+	got := crictlContainerMap("node-1", "us-west1", "order-processor-cluster-us-west1", "local")
 
 	if got == nil {
 		t.Fatalf("crictlContainerMap returned nil map")

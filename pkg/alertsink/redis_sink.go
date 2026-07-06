@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	redisChannel       = "edr-alerts"
-	redisConnTimeout   = 2 * time.Second
+	redisChannel     = "edr-alerts"
+	redisConnTimeout = 2 * time.Second
 )
 
 // RedisSink publishes alerts to a Redis channel for real-time monitoring.
@@ -49,27 +49,27 @@ func NewRedisSink(addr string) (*RedisSink, error) {
 
 func (s *RedisSink) Write(ctx context.Context, a alert.Alert) error {
 	payload := map[string]interface{}{
-		"ts":               time.Now().UTC().Format(time.RFC3339),
-		"level":            string(a.Level),
-		"rule":             a.Rule,
-		"message":          a.Message,
-		"pid":              a.Pid,
-		"ppid":             a.Ppid,
-		"uid":              a.Uid,
-		"comm":             a.Comm,
-		"runtime":          a.Workload.Identity.Runtime,
-		"service":          a.Workload.Identity.Service,
-		"env":              a.Workload.Identity.Env,
-		"state":            string(a.Workload.State),
-		"cluster":          a.Workload.Meta.Cluster,
-		"pod":              a.Workload.Meta.Pod,
-		"namespace":        a.Workload.Meta.Namespace,
-		"node":             a.Workload.Meta.Node,
-		"region":           a.Workload.Meta.Region,
-		"filename":         a.Filename,
-		"dst_ip":           a.DstIP,
-		"dst_port":         a.DstPort,
-		"response_action":  a.ResponseAction,
+		"ts":              time.Now().UTC().Format(time.RFC3339),
+		"level":           string(a.Level),
+		"rule":            a.Rule,
+		"message":         a.Message,
+		"pid":             a.Pid,
+		"ppid":            a.Ppid,
+		"uid":             a.Uid,
+		"comm":            a.Comm,
+		"runtime":         a.Workload.Identity.Runtime,
+		"service":         a.Workload.Identity.Service,
+		"env":             a.Workload.Identity.Env,
+		"state":           string(a.Workload.State),
+		"cluster":         a.Workload.Meta.Cluster,
+		"pod":             a.Workload.Meta.Pod,
+		"namespace":       a.Workload.Meta.Namespace,
+		"node":            a.Workload.Meta.Node,
+		"region":          a.Workload.Meta.Region,
+		"filename":        a.Filename,
+		"dst_ip":          a.DstIP,
+		"dst_port":        a.DstPort,
+		"response_action": a.ResponseAction,
 	}
 
 	data, err := json.Marshal(payload)

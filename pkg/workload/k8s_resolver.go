@@ -13,11 +13,13 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"ebpf-edr-demo/internal/processor"
 )
 
 const (
-	k8sRefreshInterval    = 5 * time.Second
-	k8sLookupWorkerLimit  = 10 // max concurrent /proc cgroup reads per resolver instance
+	k8sRefreshInterval   = 5 * time.Second
+	k8sLookupWorkerLimit = 10 // max concurrent /proc cgroup reads per resolver instance
 )
 
 type K8sResolver struct {
@@ -32,10 +34,10 @@ type K8sResolver struct {
 	env     string
 
 	// High-throughput concurrency controls (same pattern as Docker resolver)
-	resolvingTasks sync.Map      // mntNsID → bool (deduplicates concurrent hot-path requests)
-	lookupSem      chan struct{} // Semaphore (limits concurrent /proc disk scans to 10)
+	resolvingTasks sync.Map                 // mntNsID → bool (deduplicates concurrent hot-path requests)
+	lookupSem      chan struct{}            // Semaphore (limits concurrent /proc disk scans to 10)
 	containerIDMap map[string]ResolveResult // containerID → pod metadata (from crictl, separate from cache)
-	containerIDMu  sync.RWMutex // protects containerIDMap
+	containerIDMu  sync.RWMutex             // protects containerIDMap
 }
 
 func (r *K8sResolver) Start() error {
@@ -60,7 +62,7 @@ func (r *K8sResolver) Start() error {
 
 func (r *K8sResolver) bareResult(state ResolveState) ResolveResult {
 	service := ""
-	if state == StateHost {
+	if state == StateResolved {
 		service = "host"
 	}
 	return ResolveResult{
@@ -70,8 +72,32 @@ func (r *K8sResolver) bareResult(state ResolveState) ResolveResult {
 	}
 }
 
-func (r *K8sResolver) Resolve(mntNsID uint32, pid uint32) ResolveResult {
-	// Fast path: check RAM cache with concurrent read-lock
+func (r *K8sResolver) Resolve(event interface{}) ResolveResult {
+	// Pod-focused resolution.
+	// We only deal with pods and anomalous namespaces here.
+
+	// Extract fields from event based on type
+	var mntNsID uint32
+	var pid uint32
+	var comm string
+
+	switch ev := event.(type) {
+	case *processor.ProcessEvent:
+		mntNsID = uint32(ev.MntNsId)
+		pid = uint32(ev.Pid)
+		comm = processor.CString(ev.Comm[:])
+	case *processor.FileEvent:
+		mntNsID = uint32(ev.MntNsId)
+		pid = uint32(ev.Pid)
+		comm = processor.CString(ev.Comm[:])
+	case *processor.NetEvent:
+		mntNsID = uint32(ev.MntNsId)
+		pid = uint32(ev.Pid)
+		comm = processor.CString(ev.Comm[:])
+	default:
+		return r.bareResult(StateUnknown)
+	}
+
 	r.mu.RLock()
 	result, exists := r.cache[mntNsID]
 	r.mu.RUnlock()
@@ -80,18 +106,13 @@ func (r *K8sResolver) Resolve(mntNsID uint32, pid uint32) ResolveResult {
 		return result
 	}
 
-	// Host namespace early exit
-	if mntNsID == r.selfNsID {
-		return r.bareResult(StateHost)
-	}
-
 	// Deduplicate: if this namespace is already being looked up, don't spawn another worker
 	if _, loading := r.resolvingTasks.LoadOrStore(mntNsID, true); loading {
 		return ResolveResult{State: StatePending}
 	}
 
 	// Offload heavy cgroup parsing to async worker pool
-	go r.asyncResolveNamespace(mntNsID, pid)
+	go r.asyncResolveNamespace(mntNsID, pid, comm)
 
 	// Return instantly (<1 microsecond execution path)
 	return ResolveResult{State: StatePending}
@@ -123,13 +144,13 @@ func (r *K8sResolver) buildInitialCache() map[uint32]ResolveResult {
 		if id == 0 {
 			continue
 		}
-		m[id] = r.bareResult(StateHost)
+		m[id] = r.bareResult(StateResolved)
 	}
 
 	return m
 }
 
-func (r *K8sResolver) asyncResolveNamespace(mntNsID uint32, pid uint32) {
+func (r *K8sResolver) asyncResolveNamespace(mntNsID uint32, pid uint32, comm string) {
 	defer r.resolvingTasks.Delete(mntNsID)
 
 	// Acquire slot from semaphore pool (max 10 concurrent disk scans)
@@ -139,10 +160,14 @@ func (r *K8sResolver) asyncResolveNamespace(mntNsID uint32, pid uint32) {
 	// 1. Targeted cgroup read for the event's PID (not global scan)
 	containerID := containerIDFromK8sCgroup(strconv.Itoa(int(pid)))
 
-	// Fallback: if pod vanished or cgroup parsing failed, set terminal StateUnknown
+	// Fallback: if pod vanished or cgroup parsing failed, mark as host process
 	if containerID == "" {
 		r.mu.Lock()
-		r.cache[mntNsID] = ResolveResult{State: StateUnknown}
+		r.cache[mntNsID] = ResolveResult{
+			Identity: WorkloadIdentity{Runtime: RuntimeHost, Service: HostProcessService, Env: r.env},
+			Meta:     WorkloadMeta{Node: r.node, Region: r.region, Cluster: r.cluster},
+			State:    StateResolved,
+		}
 		r.mu.Unlock()
 		return
 	}

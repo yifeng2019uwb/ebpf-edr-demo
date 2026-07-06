@@ -22,9 +22,9 @@ const ProcessEventBurstSize = 256 * 1024
 // Call Close() to detach all probes and release kernel resources.
 type Loader struct {
 	// Exported readers — callers consume events from these.
-	ProcessRd  *perf.Reader
-	FileRd     *ringbuf.Reader
-	NetRd      *ringbuf.Reader
+	ProcessRd *perf.Reader
+	FileRd    *ringbuf.Reader
+	NetRd     *ringbuf.Reader
 
 	// kernel resources — closed by Close()
 	processObjs processObjects
