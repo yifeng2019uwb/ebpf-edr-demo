@@ -36,7 +36,7 @@ const (
 
 	rawChCap      = 65536 // kernel event burst buffer — absorbs deployment spikes (10,000-50,000 events/sec)
 	enrichedChCap = 32768 // post-enrichment buffer
-	alertChCap    = 1024  // alerts are rare; small buffer is fine
+	alertChCap    = 8096  // alerts are rare, but may have many Low/Info telemetry
 
 	// fileDedupWindow deduplicates file events from the same process within this window.
 	// Why: multi-threaded processes trigger lsm/file_open once per thread (N threads = N syscalls).
@@ -45,7 +45,7 @@ const (
 	fileDedupWindow = time.Second
 
 	cacheCleanUpWorkerInterval     = 5 * time.Minute
-	debugResolveDetecCheckInterval = 20 * time.Microsecond
+	debugResolveDetecCheckInterval = 50 * time.Microsecond
 
 	// Graceful shutdown timings
 	shutdownWaitInterval = 100 * time.Millisecond // time for goroutines to finish between channel closes

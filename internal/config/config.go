@@ -28,6 +28,13 @@ const (
 	// Sensor configuration (optional, for extended deployments)
 	EnvSensorType   = "SENSOR_TYPE"
 	EnvCollectorURL = "COLLECTOR_URL"
+
+	// Local alert log path (optional; defaults to DefaultAlertLogPath).
+	// On K8s set this to the hostPath mount (e.g. /alerts/alert.log) so the log
+	// survives pod restarts instead of landing on the ephemeral container FS.
+	EnvAlertLogPath = "ALERT_LOG_PATH"
+	// DefaultAlertLogPath is used when ALERT_LOG_PATH is unset (relative to CWD).
+	DefaultAlertLogPath = "alerts/alert.log"
 )
 
 // Config holds alert infrastructure settings.
@@ -63,11 +70,16 @@ func Load() *Config {
 		}
 	}
 
+	alertLogPath := os.Getenv(EnvAlertLogPath)
+	if alertLogPath == "" {
+		alertLogPath = DefaultAlertLogPath
+	}
+
 	return &Config{
 		DatabaseURL:  os.Getenv(EnvDatabaseURL),
 		DatabaseKey:  os.Getenv(EnvDatabaseKey),
 		PubSubAddr:   os.Getenv(EnvPubSubAddr),
 		PubSubKey:    os.Getenv(EnvPubSubKey),
-		AlertLogPath: "alerts/alert.log",
+		AlertLogPath: alertLogPath,
 	}
 }

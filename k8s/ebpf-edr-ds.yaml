@@ -33,6 +33,10 @@ spec:
           value: "${CLUSTER_NAME}"
         - name: CONTAINER_RUNTIME_ENDPOINT
           value: unix:///run/containerd/containerd.sock
+        # Durable alert log on the node hostPath (survives pod restarts).
+        # Must match the `alerts` volumeMount below (/alerts → /var/log/ebpf-edr).
+        - name: ALERT_LOG_PATH
+          value: /alerts/alert.log
         # Alert infrastructure (from ConfigMap)
         - name: DATABASE_URL
           valueFrom:

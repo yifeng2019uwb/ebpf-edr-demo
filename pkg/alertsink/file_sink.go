@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -18,8 +19,12 @@ type FileSink struct {
 }
 
 func NewFileSink(path string) (*FileSink, error) {
-	if err := os.MkdirAll("alerts", 0755); err != nil {
-		return nil, err
+	// Create the log's parent directory (matches the actual path, which may be an
+	// absolute hostPath mount like /alerts on K8s — not the relative default).
+	if dir := filepath.Dir(path); dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return nil, err
+		}
 	}
 
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
