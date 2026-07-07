@@ -10,37 +10,25 @@
 
 ---
 
-## TASK (queued): Route LOW telemetry off the live dashboard (2026-07-07)
+## DONE: Route LOW telemetry off the live dashboard (2026-07-07)
 
-**Priority:** After K8s parity (see below). Design agreed, implementation deferred.
-
-**Context:** Phase 3 now emits `LOW EDR_telemetry_unresolved_namespace` for the residual
+**Context:** Phase 3 emits `LOW EDR_telemetry_unresolved_namespace` for the residual
 `state=unknown` processes the ancestry walk can't verify as infrastructure (e.g. udev
 `bridge-network-interface`, open-iscsi `net-interface-handler`, `systemd-sysctl` during
 network setup / deploy). These are *not* threats — they're a visibility gap. They no
-longer fire CRITICAL, but at LOW they still flood every sink, including the live
-dashboard (Redis pub/sub).
+longer fire CRITICAL, but at LOW they were still flooding the live dashboard.
 
-**Decision:** Keep them at LOW, but keep them OFF the human-facing live dashboard.
-- LOW ≈ Info. A dashboard full of LOW telemetry causes alert fatigue — humans start
-  skipping past LOW and miss the CRITICAL/HIGH that matter, or waste time triaging noise.
-- Route telemetry to **persistence only** (file + Supabase). An automated
-  **anomaly/behavior service** (see "Phase 2: Behavioral & Anomaly Detection" below)
-  consumes the Supabase stream and surfaces only genuinely anomalous cases. This LOW
-  stream is precisely that service's input.
+**Decision & rationale:** Keep them at LOW, but off the human-facing live dashboard.
+LOW ≈ Info; a dashboard full of it causes alert fatigue — humans skip LOW and miss the
+CRITICAL/HIGH that matter. Telemetry persists to **file + Supabase**; an automated
+**anomaly/behavior service** (see "Phase 2: Behavioral & Anomaly Detection" below)
+consumes the Supabase stream. This LOW stream is that service's input.
 
-**Design (not yet implemented):**
-- Add a `FilterSink` decorator in `internal/alert` — wraps any Sink, forwards only alerts
-  passing a predicate; keeps routing policy out of transport code.
-- In `cmd/edr-monitor/main.go` `initAlertHandler`, wrap ONLY the Redis (pub/sub) sink with
-  a `notTelemetry` predicate. File + Supabase stay unwrapped (get everything).
-- Identify telemetry via an explicit `Telemetry bool` on `alert.Alert` (recommended —
-  future-proof, encodes the "telemetry vs actionable" split the anomaly service keys on),
-  set `true` where the detector emits `EDR_telemetry_unresolved_namespace`. Simpler
-  fallback: predicate on `a.Level == alert.Low`.
-
-**Current behavior until implemented:** LOW telemetry goes everywhere (file + Redis +
-Supabase) and is also DEBUG-printed in the agent log.
+**Implementation (simple, by level):** `RedisSink.Write` drops `alert.Low`
+(`pkg/alertsink/redis_sink.go`). File + Supabase sinks are unchanged, so they still
+receive everything. Chose the level check over a `FilterSink`/`Telemetry`-flag decorator
+to keep it minimal; currently LOW == telemetry. If a real actionable LOW alert is added
+later that *should* hit the dashboard, revisit (tag telemetry explicitly then).
 
 ---
 

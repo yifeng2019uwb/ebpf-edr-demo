@@ -449,11 +449,9 @@ func (d *YAMLDetector) checkProcessRules(event processor.ProcessEvent, res workl
 
 		// Phase 3 (§3.6): the namespace never resolved AND the ancestry chain could not
 		// be verified as infrastructure. Falco-aligned — absence of identity is a
-		// visibility gap, not an escape. Emit LOW telemetry (still reaches the log /
-		// dashboard / Supabase as a validation breadcrumb) instead of a CRITICAL false
-		// positive. Print the full context so unresolved cases stay visible for tuning.
-		// log.Printf("DEBUG: unresolved state=unknown %s (pid %d ppid %d uid %d): ancestry not infra-rooted — routed to LOW telemetry",
-		// 	comm, event.Pid, event.Ppid, event.Uid)
+		// visibility gap, not an escape. Emit at LOW: still persisted (file + Supabase
+		// for the anomaly service) but the Redis sink drops LOW so it stays off the live
+		// dashboard — avoids LOW-level alert fatigue.
 		return newProcessAlert(event, res, comm, alert.Low, RuleEDRTelemetryUnresolvedNamespace, "EDR visibility gap: process in unresolved namespace")
 	}
 

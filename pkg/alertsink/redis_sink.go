@@ -48,6 +48,13 @@ func NewRedisSink(addr string) (*RedisSink, error) {
 }
 
 func (s *RedisSink) Write(ctx context.Context, a alert.Alert) error {
+	// LOW alerts are informational telemetry (e.g. unresolved-namespace visibility
+	// gaps). Keep them off the live dashboard to avoid alert fatigue; they still
+	// persist via the file + Supabase sinks for the anomaly service to analyze.
+	if a.Level == alert.Low {
+		return nil
+	}
+
 	payload := map[string]interface{}{
 		"ts":              time.Now().UTC().Format(time.RFC3339),
 		"level":           string(a.Level),
