@@ -48,6 +48,7 @@ type DockerResolver struct {
 	hostname string // Docker host/VM name
 	region   string // Optional: cloud region
 	env      string // Optional: cloud provider (gcp-vm, do-vm, local)
+	hostNsID uint32 // host mount namespace ID (from PID 1 at startup); 0 if unknown
 	// Docker event listener
 	cli         *client.Client // Docker daemon client
 	eventCtx    context.Context
@@ -55,6 +56,8 @@ type DockerResolver struct {
 	// Async worker pool controls (prevent goroutine explosion, protect /proc from concurrent scans)
 	resolvingTasks sync.Map      // mntNsID -> bool (deduplicates: only one lookup per namespace)
 	lookupSem      chan struct{} // Semaphore: limits concurrent /proc reads to 10
+	// One-time diagnostic: confirms the host-namespace fast path is live
+	hostFastPathOnce sync.Once
 }
 
 func (r *DockerResolver) Start() error {
@@ -62,6 +65,11 @@ func (r *DockerResolver) Start() error {
 	r.containerToNs = make(map[string]uint32)
 	// Initialize worker pool semaphore (limits concurrent /proc scans)
 	r.lookupSem = make(chan struct{}, dockerLookupWorkerLimit)
+
+	// Host namespace ID: enables the Resolve() fast path for host processes.
+	// Set before the Docker client check so it works even without a daemon.
+	r.hostNsID = getMntNsID(1)
+	log.Printf("docker resolver: host namespace ID = %d (0 means detection failed, fast path disabled)", r.hostNsID)
 
 	// Connect to Docker daemon early (needed for buildCache to use Docker API)
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
@@ -124,11 +132,26 @@ func (r *DockerResolver) Resolve(event interface{}) ResolveResult {
 		return r.bareResult(StateUnknown, "")
 	}
 
+	// Fast path 1: host namespace — known at startup, deliberately never cached.
+	// Without this, transient host processes (deploy scripts, snap helpers,
+	// getent) die before async resolution completes, the shared host namespace
+	// never gets cached, and every one of them times out to state=unknown.
+	if r.hostNsID != 0 && mntNsID == r.hostNsID {
+		r.hostFastPathOnce.Do(func() {
+			log.Printf("DEBUG: docker resolver: host-namespace fast path active (first hit: pid %d comm %s ns %d)", pid, comm, mntNsID)
+		})
+		return ResolveResult{
+			Identity: WorkloadIdentity{Runtime: RuntimeHost, Service: "host-process", Env: r.env},
+			Meta:     WorkloadMeta{Node: r.hostname, Region: r.region},
+			State:    StateResolved,
+		}
+	}
+
 	r.mu.RLock()
 	result, ok := r.cache[mntNsID]
 	r.mu.RUnlock()
 
-	// Fast path: Cache hit (container already resolved)
+	// Fast path 2: Cache hit (container already resolved)
 	if ok {
 		return result
 	}

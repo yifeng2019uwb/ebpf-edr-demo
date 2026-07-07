@@ -11,10 +11,10 @@ import (
 type Level string
 
 const (
-	Critical Level = "CRITICAL"
-	High     Level = "HIGH"
-	Medium   Level = "MEDIUM"
-	Low      Level = "LOW"
+	Critical Level = "CRITICAL" // P1 (Critical) Immediate threats to infrastructure (e.g., container escapes, privilege escalations, or unauthorized eBPF program loads).
+	High     Level = "HIGH"     // P2 (High): Serious violations requiring prompt review (e.g., access to sensitive/restricted files like /etc/shadow).
+	Medium   Level = "MEDIUM"   // P3 (Medium/Warning): Behavioral anomalies, unusual outbound connections, or performance deviations.
+	Low      Level = "LOW"      // P4 (Low/Info): Routine audit trails, policy check events, or basic statistical thresholds.
 )
 
 // Action represents the response action taken by the responder.

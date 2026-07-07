@@ -4,11 +4,9 @@ package detector
 
 import (
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"ebpf-edr-demo/internal/alert"
@@ -18,29 +16,62 @@ import (
 	"ebpf-edr-demo/pkg/workload"
 )
 
+// ancestryWalkMaxDepth bounds how far isParentTrusted climbs the ancestry chain.
+// The walk only continues through shells, so real chains (sshd → bash → script →
+// util) are shallow; the cap is a safety valve against PID-reuse cycles.
+const ancestryWalkMaxDepth = 10
+
 // YAMLDetector implements pipeline.Detector using rules loaded from YAML.
 type YAMLDetector struct {
-	rules         *rules.RulesDB
-	runtime       workload.Runtime  // workload runtime: RuntimeK8s or RuntimeDocker
-	safeInfraPIDs map[uint32]string // Layer 1 infrastructure PIDs (passed from resolver)
+	rules              *rules.RulesDB
+	runtime            workload.Runtime  // workload runtime: RuntimeK8s or RuntimeDocker
+	safeInfraPIDs      map[uint32]string // Layer 1 infrastructure PIDs (passed from resolver)
+	ancestry           *AncestryCache    // live pid → exec record, for parent verification
+	trustedParentNames map[string]bool   // precomputed from trusted_parent_names (hot path)
+	suspiciousPrefixes []string          // precomputed from suspicious_exec_paths (writable-location denylist)
+	shellNames         map[string]bool   // precomputed from shell_processes (hot path)
 }
 
 // NewYAMLDetector creates a detector with no runtime awareness.
 // Use NewYAMLDetectorWithRuntime for runtime-specific whitelisting.
 func NewYAMLDetector(db *rules.RulesDB) *YAMLDetector {
-	return &YAMLDetector{rules: db, runtime: ""}
+	return NewYAMLDetectorWithRuntime(db, "")
 }
 
 // NewYAMLDetectorWithRuntime creates a detector aware of the workload runtime.
 // Runtime affects whitelist matching for processes in unknown namespaces.
 func NewYAMLDetectorWithRuntime(db *rules.RulesDB, runtime workload.Runtime) *YAMLDetector {
-	return &YAMLDetector{rules: db, runtime: runtime}
+	d := &YAMLDetector{rules: db, runtime: runtime}
+	// Rules are immutable after load; precompute the hot-path lookups once.
+	d.trustedParentNames = make(map[string]bool)
+	for _, item := range db.GetList("trusted_parent_names") {
+		if s, ok := item.(string); ok {
+			d.trustedParentNames[s] = true
+		}
+	}
+	d.shellNames = make(map[string]bool)
+	for _, item := range db.GetList("shell_processes") {
+		if s, ok := item.(string); ok {
+			d.shellNames[s] = true
+		}
+	}
+	// Anti-spoof path validation (env-agnostic): rather than allowlisting per-distro
+	// system dirs, we denylist attacker-writable locations. Precompute the list once.
+	d.suspiciousPrefixes = d.getListStrings("suspicious_exec_paths")
+	return d
 }
 
 // SetInfrastructurePIDs sets the Layer 1 infrastructure PIDs for pre-filter validation.
 // Called by enricher after resolver startup.
 func (d *YAMLDetector) SetInfrastructurePIDs(safeInfraPIDs map[uint32]string) {
 	d.safeInfraPIDs = safeInfraPIDs
+}
+
+// SetAncestryCache attaches the live process ancestry cache used for
+// parent verification. Without it, parent checks fall back to the static
+// Layer 1 PIDs only.
+func (d *YAMLDetector) SetAncestryCache(c *AncestryCache) {
+	d.ancestry = c
 }
 
 // Detect applies rules to the enriched event and returns first matching alert (or nil).
@@ -148,17 +179,6 @@ func (d *YAMLDetector) isPrivateIP(ip net.IP) bool {
 	return false
 }
 
-func getParentComm(ppid int32) string {
-	// Read parent's executable name from /proc/[ppid]/comm
-	// Used to detect initialization context (shell scripts, init processes)
-	path := fmt.Sprintf("/proc/%d/comm", ppid)
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(data))
-}
-
 func (d *YAMLDetector) isParentInfrastructure(ppid int32) bool {
 	// Check if parent PID is in infrastructure PIDs (Layer 1 discovery)
 	if d.safeInfraPIDs == nil {
@@ -168,32 +188,92 @@ func (d *YAMLDetector) isParentInfrastructure(ppid int32) bool {
 	return found
 }
 
-// getParentPID reads /proc/<pid>/status and returns its parent PID (PPid).
-// Returns -1 if the PID is gone or the status file can't be parsed.
-func getParentPID(pid int32) int32 {
-	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/status", pid))
-	if err != nil {
-		return -1
-	}
-	// /proc/<pid>/status is a text file, one "Key:\tValue" pair per line, e.g.:
-	//   Name:   bash
-	//   State:  S (sleeping)
-	//   Pid:    12345
-	//   PPid:   270674
-	// We want the PPid line. strings.Fields splits on whitespace/tabs, so for
-	// "PPid:\t270674" that gives fields = ["PPid:", "270674"] — fields[1] is the value.
-	for _, line := range strings.Split(string(data), "\n") {
-		if strings.HasPrefix(line, "PPid:") {
-			fields := strings.Fields(line)
-			if len(fields) >= 2 {
-				if ppid, err := strconv.ParseInt(fields[1], 10, 32); err == nil {
-					return int32(ppid)
-				}
-			}
-			break
+// resolveParent returns a pid's exec record, preferring the live ancestry cache
+// (race-free, exec-time data) and falling back to a direct /proc read for the
+// fork-without-exec gap (DESIGN §3.4). The fallback reads /proc/<pid>/exe (the full
+// binary path) rather than /proc/<pid>/comm (a bare 15-char name) so the trusted-prefix
+// anti-spoof check still applies. It only succeeds while the parent is alive, so a
+// dead + uncached parent stays unresolvable (routed as noise, DESIGN §3.6).
+func (d *YAMLDetector) resolveParent(pid uint32) (AncestryEntry, bool) {
+	if d.ancestry != nil {
+		if e, ok := d.ancestry.Lookup(pid); ok {
+			return e, true
 		}
 	}
-	return -1
+	exe, err := os.Readlink(fmt.Sprintf("/proc/%d/exe", pid))
+	if err != nil {
+		return AncestryEntry{}, false
+	}
+	return AncestryEntry{Ppid: procPPid(pid), ExecPath: exe}, true
+}
+
+// isParentTrusted reports whether ppid's ancestry roots in verified infrastructure.
+// It walks up the chain (Falco proc.aname-style — a trusted *ancestor*, not just the
+// direct parent), returning trusted as soon as any ancestor is:
+//  1. in safeInfraPIDs (persistent daemon discovered at startup), or
+//  2. a trusted exec path — base name in trusted_parent_names AND path under a Layer 1
+//     trusted prefix (blocks /tmp/dockerd spoofing).
+//
+// It only keeps climbing through shells: a non-shell, non-trusted ancestor is a hard
+// stop (that binary is where arbitrary code could have taken over — we do not credit a
+// trusted grandparent through it). This catches deep host-session chains
+// (sshd → bash → script → grep) while a chain rooted in a non-infra parent still fails.
+//
+// Ancestor identity comes from the ancestry cache (exec-time data, survives the parent
+// exiting), with a /proc/<pid>/exe fallback on cache miss (resolveParent). A broken
+// chain (dead + uncached ancestor) is unresolvable → caller routes it to §3.6 noise.
+// Safety is a property of who spawned the process, not what it is called.
+// Design: docs/DESIGN-PROCESS-ANCESTRY-CACHE.md §3.5
+func (d *YAMLDetector) isParentTrusted(ppid int32) bool {
+	pid := uint32(ppid)
+	for range ancestryWalkMaxDepth {
+		if d.isParentInfrastructure(int32(pid)) {
+			return true
+		}
+		entry, ok := d.resolveParent(pid)
+		if !ok {
+			return false // chain broke — unresolvable ancestor
+		}
+		if d.isTrustedParentExec(entry.ExecPath) {
+			return true
+		}
+		// Only climb through shells; a non-shell, non-trusted ancestor is not infra-rooted.
+		if !d.shellNames[filepath.Base(entry.ExecPath)] {
+			return false
+		}
+		if entry.Ppid == 0 || entry.Ppid == pid {
+			return false // reached the top / self-cycle
+		}
+		pid = entry.Ppid
+	}
+	return false
+}
+
+// isTrustedParentExec reports whether an exec-time path names a trusted parent:
+// base name in trusted_parent_names AND full path under a Layer 1 trusted prefix.
+func (d *YAMLDetector) isTrustedParentExec(execPath string) bool {
+	if !d.trustedParentNames[filepath.Base(execPath)] {
+		return false
+	}
+	return d.hasTrustedInfraPrefix(execPath)
+}
+
+// hasTrustedInfraPrefix reports whether an exec path is in a trusted (non-writable)
+// location. Env-agnostic by design: instead of allowlisting per-distro system dirs
+// (/usr/bin vs /var/lib/minikube/bin vs /opt/... — different on every runtime), it
+// rejects only attacker-writable locations (suspicious_exec_paths: /tmp, /dev/shm,
+// /var/tmp, /run/user). A real daemon lives somewhere normal on every distro; a
+// spoofed /tmp/dockerd does not. Same anti-spoof intent, zero per-env maintenance.
+func (d *YAMLDetector) hasTrustedInfraPrefix(execPath string) bool {
+	if !strings.HasPrefix(execPath, "/") {
+		return false // must be an absolute path
+	}
+	for _, p := range d.suspiciousPrefixes {
+		if strings.HasPrefix(execPath, p) {
+			return false
+		}
+	}
+	return true
 }
 
 // isContainerContext enforces that container-specific context is only true for verified containers.
@@ -258,11 +338,9 @@ func (d *YAMLDetector) isGloballyExcepted(ev pipeline.EnrichedEvent) bool {
 					continue
 				}
 			case "infrastructure":
-				// Must have ppid in safeInfraPIDs
-				if d.safeInfraPIDs == nil {
-					continue // Infrastructure PIDs not set, skip
-				}
-				if _, found := d.safeInfraPIDs[uint32(ppid)]; !found {
+				// Verified via static Layer 1 PIDs or the live ancestry cache
+				// (covers post-startup daemon instances and shell-mediated spawns)
+				if !d.isParentTrusted(ppid) {
 					continue
 				}
 			default:
@@ -274,6 +352,12 @@ func (d *YAMLDetector) isGloballyExcepted(ev pipeline.EnrichedEvent) bool {
 		// If no file_prefixes specified, match on process only (Gate 2)
 		if len(ex.FilePrefixes) == 0 {
 			// No file prefixes specified, process match is sufficient
+			return true
+		}
+
+		// FIX: If it's a process event, we don't validate file prefixes.
+		// The process/parent match above is sufficient to whitelist the execution itself.
+		if ev.Type == pipeline.ProcessEventType {
 			return true
 		}
 
@@ -336,133 +420,41 @@ func (d *YAMLDetector) checkProcessRules(event processor.ProcessEvent, res workl
 	}
 
 	if res.State == workload.StateUnknown {
-		// Initialization context (ppid=1, shell scripts) handled by global_exceptions pre-filter.
-		// Remaining StateUnknown processes are checked below.
+		// Initialization context (ppid=1, shell scripts) is handled by the
+		// global_exceptions pre-filter; remaining state=unknown processes are here.
 
-		// Structural fix: If parent is known infrastructure daemon, suppress alert
-		// (it's legitimate docker lifecycle operation, not escape attempt)
-		// This avoids maintaining an endless blocklist of utility names
-		if d.isParentInfrastructure(event.Ppid) {
-			log.Printf("DEBUG: Suppressing state=unknown process %s (ppid %d in infrastructure)", comm, event.Ppid)
+		// Primary suppression: a verified-infrastructure parent chain (static Layer 1
+		// PID, or a post-startup daemon / shell-mediated spawn resolved via the ancestry
+		// cache or /proc fallback) means legitimate lifecycle activity, not an escape.
+		// Parent-based and name-agnostic — safety is who spawned the process, not what
+		// it is called (closes the "attacker renames their tool to curl" gap).
+		if d.isParentTrusted(event.Ppid) {
+			// log.Printf("DEBUG: Suppressing state=unknown process %s (ppid %d has trusted ancestry)", comm, event.Ppid)
 			return nil
 		}
 
-		base := filepath.Base(comm)
-
-		// Load whitelists from YAML rules
-		universalTools := d.getListStrings("universal_system_tools")
-		k8sInfra := d.getListStrings("k8s_infrastructure_procs")
-		systemTools := d.getListStrings("system_container_detection_tools")
-		procFdPatterns := d.getListStrings("proc_fd_patterns")
-		runtimeExecs := d.getListStrings("container_runtime_execs")
-		netMgmtTools := d.getListStrings("network_management_tools")
-		dockerLifecycleTools := d.getListStrings("docker_lifecycle_tools")
-
-		// Check if process is whitelisted (using environment-aware logic)
-		// eBPF artifacts: /proc/*/fd/* patterns (symlink resolution artifacts)
-		for _, pattern := range procFdPatterns {
-			// Use filepath.Match for glob patterns (* matches any sequence)
+		// eBPF capture artifacts, not real executions: /proc/*/fd/* symlink reads and
+		// the `fd` universal tool. Not a security decision, so still matched by name.
+		for _, pattern := range d.getListStrings("proc_fd_patterns") {
 			if matched, _ := filepath.Match(pattern, comm); matched {
 				return nil
 			}
 		}
-
-		for _, w := range universalTools {
+		base := filepath.Base(comm)
+		for _, w := range d.getListStrings("universal_system_tools") {
 			if base == w {
 				return nil
 			}
 		}
 
-		// K8s infrastructure only safe in K8s
-		if d.runtime == workload.RuntimeK8s {
-			for _, w := range k8sInfra {
-				if base == w {
-					return nil
-				}
-			}
-		}
-
-		// Check whitelisted_processes (infrastructure + customer apps)
-		if d.isWhitelisted(comm) {
-			return nil
-		}
-
-		// Stage 1: Core container runtime tools — always drop when state=unknown
-		// These ARE infrastructure, can never be attacker-spawned
-		for _, w := range runtimeExecs {
-			if base == w {
-				log.Printf("DEBUG: Stage 1 - Core runtime tool always dropped: %s (pid %d)", base, event.Pid)
-				return nil
-			}
-		}
-
-		// Stage 2: Dynamic lifecycle utilities — only drop if spawned by verified infrastructure
-		// Transient tools (grep, sleep, wget, curl, etc.) used during docker operations
-		// Only suppress if parent process is a known infrastructure daemon
-		isTransientTool := false
-		for _, w := range netMgmtTools {
-			if base == w {
-				isTransientTool = true
-				break
-			}
-		}
-		if !isTransientTool {
-			for _, w := range dockerLifecycleTools {
-				if base == w {
-					isTransientTool = true
-					break
-				}
-			}
-		}
-
-		if isTransientTool {
-			// Read parent process name from /proc/ppid/comm to verify infrastructure context
-			pcommPath := fmt.Sprintf("/proc/%d/comm", event.Ppid)
-			if pcommData, err := os.ReadFile(pcommPath); err == nil {
-				parentComm := strings.TrimSpace(string(pcommData))
-
-				// Suppress if parent is a known infrastructure daemon
-				if parentComm == "dockerd" || parentComm == "containerd" || parentComm == "snap" {
-					log.Printf("DEBUG: Stage 2 - Transient tool dropped (parent is infrastructure): %s (ppid %d parent=%s)", base, event.Ppid, parentComm)
-					return nil
-				}
-
-				// Also check if parent is a core runtime executable (runc, containerd-shim, docker-proxy)
-				for _, w := range runtimeExecs {
-					if parentComm == w {
-						log.Printf("DEBUG: Stage 2 - Transient tool dropped (parent is core runtime): %s (ppid %d parent=%s)", base, event.Ppid, parentComm)
-						return nil
-					}
-				}
-
-				// Parent is a mid-layer shell (e.g. a health-check script run by containerd-shim).
-				// Check the shell's own parent (grandparent) against Layer 1 infrastructure PIDs.
-				if parentComm == "bash" || parentComm == "sh" || parentComm == "dash" || parentComm == "zsh" {
-					grandppid := getParentPID(event.Ppid)
-					if grandppid > 0 && d.isParentInfrastructure(grandppid) {
-						log.Printf("DEBUG: Stage 2 - Transient tool dropped (shell parent's grandparent is infrastructure): %s (ppid %d parent=%s grandppid %d)", base, event.Ppid, parentComm, grandppid)
-						return nil
-					}
-					log.Printf("DEBUG: Stage 2 - Transient tool NOT dropped (shell parent's grandparent not infrastructure): %s (ppid %d parent=%s grandppid %d)", base, event.Ppid, parentComm, grandppid)
-				} else {
-					// Parent process is not verified infrastructure — alert (secure fail)
-					log.Printf("DEBUG: Stage 2 - Transient tool NOT dropped (parent not verified): %s (ppid %d parent=%s)", base, event.Ppid, parentComm)
-				}
-			} else {
-				// Parent PID already exited (can't verify) — secure fail, alert
-				log.Printf("DEBUG: Stage 2 - Transient tool NOT dropped (parent PID gone): %s (ppid %d, err=%v)", base, event.Ppid, err)
-			}
-		}
-
-		// Medium confidence: system detection tools (any environment)
-		for _, w := range systemTools {
-			if base == w {
-				return newProcessAlert(event, res, comm, alert.Medium, RuleT1611EscapeToHostNs, "System tool in unrecognized namespace — potential reconnaissance")
-			}
-		}
-
-		// Unknown process in unknown namespace: likely escape attempt
-		return newProcessAlert(event, res, comm, alert.Critical, RuleT1611EscapeToHostNs, "Process in unrecognized namespace — possible container escape")
+		// Phase 3 (§3.6): the namespace never resolved AND the ancestry chain could not
+		// be verified as infrastructure. Falco-aligned — absence of identity is a
+		// visibility gap, not an escape. Emit LOW telemetry (still reaches the log /
+		// dashboard / Supabase as a validation breadcrumb) instead of a CRITICAL false
+		// positive. Print the full context so unresolved cases stay visible for tuning.
+		// log.Printf("DEBUG: unresolved state=unknown %s (pid %d ppid %d uid %d): ancestry not infra-rooted — routed to LOW telemetry",
+		// 	comm, event.Pid, event.Ppid, event.Uid)
+		return newProcessAlert(event, res, comm, alert.Low, RuleEDRTelemetryUnresolvedNamespace, "EDR visibility gap: process in unresolved namespace")
 	}
 
 	// Container context gating: only apply container-specific rules if state is VERIFIED (not unknown)

@@ -44,6 +44,9 @@ const (
 	// Solution: keep only first occurrence within window; discard thread duplicates as noise.
 	fileDedupWindow = time.Second
 
+	cacheCleanUpWorkerInterval     = 5 * time.Minute
+	debugResolveDetecCheckInterval = 20 * time.Microsecond
+
 	// Graceful shutdown timings
 	shutdownWaitInterval = 100 * time.Millisecond // time for goroutines to finish between channel closes
 )
@@ -88,39 +91,8 @@ func main() {
 	// Load configuration from environment
 	cfg := config.Load()
 
-	// Create alert sinks based on configuration
-	var sinks []alert.Sink
-
-	// File sink (always enabled)
-	fileSink, err := alertsink.NewFileSink(cfg.AlertLogPath)
-	if err != nil {
-		log.Fatalf("opening alert log: %v", err)
-	}
-	sinks = append(sinks, fileSink)
-
-	// Pub/Sub sink (if configured)
-	// Currently supports Redis, extensible to other pub/sub systems
-	if cfg.PubSubAddr != "" {
-		pubsubSink, err := alertsink.NewRedisSink(cfg.PubSubAddr)
-		if err != nil {
-			log.Printf("pub/sub sink disabled: %v", err)
-		} else {
-			sinks = append(sinks, pubsubSink)
-		}
-	}
-
-	// Database sink (if configured)
-	// Currently supports Supabase, extensible to other databases
-	if cfg.DatabaseURL != "" && cfg.DatabaseKey != "" {
-		dbSink, err := alertsink.NewSupabaseSink(cfg.DatabaseURL, cfg.DatabaseKey)
-		if err != nil {
-			log.Printf("database sink disabled: %v", err)
-		} else {
-			sinks = append(sinks, dbSink)
-		}
-	}
-
-	handler := alert.NewHandler(sinks)
+	// Alert Sink Initialization
+	handler := initAlertHandler(cfg)
 	defer handler.Close()
 
 	loader, err := bpf.Load()
@@ -135,7 +107,7 @@ func main() {
 		rt = workload.RuntimeK8s
 	}
 
-	rulesDB, err := rules.LoadRulesForEnvironment(rulesFilePath, rt)
+	rulesDB, err := rules.LoadRulesForEnvironment(rulesFilePath)
 	if err != nil {
 		log.Fatalf("loading rules from YAML: %v", err)
 	}
@@ -171,19 +143,118 @@ func main() {
 	det.SetInfrastructurePIDs(safeInfraPIDs) // Pass Layer 1 infrastructure PIDs for Layer 2 pre-filter
 	responder := detector.NewResponder(nil)
 
+	// Live process ancestry cache: pid → (ppid, execPath) captured from every exec
+	// event, so parent identity stays readable after the parent exits.
+	// The detector uses it for trusted-parent verification (isParentTrusted).
+	// Design: docs/DESIGN-PROCESS-ANCESTRY-CACHE.md
+	ancestry := detector.NewAncestryCache()
+	ancestry.Bootstrap()
+	det.SetAncestryCache(ancestry)
+
 	// Load GKE-specific service CIDRs only if detected in GKE environment.
 	// Avoids unnecessary metadata server calls on Docker/bare-metal.
 	if string(rulesDB.Env) == envGCP {
 		detector.AddGKEServiceCIDR()
 	}
 
-	// Producers: start readers for each eBPF event source
-	type eventReader struct {
-		source  pipeline.Source
-		logName string
-		read    func() ([]byte, error)
+	// Start Readers
+	startEBPFReaders(loader, rawCh, &rawDropped, &resolvedEvents)
+
+	// 3. Enricher Loop
+	startEnricherWorker(
+		rawCh,
+		enrichedCh,
+		resolver,
+		ancestry,
+		safeInfraPIDs,
+		&pendingMu,
+		pendingBuf,
+		&enrichedDropped,
+		&resolvedEvents,
+	)
+
+	// 4. Retry Pending Events
+	startPendingRetryWorker(
+		resolver,
+		enrichedCh,
+		&pendingMu,
+		pendingBuf,
+		&enrichedDropped,
+		&unknownNs,
+	)
+
+	// 5. Cache Cleanup
+	startCacheCleanupWorker(ancestry)
+
+	// 6 Detector & Responder Routing
+	startDetectorAndResponder(enrichedCh, alertCh, det, responder, &alertDropped)
+
+	// 7. Alert Handler Dispatcher
+	startAlertHandlerWorker(alertCh, handler)
+
+	// signal
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+	<-sig
+	log.Printf("shutdown: resolved=%d (dropped: raw=%d enriched=%d alert=%d unknown=%d)",
+		resolvedEvents.Load(), rawDropped.Load(), enrichedDropped.Load(), alertDropped.Load(), unknownNs.Load())
+
+	// Graceful shutdown: close channels in order (stops goroutines from top to bottom)
+	close(rawCh)                     // Stop event readers → enricher stops receiving
+	time.Sleep(shutdownWaitInterval) // Let enricher finish processing
+	close(enrichedCh)                // Stop enricher → detector stops receiving
+	time.Sleep(shutdownWaitInterval) // Let detector finish processing
+	close(alertCh)                   // Stop handler
+
+	// Close resources
+	handler.Close()
+	loader.Close()
+}
+
+// initAlertHandler: initializes and builds the complete slice of alert sinks
+// based on the provided configuration topology.
+func initAlertHandler(cfg *config.Config) *alert.Handler {
+	var sinks []alert.Sink
+
+	// File sink (always enabled)
+	fileSink, err := alertsink.NewFileSink(cfg.AlertLogPath)
+	if err != nil {
+		log.Fatalf("opening alert log: %v", err)
+	}
+	sinks = append(sinks, fileSink)
+
+	// Pub/Sub sink (if configured)
+	if cfg.PubSubAddr != "" {
+		pubsubSink, err := alertsink.NewRedisSink(cfg.PubSubAddr)
+		if err != nil {
+			log.Printf("pub/sub sink disabled: %v", err)
+		} else {
+			sinks = append(sinks, pubsubSink)
+		}
 	}
 
+	// Database sink (if configured)
+	if cfg.DatabaseURL != "" && cfg.DatabaseKey != "" {
+		dbSink, err := alertsink.NewSupabaseSink(cfg.DatabaseURL, cfg.DatabaseKey)
+		if err != nil {
+			log.Printf("database sink disabled: %v", err)
+		} else {
+			sinks = append(sinks, dbSink)
+		}
+	}
+
+	return alert.NewHandler(sinks)
+}
+
+type eventReader struct {
+	source  pipeline.Source
+	logName string
+	read    func() ([]byte, error)
+}
+
+// startEBPFReaders orchestrates the initialization and background worker loops
+// for reading raw samples from the eBPF ring buffers.
+func startEBPFReaders(loader *bpf.Loader, rawCh chan<- pipeline.RawEvent, rawDropped *atomic.Int64, resolvedEvents *atomic.Int64) {
 	readers := []eventReader{
 		{pipeline.SourceExecsnoop, logNameProcess, func() ([]byte, error) {
 			rec, err := loader.ProcessRd.Read()
@@ -209,12 +280,34 @@ func main() {
 	}
 
 	for _, cfg := range readers {
-		go startEventReader(cfg, rawCh, &rawDropped, &resolvedEvents)
+		go startEventReader(cfg, rawCh, rawDropped, resolvedEvents)
 	}
+}
 
-	// Enricher
+// startEnricherWorker runs the pipeline worker responsible for intercepting raw eBPF events,
+// updating the ancestry cache, filtering out infrastructure spikes, deduping file access,
+// and executing asynchronous workload metadata enrichment.
+func startEnricherWorker(
+	rawCh <-chan pipeline.RawEvent,
+	enrichedCh chan<- pipeline.EnrichedEvent,
+	resolver workload.WorkloadResolver,
+	ancestry *detector.AncestryCache,
+	safeInfraPIDs map[uint32]string,
+	pendingMu *sync.Mutex,
+	pendingBuf map[uint32][]pendingEntry,
+	enrichedDropped *atomic.Int64,
+	resolvedEvents *atomic.Int64,
+) {
 	go func() {
 		for raw := range rawCh {
+			// Record every exec into the ancestry cache BEFORE the Layer 1 skip,
+			// so children of skipped infrastructure processes can still resolve
+			// their parent identity later.
+			if raw.Source == pipeline.SourceExecsnoop {
+				pe := (*processor.ProcessEvent)(unsafe.Pointer(&raw.Data[0]))
+				ancestry.Record(uint32(pe.Pid), uint32(pe.Ppid), processor.CString(pe.Comm[:]))
+			}
+
 			// Layer 1: Fast-path filtering (before enrichment/resolver)
 			if shouldSkipLayer1(raw, safeInfraPIDs) {
 				continue
@@ -227,9 +320,6 @@ func main() {
 
 			if ev.Type == pipeline.FileEventType {
 				// Dedup file events: multi-threaded processes trigger lsm/file_open once per thread.
-				// From kernel's perspective: N threads = N syscalls = N hook firings.
-				// From detection's perspective: file open happened once; N threads share FD and RAM.
-				// Keep only first within fileDedupWindow (1s); rest are noise.
 				// Optimization: Use sharded locks (32 shards indexed by PID) to reduce contention on multi-core systems.
 				key := fileDedupKey{
 					Pid:      uint32(ev.File.Pid),
@@ -250,9 +340,6 @@ func main() {
 
 			// Pending workload: resolver couldn't identify container yet (State=Pending).
 			// Buffer event and retry later when resolver catches up (K8s pod startup lag).
-			// Note: Dedup applied to file events only (multi-thread noise).
-			// Pending events (any type) skip dedup for now — if duplicates matter in production,
-			// create shared dedup func and apply to all pending types.
 			if ev.Workload.State == workload.StatePending {
 				nsID := mntNsIDOf(*ev)
 				pendingMu.Lock()
@@ -274,10 +361,18 @@ func main() {
 			}
 		}
 	}()
+}
 
-	// Retry pending events that are waiting for namespace resolution
-	// pendingBuf: map[nsID][]pendingEntry — groups events by namespace ID
-	// All events with same nsID share one resolution (one namespace = one state)
+// startPendingRetryWorker runs the background routine that retries namespace/workload
+// resolution for buffered events whose state was initially Pending.
+func startPendingRetryWorker(
+	resolver workload.WorkloadResolver,
+	enrichedCh chan<- pipeline.EnrichedEvent,
+	pendingMu *sync.Mutex,
+	pendingBuf map[uint32][]pendingEntry,
+	enrichedDropped *atomic.Int64,
+	unknownNs *atomic.Int64,
+) {
 	go func() {
 		ticker := time.NewTicker(pendingRetryInterval)
 		defer ticker.Stop()
@@ -286,14 +381,12 @@ func main() {
 			pendingMu.Lock()
 
 			for nsID, entries := range pendingBuf {
-				// Skip if somehow all entries were deleted (race condition cleanup)
 				if len(entries) == 0 {
 					delete(pendingBuf, nsID)
 					continue
 				}
 
-				// Resolve using first event: all events in this nsID group should resolve the same way
-				// (they all come from the same namespace, just different processes)
+				// Resolve using first event: all events in this nsID group share a namespace
 				res := resolver.Resolve(&entries[0].ev)
 
 				// Success: namespace resolved — apply resolution to all events in this group
@@ -316,8 +409,6 @@ func main() {
 				// Still unresolved: check if any entries have exceeded timeout/retry limits
 				var remain []pendingEntry
 				for _, e := range entries {
-					// Fast-drop dead processes: if /proc/[pid] no longer exists, process is gone
-					// Don't wait 60s for resolver timeout on ephemeral processes (grep, readlink, etc.)
 					ev := e.ev
 					var pid int32
 					switch ev.Type {
@@ -330,9 +421,9 @@ func main() {
 					}
 
 					if pid > 0 {
-						// Use syscall.Kill(pid, 0) to check if process exists without sending signal
+						// Check if process exists without sending signal
 						if err := syscall.Kill(int(pid), 0); err != nil {
-							// Process is dead: mark as unknown and send immediately (don't wait for timeout)
+							// Process is dead: mark as unknown and send immediately
 							ev.Workload.State = workload.StateUnknown
 							unknownNs.Add(1)
 							select {
@@ -342,20 +433,18 @@ func main() {
 									log.Printf("warning: enrichedCh full, %d enriched events dropped", n)
 								}
 							}
-							continue // Skip this entry, move to next
+							continue
 						}
 					}
 
 					// Check absolute timeout (pendingMaxAge = 60s)
 					expired := time.Since(e.firstSeen) > pendingMaxAge
 					if !expired {
-						// Check retry limit (pendingMaxRetries = 20 retries × 3s = 60s)
 						e.retries++
 						expired = e.retries >= pendingMaxRetries
 					}
 
 					if expired {
-						// Timeout exceeded: give up, mark as unknown, send to detector
 						ev.Workload.State = workload.StateUnknown
 						unknownNs.Add(1)
 						select {
@@ -366,7 +455,6 @@ func main() {
 							}
 						}
 					} else {
-						// Still within timeout: keep in pending for next retry
 						remain = append(remain, e)
 					}
 				}
@@ -381,33 +469,36 @@ func main() {
 			pendingMu.Unlock()
 		}
 	}()
+}
 
-	// File dedup cache cleanup — evict entries older than 2× the dedup window
+// startCacheCleanupWorker runs a background routine that periodically evicts
+// dead or expired entries from the process ancestry cache.
+func startCacheCleanupWorker(ancestry *detector.AncestryCache) {
 	go func() {
-		ticker := time.NewTicker(30 * time.Second)
+		ticker := time.NewTicker(cacheCleanUpWorkerInterval)
 		defer ticker.Stop()
+
 		for range ticker.C {
-			cutoff := time.Now().Add(-fileDedupWindow * 2)
-			for i := range fileDedupShards_array {
-				shard := &fileDedupShards_array[i]
-				shard.mu.Lock()
-				for k, t := range shard.seen {
-					if t.Before(cutoff) {
-						delete(shard.seen, k)
-					}
-				}
-				shard.mu.Unlock()
-			}
+			ancestry.Sweep()
 		}
 	}()
+}
 
-	// Detector
+// startDetectorAndResponder runs the core pipeline processor that evaluates enriched events,
+// tracks detection latency, applies inline mitigation responses, and handles alert signaling.
+func startDetectorAndResponder(
+	enrichedCh <-chan pipeline.EnrichedEvent,
+	alertCh chan<- alert.Alert,
+	det *detector.YAMLDetector,
+	responder *detector.Responder,
+	alertDropped *atomic.Int64,
+) {
 	go func() {
 		for ev := range enrichedCh {
 			detectStart := time.Now()
 			a := det.Detect(ev)
 			detectTime := time.Since(detectStart)
-			if detectTime > 5*time.Millisecond {
+			if detectTime > debugResolveDetecCheckInterval {
 				log.Printf("DEBUG: det.Detect took %v (slow detection)", detectTime)
 			}
 
@@ -423,6 +514,7 @@ func main() {
 				action = responder.Respond(a, action)
 			}
 			a.ResponseAction = action
+
 			select {
 			case alertCh <- *a:
 			default:
@@ -431,31 +523,16 @@ func main() {
 			}
 		}
 	}()
+}
 
-	// Handler
+// startAlertHandlerWorker consumes generated security alerts from the pipeline
+// and dispatches them to all active logging and database sinks.
+func startAlertHandlerWorker(alertCh <-chan alert.Alert, handler *alert.Handler) {
 	go func() {
 		for a := range alertCh {
 			handler.Send(a)
 		}
 	}()
-
-	// signal
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-	<-sig
-	log.Printf("shutdown: resolved=%d (dropped: raw=%d enriched=%d alert=%d unknown=%d)",
-		resolvedEvents.Load(), rawDropped.Load(), enrichedDropped.Load(), alertDropped.Load(), unknownNs.Load())
-
-	// Graceful shutdown: close channels in order (stops goroutines from top to bottom)
-	close(rawCh)                     // Stop event readers → enricher stops receiving
-	time.Sleep(shutdownWaitInterval) // Let enricher finish processing
-	close(enrichedCh)                // Stop enricher → detector stops receiving
-	time.Sleep(shutdownWaitInterval) // Let detector finish processing
-	close(alertCh)                   // Stop handler
-
-	// Close resources
-	handler.Close()
-	loader.Close()
 }
 
 func enrich(raw pipeline.RawEvent, r workload.WorkloadResolver) *pipeline.EnrichedEvent {
@@ -475,7 +552,7 @@ func enrich(raw pipeline.RawEvent, r workload.WorkloadResolver) *pipeline.Enrich
 		start := time.Now()
 		enriched.Workload = r.Resolve(enriched)
 		resolveTime := time.Since(start)
-		if resolveTime > 10*time.Microsecond {
+		if resolveTime > debugResolveDetecCheckInterval {
 			log.Printf("DEBUG: resolve process took %v", resolveTime)
 		}
 
@@ -495,7 +572,7 @@ func enrich(raw pipeline.RawEvent, r workload.WorkloadResolver) *pipeline.Enrich
 		start := time.Now()
 		enriched.Workload = r.Resolve(enriched)
 		resolveTime := time.Since(start)
-		if resolveTime > 10*time.Microsecond {
+		if resolveTime > debugResolveDetecCheckInterval {
 			log.Printf("DEBUG: resolve file took %v", resolveTime)
 		}
 		return enriched
@@ -514,7 +591,7 @@ func enrich(raw pipeline.RawEvent, r workload.WorkloadResolver) *pipeline.Enrich
 		start := time.Now()
 		enriched.Workload = r.Resolve(enriched)
 		resolveTime := time.Since(start)
-		if resolveTime > 10*time.Millisecond {
+		if resolveTime > debugResolveDetecCheckInterval {
 			log.Printf("DEBUG: resolve net took %v", resolveTime)
 		}
 

@@ -1,11 +1,46 @@
 # Project Handoff — Current Status
 
-**Last Updated:** 2026-07-06 (Two-Stage Parent Process Verification Approach)  
-**Status:** 🔄 False Positive Reduction - Design Complete, Implementation Pending
+**Last Updated:** 2026-07-07 (Process Ancestry Cache — Phase 2 + Phase 3 landed)  
+**Status:** 🔄 False Positive Reduction — parent-based verification implemented, tuning on Docker
 - Layer 1 fast-path filtering: ✅ DONE (ppid==0, pid in safeInfraPIDs)
-- Layer 2 whitelisting: ✅ DONE (whitelisted_processes list + exception macros)
-- Container runtime tool exclusion: ⚠️ IN DESIGN (two-stage parent process verification approach)
-- Docker deploy false positives: ⚠️ ROOT CAUSE IDENTIFIED (transient tools need parent verification)
+- Layer 2 whitelisting: ✅ DONE (global_exceptions + exception macros)
+- Process ancestry cache + bounded ancestry walk: ✅ DONE (replaces the old name-based blocklists — see `docs/DESIGN-PROCESS-ANCESTRY-CACHE.md`)
+- Phase 3 unresolved→LOW telemetry downgrade: ✅ DONE (no more CRITICAL T1611 for transient host processes)
+- **Note:** the "Two-Stage Parent Process Verification" sections further down are SUPERSEDED by the ancestry-cache design; kept only for history.
+
+---
+
+## TASK (queued): Route LOW telemetry off the live dashboard (2026-07-07)
+
+**Priority:** After K8s parity (see below). Design agreed, implementation deferred.
+
+**Context:** Phase 3 now emits `LOW EDR_telemetry_unresolved_namespace` for the residual
+`state=unknown` processes the ancestry walk can't verify as infrastructure (e.g. udev
+`bridge-network-interface`, open-iscsi `net-interface-handler`, `systemd-sysctl` during
+network setup / deploy). These are *not* threats — they're a visibility gap. They no
+longer fire CRITICAL, but at LOW they still flood every sink, including the live
+dashboard (Redis pub/sub).
+
+**Decision:** Keep them at LOW, but keep them OFF the human-facing live dashboard.
+- LOW ≈ Info. A dashboard full of LOW telemetry causes alert fatigue — humans start
+  skipping past LOW and miss the CRITICAL/HIGH that matter, or waste time triaging noise.
+- Route telemetry to **persistence only** (file + Supabase). An automated
+  **anomaly/behavior service** (see "Phase 2: Behavioral & Anomaly Detection" below)
+  consumes the Supabase stream and surfaces only genuinely anomalous cases. This LOW
+  stream is precisely that service's input.
+
+**Design (not yet implemented):**
+- Add a `FilterSink` decorator in `internal/alert` — wraps any Sink, forwards only alerts
+  passing a predicate; keeps routing policy out of transport code.
+- In `cmd/edr-monitor/main.go` `initAlertHandler`, wrap ONLY the Redis (pub/sub) sink with
+  a `notTelemetry` predicate. File + Supabase stay unwrapped (get everything).
+- Identify telemetry via an explicit `Telemetry bool` on `alert.Alert` (recommended —
+  future-proof, encodes the "telemetry vs actionable" split the anomaly service keys on),
+  set `true` where the detector emits `EDR_telemetry_unresolved_namespace`. Simpler
+  fallback: predicate on `a.Level == alert.Low`.
+
+**Current behavior until implemented:** LOW telemetry goes everywhere (file + Redis +
+Supabase) and is also DEBUG-printed in the agent log.
 
 ---
 

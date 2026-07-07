@@ -24,6 +24,13 @@ const (
 	// T1611 — Escape to Host: process running in unrecognised mount namespace
 	RuleT1611EscapeToHostNs = "T1611_escape_to_host_ns" // (Podman FP — Phase 2 fix)
 
+	// EDR telemetry (not a threat): process whose namespace never resolved and whose
+	// ancestry chain could not be verified as infrastructure. Falco-aligned — absence
+	// of identity is a visibility gap, not an escape, so this is emitted at LOW as a
+	// validation breadcrumb rather than a CRITICAL false positive.
+	// Design: docs/DESIGN-PROCESS-ANCESTRY-CACHE.md §3.6
+	RuleEDRTelemetryUnresolvedNamespace = "EDR_telemetry_unresolved_namespace"
+
 	// T1059 — Command & Scripting Interpreter: scripting runtime spawned in container
 	RuleT1059ScriptingInterpreter = "T1059_scripting_interpreter" // 🔲 python -c, perl -e
 

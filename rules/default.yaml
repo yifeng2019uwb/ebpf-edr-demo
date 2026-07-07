@@ -211,13 +211,20 @@ rules:
     # These are core infrastructure tools that may appear in unknown namespaces.
     # Excluded from T1611 escape detection to prevent false positives.
     - name: container_runtime_execs
-      items: [runc, containerd-shim, containerd-shim-runc-v2, dockerd, containerd, docker]
+      items: [runc, containerd-shim, containerd-shim-runc-v2, dockerd, containerd, docker, ls, debian-sa1, droplet-agent, do-agent]
 
-    # Network management tools — legitimate system utilities for network configuration.
-    # These tools operate at namespace boundaries and may appear in unknown namespaces.
-    # Excluded from T1611 escape detection.
-    - name: network_management_tools
-      items: [nft, xtables-nft-multi, ip, iptables, iptables-legacy, ip6tables, grep, readlink, sleep, curl]
+    # Trusted parent names — processes allowed to spawn transient utilities
+    # (health checks, deploy scripts, SSH session tooling) without alerting.
+    # Checked against the LIVE ancestry cache: parent identity is the exec-time
+    # path captured in-kernel, so it stays valid after the parent exits, and the
+    # path is validated against Layer 1 trusted_prefixes to prevent spoofing
+    # (a /tmp/dockerd does not match). Used by parent_context: infrastructure
+    # and the T1611 state=unknown path. If the direct parent is a shell
+    # (shell_processes), the check hops once to the grandparent.
+    # Design: docs/DESIGN-PROCESS-ANCESTRY-CACHE.md §3.5
+    - name: trusted_parent_names
+      items: [containerd-shim, containerd-shim-runc-v2, dockerd, containerd, docker-proxy, runc, sshd, systemd, snapd, snap, cron,
+              kubelet, kube-proxy, crio, conmon]
 
     # Docker lifecycle and deployment tools
     # Spawned during docker deploy/destroy, exit too fast for resolver to complete
@@ -475,18 +482,27 @@ rules:
       output: "Container escape attempt - procfs (file=%fd.name service=%service)"
 
     # T1611 — Escape to Host (Namespace)
-    # Process in unknown namespace (should be in pod NS) → escape to host.
-    # Exclude known container runtime tools and network management utilities to prevent false positives.
+    # Process in an unknown namespace (should be inside a pod/container NS).
+    # SUPERSEDED (Phase 3 / §3.6): a bare unresolved namespace is NOT treated as an
+    # escape any more. "Unknown" is a resolver-timing artifact, not a threat signal
+    # (Falco has no equivalent). Runtime behavior (Go, source of truth):
+    #   - ancestry roots in verified infrastructure (isParentTrusted — Layer 1 PIDs +
+    #     ancestry-cache walk with trusted-path validation) → suppressed;
+    #   - eBPF capture artifacts (proc_fd_patterns, universal_system_tools) → suppressed;
+    #   - everything else → LOW EDR_telemetry_unresolved_namespace (below), not CRITICAL.
+    # Real escape detection lives in the behavioral/file T1611 rules (fs, proc). This
+    # entry is retained only as the technique reference. See §3.5–3.6.
     T1611_escape_host_ns:
-      condition: is_unknown_namespace and proc.name not_in (container_runtime_execs) and proc.name not_in (network_management_tools)
-      severity: CRITICAL
+      condition: is_unknown_namespace
+      severity: LOW
       exception_macros: [is_customer_app]
       output: "Container escape attempt - namespace (proc=%proc.name service=%service)"
 
-    # EDR_telemetry_unresolved_namespace
-    # Visibility gap: Process executed in unresolved/unindexed container namespace.
-    # Used to detect resolver timeouts or capacity issues, not a security alert.
-    # Processes that timeout before resolver completes cgroup parsing.
+    # EDR_telemetry_unresolved_namespace — active routing target for Phase 3.
+    # Visibility gap: namespace never resolved AND ancestry could not be verified as
+    # infrastructure. Not a security alert — a validation breadcrumb (resolver timeouts,
+    # capacity issues, fork-without-exec gaps). Emitted at LOW so it still reaches the
+    # log / dashboard / Supabase for tuning, without CRITICAL noise.
     EDR_telemetry_unresolved_namespace:
       condition: is_unknown_namespace
       severity: LOW

@@ -9,8 +9,6 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
-
-	"ebpf-edr-demo/pkg/workload"
 )
 
 // Config is the top-level rules configuration.
@@ -226,59 +224,17 @@ func tryMetadata(ctx context.Context, method, url string, headers map[string]str
 	return resp.StatusCode == 200
 }
 
-// MergeWhitelists adds environment-specific whitelists to the rules database.
-// runtime determines which infrastructure processes to include (RuntimeK8s or RuntimeDocker).
-func (db *RulesDB) MergeWhitelists(env Environment, runtime workload.Runtime) {
-	var cloudAgents []interface{}
-	var infraProcs []interface{}
-
-	switch env {
-	case EnvGCP:
-		cloudAgents = db.Lists["gcp_cloud_agents"]
-		infraProcs = db.Lists["gke_infrastructure_procs"]
-	case EnvDigitalOcean:
-		cloudAgents = db.Lists["digitalocean_cloud_agents"]
-		infraProcs = db.Lists["digitalocean_infrastructure_procs"]
-	default:
-		return
-	}
-
-	// Build compiled_infra_runtime_whitelist: always include environment-specific infraProcs,
-	// additionally include K8s infrastructure only if runtime is RuntimeK8s
-	result := []interface{}{}
-
-	if runtime == workload.RuntimeK8s {
-		baseK8s := db.Lists["k8s_infrastructure_procs"]
-		if baseK8s != nil {
-			result = append(result, baseK8s...)
-		}
-	}
-
-	if infraProcs != nil {
-		result = append(result, infraProcs...)
-	}
-
-	if len(result) > 0 {
-		db.Lists["compiled_infra_runtime_whitelist"] = result
-	}
-
-	logMsg := fmt.Sprintf("rules: merged %d cloud agents", len(cloudAgents))
-	if infraProcs != nil {
-		logMsg = fmt.Sprintf("%s, %d infrastructure procs", logMsg, len(infraProcs))
-	}
-	log.Printf(logMsg)
-}
-
-// LoadRulesForEnvironment loads rules and merges environment-specific whitelists.
-func LoadRulesForEnvironment(path string, runtime workload.Runtime) (*RulesDB, error) {
+// LoadRulesForEnvironment loads rules and records the detected cloud environment.
+// Environment-specific trust (gcp_cloud_agents, gke_infrastructure_procs,
+// digitalocean_* lists) is not merged here — it belongs in the YAML-rule-driven
+// trust checks (trusted_parent_names / ancestry), not a startup list merge.
+func LoadRulesForEnvironment(path string) (*RulesDB, error) {
 	db, err := LoadRules(path)
 	if err != nil {
 		return nil, err
 	}
 
-	env := DetectEnvironment()
-	db.Env = env // store detected environment for detector use
-	db.MergeWhitelists(env, runtime)
+	db.Env = DetectEnvironment() // store detected environment for detector use
 
 	return db, nil
 }

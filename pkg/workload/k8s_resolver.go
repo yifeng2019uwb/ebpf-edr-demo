@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"strconv"
@@ -27,6 +28,7 @@ type K8sResolver struct {
 	cache     map[uint32]ResolveResult // mntNsID → pod identity
 	refreshMu sync.Mutex
 	selfNsID  uint32
+	hostNsID  uint32 // host mount namespace (from PID 1 at startup); 0 if unknown
 	// Immutable metadata set at startup (from environment)
 	node    string
 	region  string
@@ -42,6 +44,11 @@ type K8sResolver struct {
 
 func (r *K8sResolver) Start() error {
 	r.selfNsID = getMntNsID(os.Getpid())
+	// Host namespace ID enables the Resolve() fast path for node/host processes.
+	// Works because the DaemonSet runs with hostPID and a host /proc mount, so PID 1
+	// is the host init. Mirrors the Docker resolver.
+	r.hostNsID = getMntNsID(1)
+	log.Printf("k8s resolver: host namespace ID = %d, self namespace ID = %d (0 means detection failed, fast path disabled)", r.hostNsID, r.selfNsID)
 	r.lookupSem = make(chan struct{}, k8sLookupWorkerLimit)
 	r.containerIDMap = make(map[string]ResolveResult)
 	r.cache = r.buildInitialCache()
@@ -98,6 +105,18 @@ func (r *K8sResolver) Resolve(event interface{}) ResolveResult {
 		return r.bareResult(StateUnknown)
 	}
 
+	// Fast path: host namespace — known at startup, resolved synchronously.
+	// Transient node/host processes (kubelet-spawned probe helpers, SSH sessions on
+	// the node) die before async resolution completes; without this they time out to
+	// state=unknown. Mirrors the Docker resolver's host fast path.
+	if r.hostNsID != 0 && mntNsID == r.hostNsID {
+		return ResolveResult{
+			Identity: WorkloadIdentity{Runtime: RuntimeHost, Service: HostProcessService, Env: r.env},
+			Meta:     WorkloadMeta{Node: r.node, Region: r.region, Cluster: r.cluster},
+			State:    StateResolved,
+		}
+	}
+
 	r.mu.RLock()
 	result, exists := r.cache[mntNsID]
 	r.mu.RUnlock()
@@ -135,16 +154,11 @@ func (r *K8sResolver) refreshCrictlCache() {
 func (r *K8sResolver) buildInitialCache() map[uint32]ResolveResult {
 	m := make(map[uint32]ResolveResult)
 
-	// Host processes (self + pid=1)
-	ids := []uint32{
-		r.selfNsID,
-		getMntNsID(1),
-	}
-	for _, id := range ids {
-		if id == 0 {
-			continue
-		}
-		m[id] = r.bareResult(StateResolved)
+	// Seed the agent's own namespace as host (pid=1 host ns is handled by the
+	// Resolve() fast path). Prevents the agent's own events from going through async
+	// resolution.
+	if r.selfNsID != 0 {
+		m[r.selfNsID] = r.bareResult(StateResolved)
 	}
 
 	return m
