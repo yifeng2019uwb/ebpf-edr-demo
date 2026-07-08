@@ -157,6 +157,17 @@ rules:
     - name: system_info_paths
       items: [/etc/passwd, /etc/group]
 
+    # Recon file readers — tools whose reading of system_info_paths is a discovery
+    # signal (T1082). /etc/passwd and /etc/group are world-readable and read constantly
+    # by libc NSS (getpwuid/getgrgid), so the app's OWN process reading them is benign —
+    # only fire T1082 when one of these recon/dump tools (or a shell) reads them. This
+    # kills the /etc/passwd false-positive storm from normal service startup while still
+    # catching `cat /etc/passwd`-style discovery.
+    - name: recon_file_readers
+      items: [cat, tac, nl, head, tail, more, less, grep, egrep, fgrep, awk, sed, cut,
+              sort, uniq, strings, xxd, od, hexdump, base64, getent, id, whoami, groups,
+              sh, bash, dash, zsh, ash, ksh]
+
     # Cron configuration files — persistence mechanism.
     # T1053.003 — containers should never access cron files.
     - name: cron_paths

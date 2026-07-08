@@ -30,6 +30,7 @@ type YAMLDetector struct {
 	trustedParentNames map[string]bool   // precomputed from trusted_parent_names (hot path)
 	suspiciousPrefixes []string          // precomputed from suspicious_exec_paths (writable-location denylist)
 	shellNames         map[string]bool   // precomputed from shell_processes (hot path)
+	reconReaders       map[string]bool   // precomputed from recon_file_readers (T1082 reader gate)
 }
 
 // NewYAMLDetector creates a detector with no runtime awareness.
@@ -53,6 +54,12 @@ func NewYAMLDetectorWithRuntime(db *rules.RulesDB, runtime workload.Runtime) *YA
 	for _, item := range db.GetList("shell_processes") {
 		if s, ok := item.(string); ok {
 			d.shellNames[s] = true
+		}
+	}
+	d.reconReaders = make(map[string]bool)
+	for _, item := range db.GetList("recon_file_readers") {
+		if s, ok := item.(string); ok {
+			d.reconReaders[s] = true
 		}
 	}
 	// Anti-spoof path validation (env-agnostic): rather than allowlisting per-distro
@@ -589,9 +596,12 @@ func (d *YAMLDetector) checkFileRules(event processor.FileEvent, res workload.Re
 		}
 	}
 
-	// T1082 — system information discovery (/etc/passwd, /etc/group)
-	// Only alert if we can verify this is a container process
-	if isVerifiedContainer {
+	// T1082 — system information discovery (/etc/passwd, /etc/group).
+	// Gate on the READER: these files are world-readable and read constantly by libc
+	// NSS (getpwuid/getgrgid), so the app's own process reading them is benign and was
+	// producing a FP storm. Only a recon/shell tool reading them (cat /etc/passwd, grep,
+	// getent, ...) is the actual discovery signal.
+	if isVerifiedContainer && d.reconReaders[filepath.Base(comm)] {
 		systemFiles := d.getListStrings("system_info_paths")
 		for _, prefix := range systemFiles {
 			if strings.HasPrefix(filename, prefix) {
