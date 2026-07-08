@@ -1,7 +1,10 @@
 # Design: Process Ancestry Cache for Parent Verification
 
-**Date:** 2026-07-06
-**Status:** APPROVED DESIGN — implementation not started
+**Date:** 2026-07-06 (implemented 2026-07-07)
+**Status:** IMPLEMENTED — Phases 1–3 shipped and deployed (Docker + DO K8s). Two changes
+went beyond the original design during implementation: the §3.5 check is a **bounded
+ancestry walk** (not a single grandparent hop), and path validation is an **env-agnostic
+suspicious-path denylist** (not a per-distro prefix allowlist). §5 items remain deferred.
 **Supersedes:** the parent-verification sections of HANDOFF.md "Two-Stage Parent Process Verification" and the ephemeral-parent race discussion. Older docs in this folder describe abandoned iterations; this doc is the current source of truth for this feature.
 
 ---
@@ -107,16 +110,24 @@ the race *rare*; it does not pretend to eliminate it.
 ### 3.5 The single trusted-parent check (replaces all three implementations)
 
 One function, used identically by `isGloballyExcepted` (`parent_context: infrastructure`)
-and the T1611 `state=unknown` path:
+and the T1611 `state=unknown` path. **As implemented it is a bounded ancestry walk** —
+the original design hopped a single grandparent; the shipped version climbs through shells
+until it hits infrastructure or a non-shell dead end (Falco `proc.aname`-style). This
+catches deep host-session chains (sshd → bash → script → grep) that one hop misses:
 
 ```
-isParentTrusted(ppid):
-  1. ppid in safeInfraPIDs (static Layer 1 snapshot)          → trusted
-  2. cache[ppid].execPath: base name in trusted_parent_names
-     AND path has a trusted prefix                            → trusted
-  3. if cache[ppid] is a shell (bash/sh/dash/zsh):
-     one more hop → apply 1+2 to the grandparent              → trusted if it passes
-  4. otherwise                                                → not trusted
+isParentTrusted(ppid):                       # climbs up to ancestryWalkMaxDepth (10) ancestors
+  pid = ppid
+  repeat:
+    1. pid in safeInfraPIDs (static Layer 1 snapshot)         → trusted
+    2. resolveParent(pid).execPath: base name in trusted_parent_names
+       AND path NOT in a writable/suspicious location         → trusted
+    3. if that ancestor is a shell (bash/sh/dash/zsh):
+       climb one level (pid = ancestor's ppid) and repeat
+    4. otherwise (non-shell, non-trusted ancestor)            → not trusted, stop
+  # resolveParent = ancestry cache first, then a /proc/<pid>/exe fallback (§3.4).
+  # Climbing ONLY through shells is the safety boundary: a non-shell ancestor is where
+  # arbitrary code could have taken over, so we do not credit a trusted grandparent past it.
 ```
 
 **YAML is the source of the knowledge, Go is only the mechanism.** New list in
@@ -124,10 +135,11 @@ isParentTrusted(ppid):
 
 ```yaml
 # Trusted parent names — processes allowed to spawn transient utilities.
-# Checked against the LIVE ancestry cache (exec-time data), with path-prefix validation.
+# Checked against the LIVE ancestry cache (exec-time data), with suspicious-path validation.
 - name: trusted_parent_names
   items: [containerd-shim, containerd-shim-runc-v2, dockerd, containerd, docker-proxy,
-          runc, sshd, systemd, snap, snapd]
+          runc, sshd, systemd, snapd, snap, cron,
+          kubelet, kube-proxy, crio, conmon]   # K8s infra names (env-agnostic by name)
 ```
 
 Shell names come from the existing `shell_processes` list. Path validation is
@@ -153,9 +165,13 @@ New behavior: route the event to the **existing LOW rule
 with full context (comm, pid, ppid, state, which lookup steps failed). Nothing is
 silently dropped:
 
-- Every such event still reaches the alert log / Supabase at LOW → the validation
-  dataset for test runs (docker deploy/destroy, SSH logins) comes for free.
+- Every such event still reaches the file log + Supabase at LOW → the validation
+  dataset for test runs (docker deploy/destroy, SSH logins) comes for free. As shipped it
+  is **routed off the live Redis dashboard** (`RedisSink` drops `alert.Low`) to avoid
+  LOW-level alert fatigue; humans see MEDIUM+ only, the anomaly service reads Supabase.
 - After test runs confirm the LOW stream is noise, decide: keep LOW telemetry, or drop.
+  Field note (2026-07-07): a few hours produced >3000 LOW rows in Supabase — retention/
+  volume needs a policy (e.g. keep 24h, or stop LOW→DB). Tracked separately.
 
 Justification for permissiveness (mirrors Falco's reasoning): the event's own
 `mnt_ns_id` was captured atomically in-kernel at exec time — that identity signal is
@@ -163,15 +179,18 @@ never racy. Ancestry is a *secondary* refinement, not the last line of defense.
 
 ## 4. Implementation phases (stop for review after each)
 
-- **Phase 1 — cache only.** Add the cache + eviction + hit/miss DEBUG counters.
-  No detection behavior changes. Verify: counters look sane during a docker deploy.
-- **Phase 2 — unified check.** Add `trusted_parent_names` to YAML; implement
-  `isParentTrusted()`; wire into `isGloballyExcepted` + T1611 path; delete the three
-  divergent checks (static-only ppid check in isGloballyExcepted, reactive /proc Stage 2,
-  bash-only grandparent hop). Verify: deploy/destroy run produces no CRITICAL T1611 for
-  infra-descended tools; a manually spawned `bash -c curl` from a non-infra parent still alerts.
-- **Phase 3 — noise downgrade.** Unresolvable-parent events → LOW telemetry + DEBUG.
-  User runs docker deploy/destroy + SSH login tests, inspects LOW stream to confirm noise.
+- ✅ **Phase 1 — cache only.** Cache + eviction (TTL sweep, hard cap) + hit/miss counters +
+  `Bootstrap()` seeding of pre-existing procs. Done.
+- ✅ **Phase 2 — unified check.** `trusted_parent_names` in YAML; `isParentTrusted()` (shipped
+  as the bounded walk above); wired into `isGloballyExcepted` + T1611 path; the three
+  divergent checks deleted (static-only ppid check, reactive /proc Stage 2 `getParentComm`,
+  bash-only grandparent hop). Verified: docker + K8s deploys produce no CRITICAL T1611 for
+  infra-descended tools. **⚠️ Still to verify:** the false-negative half — *a manually spawned
+  `bash -c curl` from a non-infra parent still alerts.* The validate suites only exercise
+  verified-container attacks, so this permissive path is not yet directly tested.
+- ✅ **Phase 3 — noise downgrade.** Unresolvable-parent events → LOW
+  `EDR_telemetry_unresolved_namespace` (off the Redis dashboard, §3.6). Confirmed quiet on
+  docker + K8s. Open follow-up: LOW DB retention/volume (see §3.6 field note).
 
 ## 5. Deliberately deferred
 

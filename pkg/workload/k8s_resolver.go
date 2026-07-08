@@ -250,7 +250,8 @@ func containerIDFromK8sCgroup(pid string) string {
 		}
 
 		containerID := string(segments[len(segments)-1])
-		// Strip runtime-specific cgroup v2 systemd scope prefixes/suffixes.
+		// systemd cgroup driver: last segment is <prefix>-<id>.scope
+		// (e.g. cri-containerd-<id>.scope, crio-<id>.scope, docker-<id>.scope).
 		for _, prefix := range []string{"cri-containerd-", "crio-", "docker-"} {
 			if strings.HasPrefix(containerID, prefix) && strings.HasSuffix(containerID, ".scope") {
 				stripped := strings.TrimSuffix(strings.TrimPrefix(containerID, prefix), ".scope")
@@ -260,9 +261,26 @@ func containerIDFromK8sCgroup(pid string) string {
 				break
 			}
 		}
+		// cgroupfs cgroup driver: last segment is already the raw 64-hex container ID,
+		// e.g. /kubepods/burstable/pod<uid>/<id>. Used by DO managed K8s (and any node
+		// with cgroupDriver=cgroupfs). Without this the parser returned "", so every pod
+		// resolved to RuntimeHost and container detection was silently disabled.
+		if len(containerID) == containerIDLen && isHexID(containerID) {
+			return containerID
+		}
 	}
 
 	return ""
+}
+
+// isHexID reports whether s is all hexadecimal digits (a container ID).
+func isHexID(s string) bool {
+	for _, c := range s {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
+		}
+	}
+	return true
 }
 
 type crictlOutput struct {

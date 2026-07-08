@@ -32,6 +32,40 @@ later that *should* hit the dashboard, revisit (tag telemetry explicitly then).
 
 ---
 
+## KNOWN ISSUE (deferred): `./deploy.sh app` never applies the eBPF DaemonSet — Pulumi hang (2026-07-07)
+
+**Symptom:** the durable alert log (`ALERT_LOG_PATH=/alerts/alert.log` → node `/var/log/ebpf-edr/alert.log`)
+never took effect through the pipeline — the DaemonSet spec never gained `ALERT_LOG_PATH`
+across many rebuild/deploy cycles, so the agent kept writing to the ephemeral
+`/app/alerts/alert.log` (relative default).
+
+**Root cause:** health-ai `kubernetes/deploy.sh` → `_apply_daemonset()` prints
+`Applying eBPF EDR DaemonSet from local repo...` then **hangs at two `pulumi stack output`
+calls** (region/cluster) that run *before* `kubectl apply`. That's GKE/Pulumi-era code —
+**we don't use Pulumi now** — and it stalls on the DO cluster, so `kubectl apply` +
+`rollout restart` for the DaemonSet never run. Other services deploy fine (they don't go
+through that function). The new *image* still lands via `rollout restart` +
+`imagePullPolicy: Always`, which is why the binary was always current but the env never was.
+
+**Workaround in place (working):**
+`kubectl -n kube-system set env daemonset/ebpf-edr ALERT_LOG_PATH=/alerts/alert.log`
+— persists in the DS spec, survives restarts, and is NOT clobbered by `./deploy.sh app`
+(the apply hangs before touching the DaemonSet). Durable log confirmed writing
+(`/alerts/alert.log` growing; `/app/alerts` gone).
+
+**Proper fix (deferred):** in `_apply_daemonset`, drop the `pulumi stack output`
+region/cluster lookups (Pulumi unused) — hardcode/env the `${REGION}`/`${CLUSTER_NAME}`
+values for `envsubst`, or move `kubectl apply` ahead of them. Once the pipeline applies the
+manifest, `ALERT_LOG_PATH` flows via the already-wired chain: `.env` → deploy.sh ConfigMap
+key `alert-log-path` → manifest `configMapKeyRef` (optional). No agent code change needed —
+the Go side (config.go env read + file_sink dir create) is correct.
+
+**Related open item:** on K8s the Supabase sink is disabled (`DATABASE_URL` resolves over
+IPv6; DO nodes have no IPv6 route), so LOW telemetry currently persists only to the node
+file until the DB URL uses the IPv4/Supavisor endpoint.
+
+---
+
 ## Known Issue: Docker Container Cache Never Evicts (2026-07-06)
 
 **Status:** `listenDockerEvents()` is commented out in `DockerResolver.Start()` (`pkg/workload/docker_resolver.go`). Disabled today because its recovery/reconnect logic had unresolved issues and is hard to test reliably without a live Docker daemon to script event sequences against.
