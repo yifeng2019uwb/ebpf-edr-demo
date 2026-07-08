@@ -45,7 +45,7 @@ const (
 	fileDedupWindow = time.Second
 
 	cacheCleanUpWorkerInterval     = 5 * time.Minute
-	debugResolveDetecCheckInterval = 50 * time.Microsecond
+	debugResolveDetecCheckInterval = 100 * time.Microsecond
 
 	// Graceful shutdown timings
 	shutdownWaitInterval = 100 * time.Millisecond // time for goroutines to finish between channel closes
