@@ -34,9 +34,16 @@ spec:
         - name: CONTAINER_RUNTIME_ENDPOINT
           value: unix:///run/containerd/containerd.sock
         # Durable alert log on the node hostPath (survives pod restarts).
-        # Must match the `alerts` volumeMount below (/alerts → /var/log/ebpf-edr).
+        # Value comes from the ebpf-alerts ConfigMap (deploy.sh builds it from .env),
+        # same as DATABASE_URL/PUBSUB_ADDR. Must resolve to the `alerts` volumeMount
+        # below (/alerts → /var/log/ebpf-edr). optional: if the key is absent the binary
+        # falls back to its default path (alerts/alert.log) instead of failing to start.
         - name: ALERT_LOG_PATH
-          value: /alerts/alert.log
+          valueFrom:
+            configMapKeyRef:
+              name: ebpf-alerts
+              key: alert-log-path
+              optional: true
         # Alert infrastructure (from ConfigMap)
         - name: DATABASE_URL
           valueFrom:
