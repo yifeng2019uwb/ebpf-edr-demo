@@ -6,12 +6,11 @@
 #   1. Attack detection: each threat rule fires correctly
 #   2. No false positives: normal service traffic does not trigger alerts
 #
-# Tests are distributed across 4 services to confirm eBPF monitors the full stack:
-#   auth_service     — T2 (net-tool), T5 (ext-connect + block), T13 (container-mgmt)
+# Tests are distributed across services to confirm eBPF monitors the full stack:
+#   auth_service     — T5 (ext-connect + block), T13 (container-mgmt)
 #   user_service     — T1 (shell-spawn), T4 (ssh-key), T10 (cron), T12 (credentials-env)
-#   order_service    — T3 (shadow), T7 (host-fs), T9 (masquerade)
+#   order_service    — T3 (shadow), T9 (masquerade)
 #   insights_service — T8 (passwd), T11 (history)
-#   inventory_service — T6 (allowlist passive check, no change)
 #
 # Run on the GCP VM as root while the EDR agent is running.
 #
@@ -27,8 +26,11 @@ AUTH_SVC="order-processor-auth_service"        # T2, T5, T13
 USER_SVC="order-processor-user_service"        # T1, T4, T10, T12
 ORDER_SVC="order-processor-order_service"      # T3, T7, T9
 INSIGHTS_SVC="order-processor-insights_service" # T8, T11
-INV="order-processor-inventory_service"        # T6: external connects are allowlisted
-LOG="alerts/alert.log"
+# Alert log the agent writes. Resolved absolutely (script-relative) so it matches the
+# agent's alerts/alert.log regardless of the caller's CWD. Override with ALERT_LOG_PATH
+# if the agent writes elsewhere (e.g. its own ALERT_LOG_PATH env).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOG="${ALERT_LOG_PATH:-$SCRIPT_DIR/alerts/alert.log}"
 INTEGRATION_TESTS="/home/yifeng2019/workspace/cloud-native-order-processor/integration_tests/run_all_tests.sh"
 
 # Unique temp directory — avoids name collisions with stale files from previous runs.
@@ -53,15 +55,16 @@ pass() { echo -e "${GREEN}[PASS]${NC} $*"; ((PASS++)) || true; }
 fail() { echo -e "${RED}[FAIL]${NC} $*"; ((FAIL++)) || true; }
 skip() { echo -e "${YELLOW}[SKIP]${NC} $*"; ((SKIP++)) || true; }
 
-# Wait for alert matching pattern in log (poll every 2s, timeout 30s)
+# Wait for alert matching pattern in log (poll every 2s, timeout 30s).
+# Scans only the TAIL — the alert fires within ~2s of the attack, so it's at the very end;
+# tailing also avoids matching stale alerts from earlier in a long-running log.
 expect_alert() {
     local pattern=$1
     local timeout=${2:-30}
-    local start_line=${3:-1}
 
     local elapsed=0
     while [[ $elapsed -lt $timeout ]]; do
-        if tail -n +$start_line "${LOG}" 2>/dev/null | grep -qE "$pattern"; then
+        if tail -n 30 "${LOG}" 2>/dev/null | grep -qE "$pattern"; then
             return 0
         fi
         sleep 2
@@ -131,43 +134,6 @@ else
 fi
 sleep 2
 
-# ── T2: Network staging tool in container — auth_service ─────────────────────
-# T1105 · T1095
-# Detection fires on binary name — nc/ncat/wget must be executed inside the container.
-# If not installed, copy nc from the host into /usr/local/bin (not /tmp — avoids T1036).
-
-header 2 13 "Network staging tool in container (auth_service)" "HIGH T1105_ingress_tool_transfer"
-T2_SINCE=$(date +%s%N)
-T2_TRIGGERED=false
-if docker exec "${AUTH_SVC}" which nc > /dev/null 2>&1; then
-    echo "  Using nc"
-    docker exec "${AUTH_SVC}" nc -w 2 1.1.1.1 80 2>/dev/null || true
-    T2_TRIGGERED=true
-elif docker exec "${AUTH_SVC}" which ncat > /dev/null 2>&1; then
-    echo "  Using ncat"
-    docker exec "${AUTH_SVC}" ncat -w 2 1.1.1.1 80 2>/dev/null || true
-    T2_TRIGGERED=true
-elif docker exec "${AUTH_SVC}" which wget > /dev/null 2>&1; then
-    echo "  Using wget"
-    docker exec "${AUTH_SVC}" wget --timeout=2 -q http://1.1.1.1 2>/dev/null || true
-    T2_TRIGGERED=true
-elif which nc > /dev/null 2>&1; then
-    echo "  Copying nc from host..."
-    docker cp "$(which nc)" "${AUTH_SVC}":/usr/local/bin/nc 2>/dev/null || true
-    docker exec "${AUTH_SVC}" /usr/local/bin/nc -w 2 1.1.1.1 80 2>/dev/null || true
-    T2_TRIGGERED=true
-else
-    skip "T2: nc/ncat/wget not available"
-fi
-if [[ "$T2_TRIGGERED" == true ]]; then
-    if expect_alert "HIGH.*T1105_ingress_tool_transfer.*auth_service" 30; then
-        pass "T2: HIGH T1105 detected"
-    else
-        fail "T2: no HIGH T1105 alert within timeout"
-    fi
-fi
-sleep 2
-
 # ── T3: OS credential dumping — order_service ────────────────────────────────
 # T1003.008
 
@@ -191,7 +157,11 @@ header 4 13 "Read SSH private key from container (user_service)" "HIGH T1552_004
 echo 'test-key-material' > "${TESTDIR}/id_rsa"
 docker cp "${TESTDIR}/id_rsa" "${USER_SVC}":/tmp/id_rsa 2>/dev/null || true
 docker exec "${USER_SVC}" cat /tmp/id_rsa 2>/dev/null || true
-pass
+if expect_alert "HIGH.*T1552_004_private_keys.*user_service" 30; then
+    pass "T4: HIGH T1552_004 detected"
+else
+    fail "T4: no HIGH T1552_004 alert within timeout"
+fi
 sleep 3
 
 # ── T5: Unauthorized external connect + LPMTrie block verification — auth_service
@@ -259,37 +229,10 @@ except OSError as e:
 " 2>&1 || true)
 echo "  ${UNBLOCK_RESULT}"
 
-pass
-sleep 3
-
-# ── T6: Authorized external connect (allowlisted — no alert expected) ─────────
-
-header 6 13 "Authorized external connect — inventory_service" "no alert (allowlisted)"
-echo "  Triggering inventory_service to call CoinGecko..."
-docker exec "${INV}" python3 -c "
-import socket
-s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.settimeout(4)
-try:
-    s.connect(('209.97.132.148', 443))
-finally:
-    s.close()
-" 2>/dev/null || true
-pass
-sleep 3
-
-# ── T7: Host reads container filesystem — order_service ──────────────────────
-# T1611
-
-header 7 13 "Host process reads container filesystem (order_service)" "CRITICAL T1611_escape_to_host_fs + action=kill_process"
-MERGED=$(docker inspect "${ORDER_SVC}" \
-    --format '{{.GraphDriver.Data.MergedDir}}' 2>/dev/null || echo "")
-
-if [[ -z "${MERGED}" ]]; then
-    echo "  SKIP: could not resolve overlay2 MergedDir for ${ORDER_SVC}"
+if expect_alert "HIGH.*T1041_exfiltration_over_c2.*auth_service.*8\.8\.8\.8" 30; then
+    pass "T5: HIGH T1041 detected (block verification printed above)"
 else
-    cat "${MERGED}/etc/hostname" 2>/dev/null || true
-    pass
+    fail "T5: no HIGH T1041 alert within timeout"
 fi
 sleep 3
 
@@ -298,7 +241,11 @@ sleep 3
 
 header 8 13 "Read /etc/passwd from container — system recon (insights_service)" "MEDIUM T1082_system_info_discovery"
 docker exec "${INSIGHTS_SVC}" cat /etc/passwd 2>/dev/null || true
-pass
+if expect_alert "MEDIUM.*T1082_system_info_discovery.*insights_service.*passwd" 30; then
+    pass "T8: MEDIUM T1082 detected"
+else
+    fail "T8: no MEDIUM T1082 alert within timeout"
+fi
 sleep 3
 
 # ── T9: Binary masquerading — order_service ───────────────────────────────────
@@ -309,7 +256,11 @@ header 9 13 "Binary masquerading from /tmp (order_service)" "HIGH T1036_masquera
 docker exec "${ORDER_SVC}" cp /bin/cat /tmp/sshd 2>/dev/null || true
 sleep 1
 docker exec "${ORDER_SVC}" /tmp/sshd /etc/hostname 2>/dev/null || true
-pass
+if expect_alert "HIGH.*T1036_masquerading.*order_service" 30; then
+    pass "T9: HIGH T1036 detected"
+else
+    fail "T9: no HIGH T1036 alert within timeout"
+fi
 sleep 3
 
 # ── T10: Cron configuration access — user_service ────────────────────────────
@@ -320,7 +271,11 @@ header 10 13 "Cron config access from container (user_service)" "HIGH T1053_003_
 echo "* * * * * root /tmp/evil_payload" > "${TESTDIR}/crontab"
 docker cp "${TESTDIR}/crontab" "${USER_SVC}":/etc/crontab
 docker exec "${USER_SVC}" cat /etc/crontab 2>/dev/null || true
-pass
+if expect_alert "HIGH.*T1053_003_scheduled_task_cron.*user_service" 30; then
+    pass "T10: HIGH T1053_003 detected"
+else
+    fail "T10: no HIGH T1053_003 alert within timeout"
+fi
 sleep 3
 
 # ── T11: Command history access — insights_service ───────────────────────────
@@ -332,7 +287,11 @@ header 11 13 "Command history access from container (insights_service)" "MEDIUM 
 echo "rm -rf /important_data" > "${TESTDIR}/bash_history"
 docker cp "${TESTDIR}/bash_history" "${INSIGHTS_SVC}":/tmp/.bash_history 2>/dev/null || true
 docker exec "${INSIGHTS_SVC}" cat /tmp/.bash_history 2>/dev/null || true
-pass
+if expect_alert "MEDIUM.*T1070_003_clear_command_history.*insights_service" 30; then
+    pass "T11: MEDIUM T1070_003 detected"
+else
+    fail "T11: no MEDIUM T1070_003 alert within timeout"
+fi
 sleep 3
 
 # ── T12: Credentials in .env file — user_service ─────────────────────────────
@@ -344,7 +303,11 @@ header 12 13 "Credentials in .env file from container (user_service)" "HIGH T155
 echo "DB_PASSWORD=super_secret_password" > "${TESTDIR}/app.env"
 docker cp "${TESTDIR}/app.env" "${USER_SVC}":/tmp/app.env 2>/dev/null || true
 docker exec "${USER_SVC}" cat /tmp/app.env 2>/dev/null || true
-pass
+if expect_alert "HIGH.*T1552_001_credentials_in_files.*user_service" 30; then
+    pass "T12: HIGH T1552_001 detected"
+else
+    fail "T12: no HIGH T1552_001 alert within timeout"
+fi
 sleep 3
 
 # ── T13: Container management tool execution — auth_service ──────────────────
@@ -360,7 +323,11 @@ if which docker > /dev/null 2>&1; then
 else
     echo "  SKIP: docker not on PATH — cannot copy binary to container"
 fi
-pass
+if expect_alert "HIGH.*T1613_container_resource_discovery.*auth_service" 30; then
+    pass "T13: HIGH T1613 detected"
+else
+    fail "T13: no HIGH T1613 alert within timeout"
+fi
 sleep 3
 
 # ── summary ───────────────────────────────────────────────────────────────────
@@ -387,5 +354,4 @@ echo -e "  ${GREEN}${PASS} passed${NC}  ${RED}${FAIL} failed${NC}  ${YELLOW}${SK
 echo "══════════════════════════════════════════════════════"
 echo ""
 echo "  Log: tail -20 ${LOG}"
-echo "  Note: T4-T13 use simple 'pass' — add expect_alert() for those tests as needed"
 echo "══════════════════════════════════════════════════════"

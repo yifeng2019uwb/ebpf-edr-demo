@@ -20,7 +20,6 @@ import (
 	"ebpf-edr-demo/internal/alert"
 	"ebpf-edr-demo/internal/config"
 	"ebpf-edr-demo/internal/processor"
-	"ebpf-edr-demo/pkg"
 	"ebpf-edr-demo/pkg/alertsink"
 	"ebpf-edr-demo/pkg/bpf"
 	"ebpf-edr-demo/pkg/detector"
@@ -53,8 +52,8 @@ const (
 
 type fileDedupKey struct {
 	Pid      uint32
-	Comm     [pkg.TaskCommLen]byte    // matches kernel/opensnoop.h
-	Filename [pkg.MaxFilenameLen]byte // matches kernel/opensnoop.h
+	Comm     string // CString form, NOT the raw [N]byte: trailing bytes after the null
+	Filename string // differ between events for the same open, defeating byte-array dedup
 }
 
 const fileDedupShards = 32 // shard count: distributes lock contention across cores
@@ -133,8 +132,8 @@ func main() {
 	var rawDropped atomic.Int64      // kernel events lost before enrichment
 	var enrichedDropped atomic.Int64 // enriched events lost before detection
 	var alertDropped atomic.Int64    // alerts lost before handler
-	var unknownNs atomic.Int64       // pending events that expired without resolving
-	var resolvedEvents atomic.Int64  // events successfully processed from rawCh → enrichedCh (temp debug)
+	var unknownNs atomic.Int64       // debug - pending events that expired without resolving
+	var resolvedEvents atomic.Int64  // debug - events successfully processed from rawCh → enrichedCh (temp debug)
 
 	var pendingMu sync.Mutex
 	pendingBuf := make(map[uint32][]pendingEntry)
@@ -323,8 +322,8 @@ func startEnricherWorker(
 				// Optimization: Use sharded locks (32 shards indexed by PID) to reduce contention on multi-core systems.
 				key := fileDedupKey{
 					Pid:      uint32(ev.File.Pid),
-					Comm:     ev.File.Comm,
-					Filename: ev.File.Filename,
+					Comm:     processor.CString(ev.File.Comm[:]),
+					Filename: processor.CString(ev.File.Filename[:]),
 				}
 				shardIdx := uint32(ev.File.Pid) % fileDedupShards
 				shard := &fileDedupShards_array[shardIdx]

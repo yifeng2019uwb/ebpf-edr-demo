@@ -52,13 +52,39 @@ so no FP here — allowlist per-service if a future service uses exec-curl probe
 **Verified:** `./validate-do-k8s.sh` → **11/11**, real service/pod/namespace attribution,
 kill-responses firing, no FPs on normal traffic.
 
+**Docker `validate.sh` (rewritten to assert for real):**
+- Alert-source fix: `LOG` is resolved absolutely (script-relative), overridable via
+  `ALERT_LOG_PATH`. The docker agent loads `infra/.env` (godotenv), so its `ALERT_LOG_PATH`
+  must be the docker path (`alerts/alert.log`), NOT the K8s `/alerts/alert.log` — that mismatch
+  was why the file looked empty. K8s gets its path from the manifest, not `infra/.env`.
+- `expect_alert` now asserts real alerts for **T1, T3, T4, T5, T8–T13** (was bare `pass`).
+- **Removed tests (cover later, need work):**
+  - **T2** (T1105 net-tool) — needs a *working* `nc`/`ncat`/`wget` in the container; the Python
+    images have none and a host-copied `nc` won't run (missing libs). Re-add per-image with a
+    static tool.
+  - **T6** (allowlist negative) — needs a `no_alert` helper to actually verify "no alert fired";
+    was a passive `pass`.
+  - **T7** (T1611 host-reads-container-overlay) — detection is **commented out** in
+    `checkFileRules`; wire that rule first, then re-add the test.
+- Header numbering still says `/13` (10 tests now) — cosmetic, renumber if it bugs you.
+
+**Post-validation FP tuning:**
+- **T1082 `/etc/passwd` FP storm (FIXED).** T1082 fired on *any* container reading
+  `/etc/passwd`/`/etc/group`, but those are world-readable and read constantly by libc NSS
+  (`getpwuid`/`getgrgid`) → every normal service tripped it. Now gated on the READER: only fires
+  when a recon/shell tool reads them (new `recon_file_readers` list in `default.yaml`; check in
+  `yaml_detector.go` T1082 block). App NSS reads no longer alert; `cat /etc/passwd` still does.
+  Caveat: a service whose entrypoint runs `getent`/`id`/`cat` at startup would still fire —
+  allowlist that service if it happens.
+
 **Cleanup / minor left:**
 - Temp debug: removed mine (`DEBUG k8s async`); yours (`DEBUG k8s Resolve`) are commented out —
   delete when convenient.
 - `default.yaml` `Health checks…` exception comment is now stale (no longer applies to containers).
 - File-dedup double-fire: some file alerts fire twice ~80ms apart despite the 1s
-  `fileDedupWindow` — cosmetic noise, low priority.
-- **Docker** is fixed by the same type-mismatch fix but should be re-validated.
+  `fileDedupWindow` — cosmetic noise, low priority. Likely the dedup key differs subtly between
+  the two events (thread vs group-leader pid, or trailing bytes in `Comm`/`Filename`).
+- **Docker** is fixed by the same type-mismatch fix but should be re-validated end-to-end.
 
 ---
 
