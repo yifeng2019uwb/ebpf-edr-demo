@@ -51,6 +51,9 @@ func (r *K8sResolver) Start() error {
 	log.Printf("k8s resolver: host namespace ID = %d, self namespace ID = %d (0 means detection failed, fast path disabled)", r.hostNsID, r.selfNsID)
 	r.lookupSem = make(chan struct{}, k8sLookupWorkerLimit)
 	r.containerIDMap = make(map[string]ResolveResult)
+	// Populate the crictl container→metadata map BEFORE the initial cache scan, so
+	// pre-populated namespaces get their real pod/service names (not placeholders).
+	r.refreshCrictlCache()
 	r.cache = r.buildInitialCache()
 
 	// Kubernetes is dynamic: pods start / stop / scale anytime
@@ -82,7 +85,6 @@ func (r *K8sResolver) bareResult(state ResolveState) ResolveResult {
 func (r *K8sResolver) Resolve(event interface{}) ResolveResult {
 	// Pod-focused resolution.
 	// We only deal with pods and anomalous namespaces here.
-
 	// Extract fields from event based on type
 	var mntNsID uint32
 	var pid uint32
@@ -102,14 +104,19 @@ func (r *K8sResolver) Resolve(event interface{}) ResolveResult {
 		pid = uint32(ev.Pid)
 		comm = processor.CString(ev.Comm[:])
 	default:
+		// log.Printf("DEBUG k8s Resolve - return default as StateUnknow")
 		return r.bareResult(StateUnknown)
 	}
+
+	// log.Printf("DEBUG k8s Resolve start")
 
 	// Fast path: host namespace — known at startup, resolved synchronously.
 	// Transient node/host processes (kubelet-spawned probe helpers, SSH sessions on
 	// the node) die before async resolution completes; without this they time out to
 	// state=unknown. Mirrors the Docker resolver's host fast path.
 	if r.hostNsID != 0 && mntNsID == r.hostNsID {
+		// log.Printf("DEBUG k8s Resolve: ns=%d comm=%s -> state=%s via=%s",
+		// 	mntNsID, comm, StateResolved, "hostfastpath|cachehit|pending")
 		return ResolveResult{
 			Identity: WorkloadIdentity{Runtime: RuntimeHost, Service: HostProcessService, Env: r.env},
 			Meta:     WorkloadMeta{Node: r.node, Region: r.region, Cluster: r.cluster},
@@ -122,11 +129,15 @@ func (r *K8sResolver) Resolve(event interface{}) ResolveResult {
 	r.mu.RUnlock()
 
 	if exists {
+		// log.Printf("DEBUG k8s Resolve: ns=%d comm=%s -> state=%s via=%s",
+		// 	mntNsID, comm, result.State, "hostfastpath|cachehit|pending")
 		return result
 	}
 
 	// Deduplicate: if this namespace is already being looked up, don't spawn another worker
 	if _, loading := r.resolvingTasks.LoadOrStore(mntNsID, true); loading {
+		// log.Printf("DEBUG k8s Resolve: ns=%d comm=%s -> state=%s via=%s",
+		// 	mntNsID, comm, StatePending, "hostfastpath|cachehit|pending")
 		return ResolveResult{State: StatePending}
 	}
 
@@ -134,6 +145,8 @@ func (r *K8sResolver) Resolve(event interface{}) ResolveResult {
 	go r.asyncResolveNamespace(mntNsID, pid, comm)
 
 	// Return instantly (<1 microsecond execution path)
+	// log.Printf("DEBUG k8s Resolve: ns=%d comm=%s -> state=%s via=%s",
+	// 	mntNsID, comm, StatePending, "hostfastpath|cachehit|pending")
 	return ResolveResult{State: StatePending}
 }
 
@@ -154,13 +167,70 @@ func (r *K8sResolver) refreshCrictlCache() {
 func (r *K8sResolver) buildInitialCache() map[uint32]ResolveResult {
 	m := make(map[uint32]ResolveResult)
 
-	// Seed the agent's own namespace as host (pid=1 host ns is handled by the
-	// Resolve() fast path). Prevents the agent's own events from going through async
-	// resolution.
+	// Seed the agent's own namespace as RuntimeHost — NOT RuntimeK8s. bareResult uses
+	// RuntimeK8s, which isContainerContext treats as a container, so the agent's own
+	// processes (notably the crictl sync every 5s) would fire false T1613 alerts.
 	if r.selfNsID != 0 {
-		m[r.selfNsID] = r.bareResult(StateResolved)
+		m[r.selfNsID] = ResolveResult{
+			Identity: WorkloadIdentity{Runtime: RuntimeHost, Service: HostProcessService, Env: r.env},
+			Meta:     WorkloadMeta{Node: r.node, Region: r.region, Cluster: r.cluster},
+			State:    StateResolved,
+		}
 	}
 
+	// Pre-populate all running container namespaces from /proc, so detection works
+	// immediately after an agent (re)start. Without this the cache is cold and
+	// short-lived container processes (health checks, exec'd attacks) die before lazy
+	// resolution completes → they time out to state=unknown and are missed. Mirrors
+	// the Docker resolver's buildCache().
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		log.Printf("k8s resolver: initial cache /proc scan failed: %v", err)
+		return m
+	}
+	seeded := 0
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		pidStr := e.Name()
+		if pidStr[0] < '0' || pidStr[0] > '9' {
+			continue // not a pid directory
+		}
+		containerID := containerIDFromK8sCgroup(pidStr) // cgroup read first (cheap filter)
+		if containerID == "" {
+			continue
+		}
+		pid64, err := strconv.ParseUint(pidStr, 10, 32)
+		if err != nil {
+			continue
+		}
+		nsID := getMntNsID(int(pid64))
+		if nsID == 0 {
+			continue
+		}
+		if _, exists := m[nsID]; exists {
+			continue // namespace already known (dedup)
+		}
+		r.containerIDMu.RLock()
+		metadata, found := r.containerIDMap[containerID]
+		r.containerIDMu.RUnlock()
+		if found {
+			m[nsID] = metadata
+		} else {
+			shortID := containerID
+			if len(shortID) > dockerShortIDLen {
+				shortID = shortID[:dockerShortIDLen]
+			}
+			m[nsID] = ResolveResult{
+				Identity: WorkloadIdentity{Runtime: RuntimeK8s, Service: "k8s-pod-" + shortID, Env: r.env},
+				Meta:     WorkloadMeta{Container: containerID, Node: r.node, Region: r.region, Cluster: r.cluster},
+				State:    StateResolved,
+			}
+		}
+		seeded++
+	}
+	log.Printf("k8s resolver: initial cache pre-populated %d container namespaces", seeded)
 	return m
 }
 
@@ -174,8 +244,18 @@ func (r *K8sResolver) asyncResolveNamespace(mntNsID uint32, pid uint32, comm str
 	// 1. Targeted cgroup read for the event's PID (not global scan)
 	containerID := containerIDFromK8sCgroup(strconv.Itoa(int(pid)))
 
-	// Fallback: if pod vanished or cgroup parsing failed, mark as host process
+	// Fallback: cgroup had no kubepods container ID.
 	if containerID == "" {
+		// Do NOT cache a dead transient as host. If the process already exited, its
+		// /proc entry is gone, so containerIDFromK8sCgroup returns "" whether it was a
+		// container or a host process — and the K8s cache has NO eviction, so a wrong
+		// "host" entry is permanent and poisons the whole namespace, silently disabling
+		// detection for that container. Mirror the Docker resolver: skip caching for
+		// dead transients; a later live process in the same namespace resolves it
+		// correctly. (This is what caused all container detection to go dark on K8s.)
+		if _, err := os.Stat("/proc/" + strconv.Itoa(int(pid))); os.IsNotExist(err) {
+			return
+		}
 		r.mu.Lock()
 		r.cache[mntNsID] = ResolveResult{
 			Identity: WorkloadIdentity{Runtime: RuntimeHost, Service: HostProcessService, Env: r.env},
@@ -317,10 +397,11 @@ func crictlContainerMap(node, region, cluster, env string) map[string]ResolveRes
 			continue
 		}
 
-		// Normalize service name: strips Compose stack prefixes and converts underscores to dashes.
-		// Ensures consistent naming across Docker Compose and K8s deployments.
-		// Example: "order-processor-auth_service" → "auth-service"
-		service := normalizeServiceName(containerName)
+		// The K8s container name (io.kubernetes.container.name) is already the clean
+		// service name, e.g. "auth-service". Do NOT run normalizeServiceName here — that
+		// is a Docker-Compose stack-prefix stripper and it wrongly chops "auth-service"
+		// → "service" (it splits on the last '-'), mislabeling every hyphenated service.
+		service := containerName
 
 		m[c.ID] = ResolveResult{
 			Identity: WorkloadIdentity{

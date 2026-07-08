@@ -1,12 +1,64 @@
 # Project Handoff — Current Status
 
-**Last Updated:** 2026-07-07 (Process Ancestry Cache — Phase 2 + Phase 3 landed)  
-**Status:** 🔄 False Positive Reduction — parent-based verification implemented, tuning on Docker
+**Last Updated:** 2026-07-08 (K8s detection restored — full validation green)  
+**Status:** ✅ Detection working on DO K8s — `./validate-do-k8s.sh` passes 11/11; ancestry/Phase-3 FP work also in
 - Layer 1 fast-path filtering: ✅ DONE (ppid==0, pid in safeInfraPIDs)
-- Layer 2 whitelisting: ✅ DONE (global_exceptions + exception macros)
+- Layer 2 whitelisting: ✅ DONE (global_exceptions + exception macros; now skipped for verified containers)
 - Process ancestry cache + bounded ancestry walk: ✅ DONE (replaces the old name-based blocklists — see `docs/DESIGN-PROCESS-ANCESTRY-CACHE.md`)
 - Phase 3 unresolved→LOW telemetry downgrade: ✅ DONE (no more CRITICAL T1611 for transient host processes)
+- K8s workload resolution: ✅ FIXED (was fully broken — see 2026-07-08 section below)
 - **Note:** the "Two-Stage Parent Process Verification" sections further down are SUPERSEDED by the ancestry-cache design; kept only for history.
+
+---
+
+## DONE: K8s detection was fully broken → restored, 11/11 validation green (2026-07-08)
+
+A day-long hunt. K8s detection produced **only** `state=unknown` / LOW telemetry — no container
+alerts at all. Root cause + a stack of resolver bugs beneath it, all now fixed.
+
+**Root cause (the big one):** `cmd/edr-monitor/main.go` passed a `*pipeline.EnrichedEvent`
+to `WorkloadResolver.Resolve()`, but every resolver type-switches only on
+`*processor.ProcessEvent/FileEvent/NetEvent` → hits `default` → `StateUnknown` for **every**
+event, on **both** runtimes (Docker was broken the same way, just untested). The `interface{}`
+param meant the compiler never flagged it. A refactor had swapped `r.Resolve(ev)` →
+`r.Resolve(enriched)`. Fix: pass the underlying `*processor` event (`enrich()` uses `ev`;
+pending-retry uses new `underlyingEvent()` helper). **Note in memory:
+`resolver-takes-processor-events`.** If detection ever goes fully dark (all state=unknown),
+check the `.Resolve(...)` argument type FIRST.
+
+**Resolver bugs found underneath (all in `pkg/workload/k8s_resolver.go`), each only reachable
+once the type switch was fixed:**
+1. **cgroupfs parser** — `containerIDFromK8sCgroup` only handled the systemd driver
+   (`cri-containerd-<id>.scope`). DO nodes use **cgroupfs** (`/kubepods/burstable/pod<uid>/<raw-64-hex>`).
+   Added a raw-64-hex fallback (`isHexID`).
+2. **Dead-transient poisoning** — a dead process's empty cgroup was cached as `RuntimeHost`,
+   and the K8s cache has no eviction → permanently poisoned the namespace. Now skips caching
+   when `/proc/<pid>` is gone (mirrors Docker).
+3. **No startup pre-population** — `buildInitialCache` only seeded self; Docker's `buildCache`
+   scans `/proc`. Added a `/proc` scan that pre-resolves all container namespaces (logs
+   `initial cache pre-populated N container namespaces`), so cold-start after a redeploy
+   doesn't miss short-lived attacks.
+4. **Agent self-FP** — the agent's own namespace was seeded via `bareResult` = `RuntimeK8s`,
+   so its 5s `crictl` sync fired false T1613. Now seeded as `RuntimeHost`.
+5. **Service-name mangling** — `normalizeServiceName("auth-service")` → `"service"` (splits on
+   last `-`; a Docker-Compose helper). K8s now uses the container name directly.
+
+**Detection policy:** `parent_context: infrastructure` global-exceptions no longer apply to
+**verified-container** events (`yaml_detector.go`) — a shell/curl *inside* a container is the
+signal (T1059/T1105/T1041), not host noise. This is what got V2/V4/V8/V10 to fire. Tradeoff:
+container `curl/wget` now alerts; exec-style liveness probes would too (health-ai uses httpGet,
+so no FP here — allowlist per-service if a future service uses exec-curl probes).
+
+**Verified:** `./validate-do-k8s.sh` → **11/11**, real service/pod/namespace attribution,
+kill-responses firing, no FPs on normal traffic.
+
+**Cleanup / minor left:**
+- Temp debug: removed mine (`DEBUG k8s async`); yours (`DEBUG k8s Resolve`) are commented out —
+  delete when convenient.
+- `default.yaml` `Health checks…` exception comment is now stale (no longer applies to containers).
+- File-dedup double-fire: some file alerts fire twice ~80ms apart despite the 1s
+  `fileDedupWindow` — cosmetic noise, low priority.
+- **Docker** is fixed by the same type-mismatch fix but should be re-validated.
 
 ---
 

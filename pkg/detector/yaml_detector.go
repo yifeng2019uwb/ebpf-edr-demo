@@ -338,6 +338,14 @@ func (d *YAMLDetector) isGloballyExcepted(ev pipeline.EnrichedEvent) bool {
 					continue
 				}
 			case "infrastructure":
+				// parent_context: infrastructure quiets HOST/node infra noise (sshd
+				// sessions, runtime health helpers). It must NOT suppress verified-container
+				// events: a shell or curl INSIDE a container is the detection signal
+				// (T1059/T1105/T1041), even though its parent is containerd-shim (trusted).
+				// So this exception only applies off-container.
+				if isContainerContext(ev.Workload) {
+					continue // container event → host-infra exception does not apply
+				}
 				// Verified via static Layer 1 PIDs or the live ancestry cache
 				// (covers post-startup daemon instances and shell-mediated spawns)
 				if !d.isParentTrusted(ppid) {

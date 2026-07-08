@@ -386,8 +386,10 @@ func startPendingRetryWorker(
 					continue
 				}
 
-				// Resolve using first event: all events in this nsID group share a namespace
-				res := resolver.Resolve(&entries[0].ev)
+				// Resolve using first event: all events in this nsID group share a namespace.
+				// Pass the underlying *processor event — Resolve type-switches on those,
+				// not on EnrichedEvent (the workload pkg can't import pipeline).
+				res := resolver.Resolve(underlyingEvent(entries[0].ev))
 
 				// Success: namespace resolved — apply resolution to all events in this group
 				if res.State == workload.StateResolved {
@@ -550,7 +552,7 @@ func enrich(raw pipeline.RawEvent, r workload.WorkloadResolver) *pipeline.Enrich
 			Timestamp: time.Now(),
 		}
 		start := time.Now()
-		enriched.Workload = r.Resolve(enriched)
+		enriched.Workload = r.Resolve(ev)
 		resolveTime := time.Since(start)
 		if resolveTime > debugResolveDetecCheckInterval {
 			log.Printf("DEBUG: resolve process took %v", resolveTime)
@@ -570,7 +572,7 @@ func enrich(raw pipeline.RawEvent, r workload.WorkloadResolver) *pipeline.Enrich
 			Timestamp: time.Now(),
 		}
 		start := time.Now()
-		enriched.Workload = r.Resolve(enriched)
+		enriched.Workload = r.Resolve(ev)
 		resolveTime := time.Since(start)
 		if resolveTime > debugResolveDetecCheckInterval {
 			log.Printf("DEBUG: resolve file took %v", resolveTime)
@@ -589,7 +591,7 @@ func enrich(raw pipeline.RawEvent, r workload.WorkloadResolver) *pipeline.Enrich
 			Timestamp: time.Now(),
 		}
 		start := time.Now()
-		enriched.Workload = r.Resolve(enriched)
+		enriched.Workload = r.Resolve(ev)
 		resolveTime := time.Since(start)
 		if resolveTime > debugResolveDetecCheckInterval {
 			log.Printf("DEBUG: resolve net took %v", resolveTime)
@@ -803,6 +805,22 @@ func startEventReader(cfg struct {
 			}
 		}
 	}
+}
+
+// underlyingEvent returns the raw *processor event carried by an EnrichedEvent.
+// WorkloadResolver.Resolve type-switches on the processor structs (the workload
+// package cannot import pipeline — EnrichedEvent.Workload would be a circular import),
+// so callers must hand it the underlying event, not the EnrichedEvent wrapper.
+func underlyingEvent(ev pipeline.EnrichedEvent) interface{} {
+	switch ev.Type {
+	case pipeline.ProcessEventType:
+		return ev.Process
+	case pipeline.FileEventType:
+		return ev.File
+	case pipeline.NetEventType:
+		return ev.Net
+	}
+	return nil
 }
 
 func mntNsIDOf(ev pipeline.EnrichedEvent) uint32 {
