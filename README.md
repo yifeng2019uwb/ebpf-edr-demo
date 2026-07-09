@@ -59,8 +59,9 @@ USERSPACE (Go Agent)
 
 **Resolution & Detection:**
 - `pkg/workload/` — Real-time container and pod identity resolution
-- `pkg/detector/` + `pkg/rules/` — Detection engine with YAML-based ruleset (`rules/common.yaml`)
-- `pkg/detector/responder.go` — Active mitigation (kill_process, blockIP)
+- `pkg/detector/` + `pkg/rules/` — Detection engine with YAML-based ruleset (`rules/*.yaml`:
+  per-sensor detections + response, shared lists in `common.yaml`)
+- `pkg/detector/response.go` — Active mitigation (kill_process, block_ip)
 
 **Alert Distribution:**
 - `pkg/alertsink/` — Multi-destination alerting (file, Redis Pub/Sub, Supabase)
@@ -74,9 +75,9 @@ USERSPACE (Go Agent)
 
 ## ✨ Key Features
 
-- ✅ **14 MITRE Techniques** — Container escape, privilege escalation, data exfiltration, discovery, and more
-- ✅ **Dynamic YAML Rules** — Update detection logic without recompiling BPF bytecode
-- ✅ **Environment-Aware** — Multi-cloud whitelisting (GCP, DigitalOcean, Kubernetes) to suppress noise
+- ✅ **15 MITRE Techniques** — Container escape, credential access, data exfiltration, discovery, and more
+- ✅ **Declarative YAML Rules** — Match, severity, order, exceptions, and response per detection; no BPF or Go changes to tune
+- ✅ **Environment-Aware** — Workload identity (Docker/K8s) + ancestry-based trust to suppress infrastructure noise
 - ✅ **Active Response** — Immediate automated actions: kill process, block IP (IPv4), with audit trail
 - ✅ **Real-Time Alerts** — Instant dispatch via Redis Pub/Sub + persistent storage in Supabase
 - ✅ **Zero Footprint** — No sidecar agents, no application changes
@@ -91,7 +92,7 @@ USERSPACE (Go Agent)
 - 🗺️ [HANDOFF.md](HANDOFF.md) — Current project state, known limitations, and future research roadmap.
 
 **Component Details:**
-- 🛡️ [rules/common.yaml](rules/common.yaml) — 14 MITRE detection rules with environment-aware whitelisting (self-documented).
+- 🛡️ [rules/](rules/) — MITRE detection rules, self-documented: per-sensor detections in `process.yaml`/`file.yaml`/`network.yaml`, shared lists + Layer 1/2 config in `common.yaml`.
 - 📊 [MITRE-COVERAGE.md](docs/MITRE-COVERAGE.md) — Full mapping of eBPF hooks to MITRE ATT&CK techniques.
 - 📖 `pkg/*/README.md` — Deep dives into each component (detector, rules, workload resolver, alertsink).
 - 🔧 `kernel/README.md` — eBPF C programs, limitations, and extending detection logic.

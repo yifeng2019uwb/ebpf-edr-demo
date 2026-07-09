@@ -92,12 +92,13 @@ func (m MatchSpec) listRefs() []string {
 // Exceptions are OR-ed: the rule is suppressed if ANY spec matches (each spec
 // still ANDs its own fields).
 type DetectionRule struct {
-	Name             string      `yaml:"name"`              // emitted rule name
-	Severity         alert.Level `yaml:"severity"`          // CRITICAL | HIGH | MEDIUM | LOW
-	RequireContainer bool        `yaml:"require_container"` // false = also host/unknown
-	Match            MatchSpec   `yaml:"match"`
-	Exceptions       []MatchSpec `yaml:"exceptions"`
-	Message          string      `yaml:"message"`
+	Name             string       `yaml:"name"`              // emitted rule name
+	Severity         alert.Level  `yaml:"severity"`          // CRITICAL | HIGH | MEDIUM | LOW
+	RequireContainer bool         `yaml:"require_container"` // false = also host/unknown
+	Match            MatchSpec    `yaml:"match"`
+	Exceptions       []MatchSpec  `yaml:"exceptions"`
+	Message          string       `yaml:"message"`
+	Response         alert.Action `yaml:"response"` // kill_process | block_ip; empty/~ = alert only
 }
 
 // sensorConfig is the top-level structure of a per-sensor rules file
@@ -145,6 +146,11 @@ func validateDetections(dets []DetectionRule, lists map[string][]interface{}) er
 		prev = rank
 		if det.Message == "" {
 			return fmt.Errorf("detection %s: missing message", det.Name)
+		}
+		switch det.Response {
+		case "", alert.ActionNone, alert.ActionKillProcess, alert.ActionBlockIP:
+		default:
+			return fmt.Errorf("detection %s: invalid response %q", det.Name, det.Response)
 		}
 		if len(det.Match.listRefs()) == 0 {
 			return fmt.Errorf("detection %s: match must specify at least one primitive", det.Name)

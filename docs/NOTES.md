@@ -3,8 +3,8 @@
 ## Current Status
 
 **Coverage:** 15 of ~15 single-event-detectable MITRE techniques implemented and validated
-- Docker VM: 13 tests pass
-- GKE: 11 tests pass
+- Docker VM: `validate.sh` 10/10 (T2/T6/T7 removed pending fixes — see HANDOFF deferred issues)
+- DO K8s: `validate-do-k8s.sh` 11/11
 - See [MITRE-COVERAGE.md](MITRE-COVERAGE.md) for complete technique list
 
 **Architecture:** 2-service design

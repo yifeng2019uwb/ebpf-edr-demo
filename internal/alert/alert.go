@@ -44,7 +44,7 @@ type Alert struct {
 	DstIP    string
 	DstPort  uint16
 
-	ResponseAction Action // set by responder after detection; ActionNone means no action taken
+	ResponseAction Action // requested by the fired rule (rules/*.yaml response:), replaced with the action actually executed before the alert is sent; ActionNone = no action
 }
 
 // Sink writes alerts to a destination (Redis, Supabase, file, etc.).

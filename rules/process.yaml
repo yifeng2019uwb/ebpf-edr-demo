@@ -21,11 +21,16 @@
 #                      ANY spec matches (fields within one spec still AND)
 #   message:           plain string (no templating — comm/service/pid are
 #                      structured alert fields)
+#   response:          automated response executed when the rule fires:
+#                      kill_process | block_ip; omit (or ~) for alert only.
+#                      The responder replaces it with the action actually
+#                      executed before the alert reaches the sinks.
 
 detections:
 
   # T1059.004 / T1609 — Command & Scripting: Unix Shell
   # Container spawning /bin/sh, /bin/bash, etc. → remote code execution.
+  # Alert only — shells run constantly in builds, kubectl exec, health checks.
   - name: T1059_unix_shell_execution
     severity: CRITICAL
     require_container: true
@@ -37,6 +42,7 @@ detections:
 
   # T1105 / T1095 — Ingress Tool Transfer
   # Container running nc, ncat, wget → attacker brought in attack tools.
+  # Alert only — wget/curl used by package managers and health checks.
   - name: T1105_ingress_tool_transfer
     severity: HIGH
     require_container: true

@@ -18,21 +18,21 @@ Remaining gaps require stateful/behavioral detection (see Phase 2 section).
 
 ## Detection Rules → MITRE Mapping
 
-Status: ✅ implemented + validated  🔲 planned — not yet implemented
+Status: ✅ implemented + validated  🔲 planned — not yet implemented  ⛔ inactive
 
 | Rule | Severity | MITRE ID | Technique | Status |
 |------|----------|----------|-----------|--------|
 | `T1059_unix_shell_execution` | CRITICAL | T1059.004 | Command & Scripting: Unix Shell | ✅ |
 | `T1059_unix_shell_execution` | CRITICAL | T1609 | Container Administration Command | ✅ |
-| `T1611_escape_to_host_ns` | CRITICAL | T1611 | Escape to Host — unknown mount namespace | ✅² |
-| `T1611_escape_to_host_fs` | CRITICAL | T1611 | Escape to Host — host reads container overlay2 | ✅ |
+| `T1611_escape_to_host_ns` | — | T1611 | Escape to Host — unknown mount namespace | ⛔ superseded³ |
+| `T1611_escape_to_host_fs` | CRITICAL | T1611 | Escape to Host — host reads container overlay2 | ⛔ disabled⁴ |
 | `T1611_escape_to_host_proc` | HIGH | T1611 | Escape to Host — container reads /proc/1/ | ✅² |
 | `T1105_ingress_tool_transfer` (nc/ncat) | HIGH | T1095 | Non-App Layer Protocol — binary in container¹ | ✅ |
 | `T1105_ingress_tool_transfer` (wget) | HIGH | T1105 | Ingress Tool Transfer — binary in container¹ | ✅ |
 | `T1552_004_private_keys` /root/.ssh/ /home/.ssh/ | CRITICAL | T1552.004 | Unsecured Credentials: Private Keys — SSH dirs | ✅ |
 | `T1552_004_private_keys` .key/id_rsa/.pem | HIGH | T1552.004 | Unsecured Credentials: Private Keys — key files | ✅ |
 | `T1552_001_credentials_in_files` | HIGH | T1552.001 | Unsecured Credentials: Credentials in Files | ✅ |
-| `T1003_008_os_credential_dumping` | HIGH | T1003.008 | OS Credential Dumping: /etc/shadow | ✅ |
+| `T1003_008_os_credential_dumping` | CRITICAL | T1003.008 | OS Credential Dumping: /etc/shadow | ✅ |
 | `T1082_system_info_discovery` | MEDIUM | T1082 | System Information Discovery | ✅ |
 | `T1036_masquerading` | HIGH | T1036 | Masquerading — binary running from /tmp, /dev/shm | ✅ |
 | `T1053_003_scheduled_task_cron` | HIGH | T1053.003 | Scheduled Task/Job: Cron | ✅ |
@@ -44,7 +44,14 @@ Status: ✅ implemented + validated  🔲 planned — not yet implemented
 | `T1046_network_service_scanning` | HIGH | T1046 | Network Service Scanning | 🔲 needs stateful burst detection |
 
 ¹ Detection fires on binary presence in container (unexpected tool = signal). Not intent-based.
-² Rule is implemented and fires in production (observed on GKE); not testable via `docker exec` because normal Docker containers have PID namespace isolation — `/proc/1/` inside the container resolves to the container's own init, not the host's. T1611_ns requires a process in a genuinely unrecognized mount namespace.
+² Rule is implemented and fires in production; not testable via `docker exec` because normal
+Docker containers have PID namespace isolation — `/proc/1/` inside the container resolves to
+the container's own init, not the host's.
+³ A bare unresolved namespace is a resolver-timing artifact, not an escape signal — routed to
+LOW `EDR_telemetry_unresolved_namespace` after ancestry verification fails (see
+DESIGN-PROCESS-ANCESTRY-CACHE.md §3.5–3.6). T1611 coverage comes from the proc rule.
+⁴ Disabled pending its allowlist (deferred validate.sh T7 work); its data
+(`container_fs_paths`) stays in `rules/common.yaml`.
 
 ---
 
@@ -96,17 +103,20 @@ Status: ✅ implemented + validated  🔲 planned — not yet implemented
 
 ## Response Actions
 
+Declared per detection via `response:` in `rules/*.yaml` (executed by `pkg/detector/response.go`).
+
 | Action | Rules | When |
 |--------|-------|------|
-| `kill_process` | T1611_fs, T1552_004, T1003_008 | File rules with high-confidence credential/escape access |
-| `none` (alert only) | T1059, T1105, T1611_ns, T1611_proc, T1036, T1613, T1053, T1070, T1082, T1552_001, T1041 | Process rules (kill FP risk); lower-confidence file rules; network (block_ip disabled — LPMTrie removed) |
+| `kill_process` | T1552_004 (both entries), T1003_008 | High-confidence credential access — never legitimate in a container |
+| `block_ip` | T1041 | Dst IP denied at the LSM hook on re-connect; kernel-side `blocked_ips` map not yet compiled, so currently skipped with a log line (alert-only in practice) |
+| alert only (no `response:`) | T1059, T1105, T1611_proc, T1036, T1613, T1053, T1070, T1082, T1552_001 | Legitimate uses exist (shells in builds, curl health checks, `.env` at startup); killing risks breaking workloads |
 
 ---
 
 ## Atomic Red Team Tests
 
-Run via `sudo ./validate.sh` on the GCP Docker VM (covers all 13 tests below).
-For GKE: use `kubectl exec` equivalents.
+Run via `sudo ./validate.sh` on the Docker VM (10 automated tests; T2/T6/T7 removed —
+see HANDOFF deferred issues). On DO K8s: `./validate-do-k8s.sh` (11 tests).
 
 ### T1059.004 / T1609 — Unix Shell (`T1059_unix_shell_execution`)
 
@@ -126,7 +136,7 @@ docker exec order-processor-auth_service nc -w 2 1.1.1.1 80
 
 ```bash
 docker exec order-processor-order_service cat /etc/shadow
-# Expected: HIGH T1003_008_os_credential_dumping service=order_service action=kill_process
+# Expected: CRITICAL T1003_008_os_credential_dumping service=order_service action=kill_process
 ```
 
 ### T1552.004 — Private Keys (`T1552_004_private_keys`)
@@ -145,12 +155,15 @@ docker exec order-processor-auth_service python3 -c \
 # Expected: HIGH T1041_exfiltration_over_c2 service=auth_service
 ```
 
-### T1611 — Escape to Host / overlay2 (`T1611_escape_to_host_fs`)
+### T1611 — Escape to Host / overlay2 (`T1611_escape_to_host_fs`) — INACTIVE
+
+Rule is disabled pending its allowlist (deferred validate.sh T7 work) — this test
+currently produces NO alert.
 
 ```bash
 MERGED=$(docker inspect order-processor-order_service --format '{{.GraphDriver.Data.MergedDir}}')
 cat "${MERGED}/etc/hostname"
-# Expected: CRITICAL T1611_escape_to_host_fs action=kill_process
+# Expected when re-enabled: CRITICAL T1611_escape_to_host_fs
 ```
 
 ### T1082 — System Info Discovery (`T1082_system_info_discovery`)
@@ -209,12 +222,11 @@ docker exec order-processor-auth_service /usr/local/bin/docker ps
 ## Validation Script
 
 ```bash
-sudo ./validate.sh       # runs all 13 tests on Docker VM (distributed across services)
-./validate-gke.sh        # runs all 11 tests on GKE (distributed across services)
+sudo ./validate.sh       # 10 automated tests on Docker VM (distributed across services)
+./validate-do-k8s.sh     # 11 tests on DO K8s (distributed across services)
 ```
 
-T1–T11 validated on GCP Docker VM (`instance-20260318-023006`) as of 2026-06-10. T12–T13 pending.
-All 11 GKE tests validated on health-ai cluster (V2–V10: 2026-06-10, V11–V12: 2026-06-09).
+Both validated 2026-07-09 with the complete YAML rules engine (Docker VM 10/10, DO K8s 11/11).
 
 ---
 

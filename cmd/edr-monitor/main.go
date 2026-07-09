@@ -507,14 +507,14 @@ func startDetectorAndResponder(
 				continue
 			}
 
-			// Compute response BEFORE sending alert to avoid data race:
+			// Execute response BEFORE sending alert to avoid data race:
 			// If we send alert first, then modify a.ResponseAction, handler goroutine
-			// may read partial/stale data. Compute response action first, then send complete alert.
-			action := detector.ResponseFor(a.Rule, a.Level)
-			if action != alert.ActionNone {
-				action = responder.Respond(a, action)
+			// may read partial/stale data. The detector set a.ResponseAction to the
+			// fired rule's response: (rules/*.yaml); replace it with the action the
+			// responder actually executed, then send the complete alert.
+			if a.ResponseAction != alert.ActionNone {
+				a.ResponseAction = responder.Respond(a, a.ResponseAction)
 			}
-			a.ResponseAction = action
 
 			select {
 			case alertCh <- *a:

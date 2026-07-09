@@ -23,6 +23,7 @@ detections:
 
   # T1552.004 — Unsecured Credentials: Private Keys (SSH directories)
   # Container reading /root/.ssh/, /home/.ssh/ → credential theft.
+  # response: kill — no container should read SSH keys.
   - name: T1552_004_private_keys
     severity: CRITICAL
     require_container: true
@@ -31,9 +32,11 @@ detections:
     exceptions:
       - comm_base_in: customer_applications
     message: "Container accessed SSH credential directory"
+    response: kill_process
 
   # T1003.008 — OS Credential Dumping
   # Container reading /etc/shadow → password hash extraction.
+  # response: kill — never legitimate inside a container.
   - name: T1003_008_os_credential_dumping
     severity: CRITICAL
     require_container: true
@@ -42,11 +45,13 @@ detections:
     exceptions:
       - comm_base_in: customer_applications
     message: "Container accessed OS credential file"
+    response: kill_process
 
   # T1611 — Escape to Host (Procfs)
   # Container reading /proc/1/ → host init process access (escape attempt).
   # proc_escape_allowed excepts the read-only files monitoring tools use
   # (/proc/1/stat, /proc/1/status, /proc/1/cmdline, /proc/1/mountinfo).
+  # Alert only — GKE monitoring sidecars hit this (known FP).
   - name: T1611_escape_to_host_proc
     severity: HIGH
     require_container: true
@@ -59,6 +64,7 @@ detections:
 
   # T1552.001 — Unsecured Credentials: Credentials in Files (secret mounts)
   # Container reading /run/secrets/ → secret extraction.
+  # Alert only — apps legitimately read their own secrets at startup.
   - name: T1552_001_credentials_in_files
     severity: HIGH
     require_container: true
@@ -71,6 +77,7 @@ detections:
   # T1552.004 — Unsecured Credentials: Private Keys (key files by extension)
   # .key, .pem, id_rsa, id_ed25519 anywhere on disk. pem_exclude_paths excepts
   # CA bundles (certifi/site-packages) that Python loads on every HTTPS request.
+  # response: kill — same policy as the SSH-directory entry above.
   - name: T1552_004_private_keys
     severity: HIGH
     require_container: true
@@ -80,9 +87,11 @@ detections:
       - file_contains_in: pem_exclude_paths
       - comm_base_in: customer_applications
     message: "Container accessed private key file"
+    response: kill_process
 
   # T1552.001 — Unsecured Credentials: Credentials in Files (.env)
   # Container reading .env files → credential extraction.
+  # Alert only — apps legitimately read their own .env at startup.
   - name: T1552_001_credentials_in_files
     severity: HIGH
     require_container: true
@@ -107,6 +116,7 @@ detections:
   # Gated on the READER: these files are world-readable and read constantly by
   # libc NSS (getpwuid/getgrgid), so an app's own reads are benign. Only a
   # recon/shell tool reading them (cat, grep, getent, ...) is the discovery signal.
+  # No response — MEDIUM, too noisy for automated action.
   - name: T1082_system_info_discovery
     severity: MEDIUM
     require_container: true

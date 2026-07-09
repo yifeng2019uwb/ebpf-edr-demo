@@ -24,12 +24,12 @@ const ancestryWalkMaxDepth = 10
 // YAMLDetector implements pipeline.Detector using rules loaded from YAML.
 type YAMLDetector struct {
 	rules              *rules.RulesDB
-	runtime            workload.Runtime  // workload runtime: RuntimeK8s or RuntimeDocker
-	safeInfraPIDs      map[uint32]string // Layer 1 infrastructure PIDs (passed from resolver)
-	ancestry           *AncestryCache    // live pid → exec record, for parent verification
-	trustedParentNames map[string]bool   // precomputed from trusted_parent_names (hot path)
-	suspiciousPrefixes []string          // precomputed from suspicious_exec_paths (writable-location denylist)
-	shellNames         map[string]bool   // precomputed from shell_processes (hot path)
+	runtime            workload.Runtime    // workload runtime: RuntimeK8s or RuntimeDocker
+	safeInfraPIDs      map[uint32]string   // Layer 1 infrastructure PIDs (passed from resolver)
+	ancestry           *AncestryCache      // live pid → exec record, for parent verification
+	trustedParentNames map[string]bool     // precomputed from trusted_parent_names (hot path)
+	suspiciousPrefixes []string            // precomputed from suspicious_exec_paths (writable-location denylist)
+	shellNames         map[string]bool     // precomputed from shell_processes (hot path)
 	processDetections  []compiledDetection // structured process rules (rules/process.yaml, ordered)
 	fileDetections     []compiledDetection // structured file rules (rules/file.yaml, ordered)
 	netDetections      []compiledDetection // structured network rules (rules/network.yaml, ordered)
@@ -150,6 +150,7 @@ type compiledDetection struct {
 	match            compiledMatch
 	exceptions       []compiledMatch // OR-ed: any spec matching suppresses the rule
 	message          string
+	response         alert.Action // requested response (rules/*.yaml response:); ActionNone = alert only
 }
 
 // excepted reports whether any exception spec matches the event.
@@ -204,6 +205,10 @@ func (d *YAMLDetector) compileDetections(dets []rules.DetectionRule) []compiledD
 		for _, ex := range det.Exceptions {
 			exceptions = append(exceptions, d.compileMatch(ex))
 		}
+		response := det.Response
+		if response == "" {
+			response = alert.ActionNone
+		}
 		compiled = append(compiled, compiledDetection{
 			name:             det.Name,
 			level:            det.Severity,
@@ -211,6 +216,7 @@ func (d *YAMLDetector) compileDetections(dets []rules.DetectionRule) []compiledD
 			match:            d.compileMatch(det.Match),
 			exceptions:       exceptions,
 			message:          det.Message,
+			response:         response,
 		})
 	}
 	return compiled
@@ -595,7 +601,9 @@ func (d *YAMLDetector) checkProcessRules(event processor.ProcessEvent, res workl
 		if det.excepted(in) {
 			continue
 		}
-		return newProcessAlert(event, res, comm, det.level, det.name, det.message)
+		a := newProcessAlert(event, res, comm, det.level, det.name, det.message)
+		a.ResponseAction = det.response
+		return a
 	}
 
 	if res.State == workload.StateUnknown {
@@ -683,7 +691,9 @@ func (d *YAMLDetector) checkFileRules(event processor.FileEvent, res workload.Re
 		if det.excepted(in) {
 			continue
 		}
-		return newFileAlert(event, res, comm, filename, det.level, det.name, det.message)
+		a := newFileAlert(event, res, comm, filename, det.level, det.name, det.message)
+		a.ResponseAction = det.response
+		return a
 	}
 
 	return nil
@@ -710,7 +720,9 @@ func (d *YAMLDetector) checkNetworkRules(event processor.NetEvent, res workload.
 		if det.excepted(in) {
 			continue
 		}
-		return newNetAlert(event, res, comm, ip.String(), port, det.level, det.name, det.message)
+		a := newNetAlert(event, res, comm, ip.String(), port, det.level, det.name, det.message)
+		a.ResponseAction = det.response
+		return a
 	}
 
 	return nil
@@ -718,11 +730,16 @@ func (d *YAMLDetector) checkNetworkRules(event processor.NetEvent, res workload.
 
 // ── Alert Constructors ────────────────────────────────────────────────────────
 
+// Constructors default ResponseAction to ActionNone; rule-fire sites overwrite
+// it with the fired detection's response:, and the responder (main.go) replaces
+// it with the action actually executed before the alert is sent to sinks.
+
 func newFileAlert(event processor.FileEvent, res workload.ResolveResult, comm, filename string, level alert.Level, rule, msg string) *alert.Alert {
 	return &alert.Alert{
 		Level: level, Rule: rule, Message: msg,
 		Pid: event.Pid, Ppid: event.Ppid, Uid: int32(event.Uid),
 		Comm: comm, Workload: res, Filename: filename,
+		ResponseAction: alert.ActionNone,
 	}
 }
 
@@ -731,6 +748,7 @@ func newProcessAlert(event processor.ProcessEvent, res workload.ResolveResult, c
 		Level: level, Rule: rule, Message: msg,
 		Pid: event.Pid, Ppid: event.Ppid, Uid: event.Uid,
 		Comm: comm, Workload: res,
+		ResponseAction: alert.ActionNone,
 	}
 }
 
@@ -739,5 +757,6 @@ func newNetAlert(event processor.NetEvent, res workload.ResolveResult, comm, dst
 		Level: level, Rule: rule, Message: msg,
 		Pid: event.Pid, Ppid: event.Ppid, Uid: int32(event.Uid),
 		Comm: comm, Workload: res, DstIP: dstIP, DstPort: dstPort,
+		ResponseAction: alert.ActionNone,
 	}
 }

@@ -85,6 +85,7 @@ const testFileYAML = `detections:
     match: {file_prefix_in: ssh_key_dirs}
     exceptions: [{comm_base_in: customer_applications}]
     message: "ssh dir"
+    response: kill_process
   - name: T1003_008_os_credential_dumping
     severity: CRITICAL
     require_container: true
@@ -222,6 +223,28 @@ func TestCheckProcessRules(t *testing.T) {
 				t.Errorf("got %s/%s, want %s/%s", a.Rule, a.Level, tc.wantRule, tc.wantLvl)
 			}
 		})
+	}
+}
+
+// TestResponseAction — the fired detection's response: is stamped on the alert
+// as the requested action; rules without response: (and the telemetry path)
+// carry ActionNone.
+func TestResponseAction(t *testing.T) {
+	d := newTestDetector(t)
+
+	a := d.checkFileRules(fileEvent("/usr/bin/python3", "/root/.ssh/id_rsa", unresolvablePpid), verifiedContainer)
+	if a == nil || a.ResponseAction != alert.ActionKillProcess {
+		t.Fatalf("ssh-dir alert ResponseAction = %v, want kill_process", a)
+	}
+
+	a = d.checkFileRules(fileEvent("/usr/bin/python3", "/etc/shadow", unresolvablePpid), verifiedContainer)
+	if a == nil || a.ResponseAction != alert.ActionNone {
+		t.Fatalf("no-response rule ResponseAction = %v, want none", a)
+	}
+
+	a = d.checkProcessRules(processEvent("/usr/bin/mystery", unresolvablePpid), unknownState)
+	if a == nil || a.ResponseAction != alert.ActionNone {
+		t.Fatalf("telemetry alert ResponseAction = %v, want none", a)
 	}
 }
 

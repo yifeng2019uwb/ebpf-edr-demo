@@ -25,7 +25,8 @@ Entry point that orchestrates the full eBPF monitoring pipeline. Runs in every p
 **Pending Buffer:**
 - Container starting = namespace not yet in resolver cache
 - Events buffered for 60 seconds with retries
-- After timeout, promoted to `StateUnknown` (possible escape)
+- After timeout, promoted to `StateUnknown` — ancestry-verified infrastructure is
+  suppressed; the rest goes to LOW telemetry (visibility gap, not an escape signal)
 
 **Deduplication:**
 - File events from multi-threaded processes deduplicated (1s window)
@@ -60,14 +61,16 @@ Useful log patterns:
 
 ```
 rules: loaded from rules/common.yaml
+rules: loaded 4 detections from rules/process.yaml   (+ file.yaml, network.yaml)
 redis sink connected: redis://...
 supabase sink connection test passed
 BPF programs loaded: execsnoop, opensnoop, lsm-connect
 ALERT level=CRITICAL rule=T1059_unix_shell_execution ...
+response: killed pid=... comm=... rule=T1552_004_private_keys ...
 ```
 
 See: `SETUP.md` for troubleshooting.
 
 ---
 
-**Last Updated:** 2026-06-30
+**Last Updated:** 2026-07-09

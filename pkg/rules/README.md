@@ -1,67 +1,73 @@
 # pkg/rules — Detection Rules Loader
 
-Loads security rules from `rules/common.yaml` and provides a queryable interface for the detector engine.
+Loads and validates the detection rule data from `rules/` and provides the
+compiled `RulesDB` the detector engine consumes.
 
 ## What It Does
 
-1. **Parses YAML** — Loads lists, macros, detection rules from YAML
-2. **Detects environment** — Identifies deployment (K8s, GCP, DigitalOcean, etc.)
-3. **Merges whitelists** — Adds cloud-specific agents and K8s infrastructure processes
-4. **Provides interface** — `GetList()`, `GetMacro()` for detector to query rules
+1. **Parses YAML** — `common.yaml` (shared lists + Layer 1/2 config) plus the
+   per-sensor detection files (`process.yaml`, `file.yaml`, `network.yaml`)
+2. **Validates fail-fast at load** — severity values, CRITICAL→LOW file order,
+   list references, response values; a bad rules file stops agent startup
+3. **Detects environment** — GCP / DigitalOcean / local via metadata servers
+4. **Provides interface** — `GetList()`, ordered `*Detections` slices for the detector
 
 ## Files
 
-- **loader.go** — YAML parser and RulesDB builder
-  - `LoadRulesForEnvironment()` — loads YAML + detects environment
+- **loader.go** — YAML parser, validation, and RulesDB builder
+  - `LoadRulesForEnvironment()` — loads all rules files + detects environment
+  - `loadSensorDetections()` — one per-sensor file: parse + validate
   - `DetectEnvironment()` — checks cloud metadata (timeout 1.5s)
-  - `MergeWhitelists()` — adds cloud agents + K8s infrastructure
-  
-- **common.yaml** — All detection rules in one file
-  - `lists:` — reusable collections (shell_binaries, network_tools, etc.)
-  - `macros:` — compound conditions (is_container, accessing_ssh_keys, etc.)
-  - `detections:` — 14 MITRE techniques with condition + severity + output
-  - `network:` — allowed ports and services
-  - `ignore_namespaces:` — skip certain K8s namespaces
+
+Rule data lives in `rules/` (self-documented):
+- **process.yaml / file.yaml / network.yaml** — structured detections per eBPF
+  hook: `name`, `severity`, `require_container`, `match`/`exceptions`
+  (list-referencing primitives), `message`, `response` (kill_process / block_ip)
+- **common.yaml** — shared `lists:` the detections and pipeline reference,
+  Layer 1 `infrastructure_filters:`, Layer 2 `global_exceptions:`,
+  `ignore_namespaces:`
 
 ## Key Concepts
 
-**Single Source of Truth:** All detection rules in YAML. No hardcoded Go policies.
+**YAML is the source of truth for rules.** Match, severity, check order
+(file order, CRITICAL→LOW), and response are declared per detection entry.
+The Go detector compiles and evaluates them; only pipeline logic (ppid==1 skip,
+ancestry walk, state=unknown telemetry) is Go code.
 
-**Environment-Aware:** Same YAML works on GCP, DigitalOcean, Kubernetes. Environment-specific whitelists merged at runtime (e.g., GCP getconf, DO droplet-agent).
+**Ordered evaluation.** Detections are a LIST; the first matching entry wins.
+Duplicate `name:` entries are allowed (e.g. T1552_004 has a CRITICAL ssh-dirs
+entry and a HIGH key-suffix entry).
 
-**Reusable Lists:** `shell_processes`, `network_tools`, `ssh_key_dirs`, etc. Referenced by multiple rules.
-
-**Conditions:** YAML-like expressions (`is_container and proc.name in (network_tools)`) evaluated by detector.
+**Reusable lists:** `shell_processes`, `network_tools`, `ssh_key_dirs`, etc. —
+referenced by name from match/exception primitives and validated at load.
 
 ## Usage
 
 ```go
-// Load rules
+// Load rules (entry point path: rules/common.yaml; sensor files load from its dir)
 rulesDB, err := rules.LoadRulesForEnvironment("rules/common.yaml")
 
-// Create detector with environment awareness
-det := detector.NewYAMLDetectorWithEnv(rulesDB, string(rulesDB.Env))
+// Create detector
+det := detector.NewYAMLDetectorWithRuntime(rulesDB, runtime)
 
-// Query rules
-list := rulesDB.GetList("shell_processes")  // ["bash", "sh", "zsh", ...]
-macro := rulesDB.GetMacro("is_container")   // condition string
+// Query
+list := rulesDB.GetList("shell_processes")   // ["bash", "sh", "zsh", ...]
+procRules := rulesDB.ProcessDetections       // ordered []DetectionRule
 ```
 
 See: `cmd/edr-monitor/main.go` for full pipeline.
 
 ## Extending Rules
 
-**Add new MITRE detection:**
-1. Add entry to `lists:` if needed (e.g., new file patterns)
-2. Add entry to `macros:` if needed (e.g., new conditions)
-3. Add detection rule to `detections:` with condition, severity, output
-4. Reload (no code rebuild needed)
+**Add a new detection:**
+1. Add a list to `common.yaml` `lists:` if needed (e.g. new file patterns)
+2. Add an entry to the matching sensor file, in severity order, with
+   `match:`/`exceptions:` primitives and optional `response:`
+3. Rebuild/redeploy the agent image (rules ship in the image via `COPY rules/`)
 
-**Add new cloud environment:**
-1. Add cloud agent names to `lists/gcp_cloud_agents` or `lists/digitalocean_cloud_agents`
-2. Update `DetectEnvironment()` if new metadata endpoint
-3. Reload rules
+**Add a new eBPF hook:** add a new per-sensor YAML file and load it in
+`LoadRules()` — one file per hook.
 
 ---
 
-**Last Updated:** 2026-06-30
+**Last Updated:** 2026-07-09

@@ -34,6 +34,12 @@ func TestLoadRealRules(t *testing.T) {
 	if firstFile.Name != "T1552_004_private_keys" || firstFile.Severity != alert.Critical {
 		t.Errorf("first file detection = %s/%s, want T1552_004_private_keys/CRITICAL", firstFile.Name, firstFile.Severity)
 	}
+	if firstFile.Response != alert.ActionKillProcess {
+		t.Errorf("T1552_004 SSH-dirs response = %q, want kill_process", firstFile.Response)
+	}
+	if first.Response != "" {
+		t.Errorf("T1059 response = %q, want empty (alert only)", first.Response)
+	}
 }
 
 // TestLoadRulesMissingSensorFile — sensor files are required (fail-fast),
@@ -84,6 +90,16 @@ func TestValidateDetections(t *testing.T) {
 			d.Exceptions = []MatchSpec{{CommBaseIn: "apps"}}
 			return d
 		}()}, ""},
+		{"valid with response", []DetectionRule{func() DetectionRule {
+			d := valid()
+			d.Response = alert.ActionKillProcess
+			return d
+		}()}, ""},
+		{"invalid response", []DetectionRule{func() DetectionRule {
+			d := valid()
+			d.Response = "reboot_host"
+			return d
+		}()}, "invalid response"},
 		{"empty exception spec", []DetectionRule{func() DetectionRule {
 			d := valid()
 			d.Exceptions = []MatchSpec{{}}

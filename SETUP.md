@@ -96,7 +96,7 @@ rules/           → Detection rules in YAML
 |---------------------|---------------------|---------------------------------|
 | BPF C code          | `make rebuild`      | [DEPLOYMENT.md](DEPLOYMENT.md)   |
 | Go code only        | `make build`        | [DEPLOYMENT.md](DEPLOYMENT.md)   |
-| Detection rules     | Edit `rules/common.yaml` | [HANDOFF.md](HANDOFF.md)   |
+| Detection rules     | Edit `rules/*.yaml`  | [HANDOFF.md](HANDOFF.md)   |
 | DaemonSet config    | Edit `k8s/ebpf-edr-ds.yaml` | [DEPLOYMENT.md](DEPLOYMENT.md) |
 
 ---
@@ -126,7 +126,8 @@ redis-cli -u redis://... SUBSCRIBE edr-alerts
 
 - **[DEPLOYMENT.md](DEPLOYMENT.md)** — Full deployment guide (K8s, Docker, config)
 - **[HANDOFF.md](HANDOFF.md)** — Session progress, architecture, known issues
-- **[rules/common.yaml](rules/common.yaml)** — Detection rules (self-documented)
+- **[rules/](rules/)** — Detection rules (self-documented): per-sensor detections in
+  `process.yaml`/`file.yaml`/`network.yaml`, shared lists in `common.yaml`
 - **[MITRE-COVERAGE.md](docs/MITRE-COVERAGE.md)** — Supported attack techniques
 
 ---

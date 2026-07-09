@@ -28,7 +28,8 @@ ebpf-edr-demo/
 │   ├── config/                 # env/config (ALERT_LOG_PATH, etc.)
 │   ├── processor/              # ProcessEvent / FileEvent / NetEvent structs + parsing
 │   └── alert/                  # Alert type + Level / Action
-├── rules/common.yaml          # detection data (lists, exceptions, network, namespaces)
+├── rules/                      # process/file/network.yaml (detections + response),
+│                               #   common.yaml (shared lists, Layer 1/2 config, namespaces)
 ├── k8s/ebpf-edr-ds.yaml        # DaemonSet manifest
 └── Makefile
 ```
@@ -44,10 +45,10 @@ kernel sensor  ──►  rawCh  ──►  enrich
   lsm-connect)                    │ pending namespaces retry within a bounded window
                                   ▼
                              enrichedCh  ──►  YAMLDetector.Detect
-                                                 │ Layer 1/2 filters + rule match (Go)
-                                                 │ data from rules/common.yaml
+                                                 │ Layer 1/2 filters + structured rule match
+                                                 │ rules from rules/*.yaml (lists in common.yaml)
                                                  ▼
-                                            Alert?  ──►  ResponseFor (kill_process / block_ip)
+                                            Alert?  ──►  Responder (rule's response: — kill_process / block_ip)
                                                  │
                                                  ▼
                                               sinks
@@ -73,7 +74,7 @@ Key properties:
 | eBPF sensors | capture exec / file-open / connect events | `kernel/*.bpf.c` |
 | Workload resolver | `mnt_ns → identity`, host fast-path, ancestry cache for parent verification | [DESIGN-PROCESS-ANCESTRY-CACHE.md](DESIGN-PROCESS-ANCESTRY-CACHE.md) |
 | Detection rules & policy | layers, per-rule attack→detection, exceptions, gating | [DETECTION-RULES-AND-POLICY.md](DETECTION-RULES-AND-POLICY.md), [MITRE-COVERAGE.md](MITRE-COVERAGE.md) |
-| Response | `kill_process` / `block_ip` for a narrow rule set | `pkg/detector/response_policy.go` |
+| Response | `kill_process` / `block_ip` via `response:` on YAML detections | `rules/*.yaml`, `pkg/detector/response.go` |
 | Alert sinks | file (+stdout), Supabase (persist), Redis (live, drops LOW) | `pkg/alertsink/` |
 | Performance / throughput | instrumentation, targets, pending load test | [PERFORMANCE.md](PERFORMANCE.md) |
 | Deployment | DaemonSet, image, environments | [DEPLOYMENT.md](DEPLOYMENT.md) |

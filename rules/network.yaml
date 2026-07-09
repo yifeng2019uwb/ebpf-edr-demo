@@ -15,7 +15,11 @@ detections:
   # Container connecting to a non-private IP → potential data exfiltration.
   # Exceptions: DNS/NTP/Supabase-pgbouncer ports (allowed_ports) and services
   # with legitimate external APIs (allowed_services — inventory calls CoinGecko).
-  # Response: block_ip (LSM-level enforcement) via response policy.
+  # response: block_ip — dst IP added to the blocked_ips LPMTrie before the TCP
+  # handshake (outbound only). First connection fires the alert and adds the IP;
+  # subsequent connects to it are denied in-kernel. Requires the kernel side:
+  # blocked_ips map in lsm-connect.bpf.c + go generate on Linux (skipped with a
+  # log line until then — see pkg/detector/response.go blockIP).
   - name: T1041_exfiltration_over_c2
     severity: HIGH
     require_container: true
@@ -25,3 +29,4 @@ detections:
       - dst_port_in: allowed_ports
       - service_in: allowed_services
     message: "Container made unauthorized external connection"
+    response: block_ip

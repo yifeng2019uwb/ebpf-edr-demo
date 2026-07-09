@@ -1,6 +1,7 @@
 # Detection Rules & Policy Design
 
-**Status:** Current — matches `pkg/detector/yaml_detector.go` + `rules/common.yaml` (2026-07-08)
+**Status:** Current — matches `pkg/detector/yaml_detector.go` + `rules/*.yaml` (2026-07-09,
+structured matchers + YAML `response:`)
 
 Single source of truth for **how each detection fires** and **the policy layers around it**.
 Companion docs: [MITRE-COVERAGE.md](MITRE-COVERAGE.md) (technique table),
@@ -20,21 +21,23 @@ kernel sensors (.bpf.c)          →  raw events
 enrich + workload resolver        →  attaches identity {runtime, service, state}
         │
         ▼
-detector (pkg/detector/yaml_detector.go)   ←  THE matching logic lives here (Go)
-        │      uses lists / exceptions / network / ignore_namespaces from ↓
+detector (pkg/detector/yaml_detector.go)   ←  matcher engine (compiles + evaluates the rules)
+        │      evaluates structured detections from ↓
         ▼
-rules/common.yaml                →  tunable DATA (lists, macros, exceptions, network, namespaces)
+rules/process.yaml / file.yaml / network.yaml  →  detections (match, severity, order, response)
+rules/common.yaml                              →  shared lists + Layer 1/2 config + namespaces
 ```
 
 **Important — where truth lives.** The eBPF `.bpf.c` files are **sensors only**; they carry no
-detection logic. The matching, severities, and responses are **hardcoded in Go**
-(`yaml_detector.go`, `response_policy.go`). `common.yaml` supplies the **data** those checks read
-(the `lists:`, `global_exceptions:`, `network:`, `ignore_namespaces:`). The YAML `detections:`
-block and its `macros:`/`condition:` fields are **declarative reference** — there is no expression
-evaluator yet, so they document intent but do **not** drive matching. When the YAML block and the
-Go code disagree, **the Go code wins** (e.g. `/etc/shadow` is CRITICAL in Go but the YAML block
-still says HIGH). Tune behaviour by editing the *lists*; changing a `condition:` string does
-nothing until an evaluator exists (deferred — see ancestry-cache doc §5).
+detection logic. Detection rules are **structured matchers in YAML**: the per-sensor files
+(`rules/process.yaml`, `file.yaml`, `network.yaml`) define each rule's match primitives,
+severity, check order (file order, CRITICAL→LOW, validated at load), exceptions, and
+`response:` (kill_process / block_ip). `common.yaml` supplies the shared `lists:` those rules
+reference, plus the Layer 1/2 pipeline config (`infrastructure_filters:`, `global_exceptions:`,
+`ignore_namespaces:`). The Go side (`yaml_detector.go`) is the *engine* — it compiles and
+evaluates the YAML rules but hardcodes no per-rule policy; only pipeline logic (ppid==1 skip,
+ancestry walk, state=unknown telemetry) lives in Go. Responses are executed by
+`pkg/detector/response.go`. Tune behaviour by editing the YAML rules and lists.
 
 ---
 
@@ -54,7 +57,7 @@ Every event runs this gauntlet. Order matters — the first thing that drops or 
 | 7 | **Container-context gating** | `isContainerContext()` | `state != unknown` AND `runtime ∈ {docker,k8s}`. Container-specific rules fire **only** for verified containers |
 | 8 | **`state=unknown` handling** | per-type checks | ancestry-trusted parent → suppress; eBPF capture artifacts → suppress; else → **LOW telemetry** (Phase 3), not CRITICAL |
 | 9 | **Rule match** | `checkProcess/File/NetworkRules` | first match wins, ordered CRITICAL→…→LOW |
-| 10 | **Response** | `ResponseFor()` | kill_process / block_ip for a short list of rules; everything else alert-only |
+| 10 | **Response** | `response:` on the fired YAML entry, executed by `Responder` | kill_process / block_ip for a short list of rules; everything else alert-only |
 | 11 | **Sinks** | alertsink | file + Supabase always; **Redis drops LOW** (keeps telemetry off the live dashboard) |
 
 **Two gates do most of the false-positive work:**
@@ -88,7 +91,7 @@ Order inside `checkProcessRules`: `ppid==1` drop → **T1036 (before whitelist)*
 
 **Signal.** execsnoop captures the `execve` with the full binary path (`comm`).
 
-**Condition (Go).** `comm` has a prefix in `suspicious_exec_paths`
+**Condition.** `comm` has a prefix in `suspicious_exec_paths`
 (`/tmp/`, `/dev/shm/`, `/var/tmp/`, `/run/user/`). Checked **before** the process whitelist and
 **before** container gating — so a masqueraded binary fires even if its *name* (`sshd`) is
 whitelisted, and regardless of resolution state. Location is the signal, not the name.
@@ -103,7 +106,7 @@ whitelisted, and regardless of resolution state. Location is the signal, not the
 
 **Signal.** execsnoop captures the shell `execve`.
 
-**Condition (Go).** verified container **and** `base(comm) ∈ shell_processes` (bash, sh, zsh, dash).
+**Condition.** verified container **and** `base(comm) ∈ shell_processes` (bash, sh, zsh, dash).
 
 **Suppression.** `customer_applications`; not gated for `state=unknown`; alert-only because shells
 run constantly in legitimate builds / health checks — killing would break workloads.
@@ -116,7 +119,7 @@ run constantly in legitimate builds / health checks — killing would break work
 
 **Signal.** execsnoop captures the tool `execve`.
 
-**Condition (Go).** verified container **and** `base(comm) ∈ network_tools` (nc, ncat, wget).
+**Condition.** verified container **and** `base(comm) ∈ network_tools` (nc, ncat, wget).
 
 **Suppression.** The Layer 2 "health checks spawned by container runtimes" exception covers
 `curl/wget/nc` **only when the parent is infrastructure and off-container** — inside a verified
@@ -132,7 +135,7 @@ movement targets.
 **Signal.** execsnoop captures the `execve` (fires even though the tool later fails with no socket
 mounted — the process event precedes any I/O).
 
-**Condition (Go).** verified container **and** `base(comm) ∈ container_mgmt_tools`.
+**Condition.** verified container **and** `base(comm) ∈ container_mgmt_tools`.
 
 **Suppression.** Container gating. The agent's own `crictl` sync is excluded by seeding the agent
 namespace as `RuntimeHost` (see K8s resolver notes).
@@ -151,7 +154,7 @@ container-gated rules. All file rules require `isVerifiedContainer` unless noted
 
 **Signal.** opensnoop captures the `file_open`.
 
-**Condition (Go).** verified container and either the path is under `ssh_key_dirs`
+**Condition.** verified container and either the path is under `ssh_key_dirs`
 (`/root/.ssh/`, `/home/.ssh/`) → **CRITICAL**, or the filename ends in a `ssh_key_suffixes` entry
 (`.key`, `.pem`, `id_rsa`, `id_ed25519`) → **HIGH**. `.pem` under `pem_exclude_paths`
 (`/site-packages/`, `/certifi/`) is skipped — those are CA bundles, not private keys.
@@ -165,8 +168,7 @@ container-gated rules. All file rules require `isVerifiedContainer` unless noted
 
 **Signal.** opensnoop captures the `file_open`.
 
-**Condition (Go).** verified container and path prefix in `credential_dump_paths` (`/etc/shadow`).
-*(Note: the YAML `detections:` block labels this HIGH; the Go code fires it CRITICAL — Go wins.)*
+**Condition.** verified container and path prefix in `credential_dump_paths` (`/etc/shadow`).
 
 **Response.** `kill_process` — never legitimate inside a container.
 
@@ -178,7 +180,7 @@ DB passwords / API keys.
 
 **Signal.** opensnoop captures the `file_open`.
 
-**Condition (Go).** verified container and (path under `credential_file_dirs` = `/run/secrets/`,
+**Condition.** verified container and (path under `credential_file_dirs` = `/run/secrets/`,
 or filename ends in `credential_file_suffixes` = `.env`).
 
 **Suppression / why alert-only.** Apps legitimately read their own `.env` at startup, so we alert
@@ -192,7 +194,7 @@ targets.
 
 **Signal.** opensnoop captures the `file_open`.
 
-**Condition (Go).** verified container **and** the *reader* is a recon/shell tool
+**Condition.** verified container **and** the *reader* is a recon/shell tool
 (`base(comm) ∈ recon_file_readers`) **and** the path is in `system_info_paths`
 (`/etc/passwd`, `/etc/group`).
 
@@ -209,7 +211,7 @@ false-positive storm. Gating on the reader means the app's own NSS reads stay qu
 
 **Signal.** opensnoop captures the `file_open`.
 
-**Condition (Go).** verified container and path prefix in `cron_paths` (`/etc/cron.*`,
+**Condition.** verified container and path prefix in `cron_paths` (`/etc/cron.*`,
 `/var/spool/cron/`, `/etc/crontab`).
 
 ---
@@ -219,7 +221,7 @@ false-positive storm. Gating on the reader means the app's own NSS reads stay qu
 
 **Signal.** opensnoop captures the `file_open`.
 
-**Condition (Go).** verified container and filename ends in `shell_history_suffixes`
+**Condition.** verified container and filename ends in `shell_history_suffixes`
 (`.bash_history`, `.zsh_history`, `.ash_history`, `.sh_history`).
 
 ---
@@ -230,7 +232,7 @@ tell.
 
 **Signal.** opensnoop captures the `file_open`.
 
-**Condition (Go).** verified container and path prefix in `proc_escape_paths` (`/proc/1/`) **and**
+**Condition.** verified container and path prefix in `proc_escape_paths` (`/proc/1/`) **and**
 not one of the read-only `proc_escape_allowed` files (`/proc/1/stat|status|cmdline|mountinfo`,
 which monitoring tools legitimately read).
 
@@ -261,7 +263,7 @@ endpoint.
 
 **Signal.** lsm-connect audits the `socket_connect` (destination IP + port).
 
-**Condition (Go).** destination **not** in `private_ranges` (RFC1918 + loopback + link-local, v4
+**Condition.** destination **not** in `private_ranges` (RFC1918 + loopback + link-local, v4
 and v6) **and** verified container **and** destination port ∉ `network.allowed_ports`
 (53 DNS, 123 NTP, 6543 Supabase) **and** service ∉ `network.allowed_services`
 (`inventory-service` → CoinGecko).
@@ -328,7 +330,7 @@ There is **no** per-host-service policy tier (systemd vs dockerd vs init) — an
 (`HOST_RUNTIME_POLICIES.md`) proposed one but it was not adopted; the ancestry-walk + telemetry
 approach replaced it.
 
-### Responses (`response_policy.go`)
+### Responses (`response:` in rules/*.yaml, executed by `pkg/detector/response.go`)
 Automated response is deliberately narrow — only where action is unambiguously safe:
 
 | Rule | Response | Rationale |
@@ -342,11 +344,9 @@ Automated response is deliberately narrow — only where action is unambiguously
 
 ## 4. Known drift / gotchas
 
-- **YAML `detections:` severities can lag Go.** They are reference; Go is truth (e.g.
-  `/etc/shadow` CRITICAL in Go vs HIGH in YAML). Don't trust the YAML block for severity.
-- **`T1611_escape_host_fs` is inactive** (commented out) — the YAML rule reads as live but does
-  not fire.
+- **T1611 host-reads-container-overlay is inactive** — disabled pending its allowlist
+  (deferred validate.sh T7 work); its data (`container_fs_paths`) stays in `common.yaml`.
 - **T1082 startup FP** — a service that runs `getent`/`id`/`cat` in its entrypoint will fire;
   allowlist per-service.
-- **Response coverage is 3 rules** — adding a rule does not add a response unless listed in
-  `response_policy.go`.
+- **Response coverage is narrow by design** — adding a rule does not add a response unless
+  its YAML entry sets `response:`.

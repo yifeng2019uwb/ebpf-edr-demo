@@ -3,7 +3,8 @@
 Manual test procedure to verify each detection rule fires correctly against real container behavior.
 Run on the GCP Docker VM while the EDR agent is running.
 
-Automated: `sudo ./validate.sh` runs all 13 tests with concurrent integration traffic.
+Automated: `sudo ./validate.sh` runs the 10 automated tests with concurrent integration
+traffic (T2/T6/T7 are manual-only — see the checklist at the bottom and HANDOFF deferred issues).
 
 ---
 
@@ -29,7 +30,7 @@ docker ps
 # Three terminals
 tail -f alerts/alert.log          # Terminal 1: watch alerts live
 tail -f /tmp/integ_tests.log      # Terminal 2: watch integration tests
-sudo ./validate.sh                # Terminal 3: run all 13 tests
+sudo ./validate.sh                # Terminal 3: run the 10 automated tests
 ```
 
 ---

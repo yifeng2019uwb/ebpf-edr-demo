@@ -41,9 +41,10 @@ kernel/          — BPF C programs (.bpf.c) and shared headers (.h)
 pkg/bpf/gen.go   — go:generate directives; one per BPF program:
                      bpf2go compiles .bpf.c → .o + Go wrapper (_bpfel.go)
 pkg/bpf/         — generated Go wrappers (committed, no clang needed in CI)
-pkg/detector/    — detection engine: yaml_detector.go (matching + severity),
-                     response_policy.go (kill/block actions), ancestry_cache.go
-rules/common.yaml — detection rule data (self-documented)
+pkg/detector/    — detection engine: yaml_detector.go (rule matching),
+                     response.go (kill/block execution), ancestry_cache.go
+rules/           — detection rule data (self-documented): process/file/network.yaml
+                     (per-sensor detections + response), common.yaml (shared lists)
 pkg/workload/    — WorkloadResolver: DockerResolver, K8sResolver
 pkg/alertsink/   — file / redis / supabase sinks
 internal/config/ — env-var config (sinks, workload identity)
@@ -75,7 +76,7 @@ bash scripts/deploy-ebpf-k8s.sh
 ./validate-do-k8s.sh
 ```
 
-### When you change only Go code (pkg/ or cmd/) or rules (rules/common.yaml)
+### When you change only Go code (pkg/ or cmd/) or rules (rules/*.yaml)
 
 `go generate` is not needed — BPF objects are unchanged. Safe to build on any machine.
 
@@ -191,9 +192,9 @@ Service assignment: `user_service` (T1/T3/T7/T9), `order_service` (T2/T6),
 | T9   | HIGH     | `T1552_001_credentials_in_files`       | —            | `/tmp/app.env`         |
 | T10  | HIGH     | `T1613_container_resource_discovery`   | —            | container mgmt tool exec |
 
-Response actions come from `pkg/detector/response_policy.go`: `kill_process` for
-credential-dumping and private-key reads, `block_ip` for C2 exfiltration. (T1611 host-escape
-kill is present but commented out until its allowlist is complete.)
+Response actions come from the `response:` field on each detection in `rules/*.yaml`
+(executed by `pkg/detector/response.go`): `kill_process` for credential-dumping and
+private-key reads, `block_ip` for C2 exfiltration.
 
 ## Verifying alerts are flowing
 
