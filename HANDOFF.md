@@ -1,7 +1,8 @@
 # Project Handoff — Current Status
 
-**Last Updated:** 2026-07-08
-**Status:** ✅ Detection working on DO K8s (`./validate-do-k8s.sh` 11/11) and Docker (`validate.sh`).
+**Last Updated:** 2026-07-09
+**Status:** ✅ Detection working on DO K8s (`./validate-do-k8s.sh` 11/11) and Docker
+(`validate.sh` 10/10) — validated with structured-matcher rules (Steps 1–3).
 
 **Working:**
 - Layer 1 fast-path filtering (ppid==0, pid in safeInfraPIDs)
@@ -29,9 +30,9 @@ Work step-by-step; STOP after each step for user review before starting the next
 | Done / deferred / planned | this file (sections below) |
 
 **Ground truth in code (only when a doc is insufficient):** matching + severity + response live in
-`pkg/detector/yaml_detector.go` + `response_policy.go` (**not** the YAML `detections:` block — that
-is declarative reference); rule *data* is `rules/default.yaml`; resolver is `pkg/workload/`;
-sink/env config is `internal/config/config.go`.
+`pkg/detector/yaml_detector.go` + `response_policy.go`; rule *data* is `rules/process.yaml` /
+`file.yaml` / `network.yaml` (per-sensor detections) + `rules/common.yaml` (shared lists +
+Layer 1/2 config); resolver is `pkg/workload/`; sink/env config is `internal/config/config.go`.
 
 **Hard constraints (also in CLAUDE.md):** never run git; never edit `.bpf.c`; never edit
 `infra/.env` (secrets — user edits on the VM); no TODO / future-commitment comments.
@@ -83,7 +84,7 @@ Alert Pipeline
   └─ Alert Router web UI (viewing)
 
 Configuration
-  ├─ rules/default.yaml (detection rules)
+  ├─ rules/ (process/file/network.yaml detections + common.yaml shared lists)
   ├─ infra/.env (credentials)
   └─ k8s/ebpf-edr-ds.yaml (K8s manifest)
 ```
@@ -106,7 +107,8 @@ make docker-push-ghcr-prebuilt
 bash scripts/deploy-ebpf-k8s.sh
 ```
 
-Setup / build / sink details: `docs/SETUP.md`. Self-documented rule data: `rules/default.yaml`.
+Setup / build / sink details: `docs/SETUP.md`. Self-documented rule data: `rules/` (per-sensor
+detections in `process.yaml`/`file.yaml`/`network.yaml`, shared lists in `common.yaml`).
 
 ---
 
@@ -143,25 +145,50 @@ detections:
   not T1036 (HIGH) — order is YAML-defined now, accepted.
 - Pipeline flow unchanged: Layer 1 safeProcs skip → global_exceptions → rules check. The
   `state=unknown` ancestry-walk → LOW telemetry path, `ppid==1` skip stay Go pipeline logic.
-- Shared lists STAY in `default.yaml` until Step 4 (`shell_processes` feeds the ancestry walk,
+- Shared lists STAY in `common.yaml` until Step 4 (`shell_processes` feeds the ancestry walk,
   `suspicious_exec_paths` feeds anti-spoof — moving them early would break pipeline precomputes).
 - Old `macros:` + free-text `condition:` are dead with Option B — deleted in Step 4, not before.
 
 **Steps (STOP after each — user reviews/validates before the next):**
 1. ✅ `rules/process.yaml` — DONE (2026-07-08). 4 process detections moved (T1059, T1105,
    T1613, T1036); loader has `DetectionRule`/`MatchSpec` (severity typed `alert.Level`, no
-   hardcoded strings), loads process.yaml from the default.yaml dir, REQUIRED + fail-fast
+   hardcoded strings), loads process.yaml from the common.yaml dir, REQUIRED + fail-fast
    validation (severity, CRITICAL→LOW order, list refs); `checkProcessRules` = one loop over
    precompiled detections, telemetry path untouched; Dockerfile now `COPY rules/` (whole dir —
    K8s image needs process.yaml or agent fails at startup). Unit tests added
    (`pkg/rules/loader_test.go` incl. real-rules load guard; `pkg/detector/yaml_detector_test.go`
-   11 cases). Verified: `make test` green, Docker VM `validate.sh` **10/10**.
-   K8s `validate-do-k8s.sh` not yet re-run (needs image push — Dockerfile changed).
-2. `rules/file.yaml` — the 9 file detections, same way (incl. T1552_004 two-severity split,
-   pem excludes, proc_escape_allowed, T1082 reader gate as `comm_base_in: recon_file_readers`).
-3. `rules/network.yaml` — T1041 + network policy (allowed_ports/services, private_ranges).
-4. Clean up `default.yaml` → becomes the "common" file (Layer 1/2 config + shared lists);
-   delete dead `detections:`/`macros:` blocks; decide per-sensor list placement.
+   11 cases). Verified: `make test` green, Docker VM `validate.sh` **10/10**,
+   K8s `validate-do-k8s.sh` **11/11** (image re-pushed, agent restarted).
+2. ✅ `rules/file.yaml` — DONE (2026-07-08). 9 file detections (T1552_004 split: dirs=CRITICAL
+   entry + suffixes=HIGH entry, same emitted name). Schema change: `exceptions:` is now a
+   LIST of specs (OR between entries, AND within — needed for "pem CA-bundle OR customer
+   app"). New primitives: `file_prefix_in/suffix_in/exact_in/contains_in`. The old global
+   file whitelist (customer_applications) is now an explicit per-rule exception; runc-state
+   whitelist stays Go pipeline. Behavior deltas (accepted): generic `file_contains_in:
+   pem_exclude_paths` excludes ALL key suffixes under /site-packages//certifi/ (Go excluded
+   .pem only); alert messages are static (filename is a structured field). Unit tests added
+   by user review round. Validated 2026-07-09: Docker VM 10/10, K8s 11/11.
+3. ✅ `rules/network.yaml` — DONE (2026-07-08). T1041: match `dst_ip_not_in: private_ranges`
+   (replaces per-event isPrivateIP CIDR re-parse — now parsed once at compile), exceptions
+   `dst_port_in: allowed_ports` / `service_in: allowed_services`. allowed_ports/services
+   moved from the `network:` block into `lists:` (block deleted from common.yaml;
+   `RulesDB.Network` struct is now dead — remove in Step 4). matchInput struct carries
+   comm/filename/dstIP/dstPort/service through one shared matcher. NOTE (pre-existing, not
+   changed): `network_init.go` privateNets (SERVICE_CIDR/GKE CIDR) is populated but never
+   read — the YAML private_ranges is the real check. Validated 2026-07-09: Docker VM 10/10,
+   K8s 11/11.
+4. ✅ Clean up `common.yaml` — DONE (2026-07-09). Deleted dead `detections:`/`macros:` blocks
+   (T1611_escape_host_fs deferred note preserved on the `container_fs_paths` list; ns-telemetry
+   rationale pointer kept in the file header). Deleted 10 orphan lists referenced by nothing
+   (shell_binaries, system_container_detection_tools, container_runtime_execs,
+   docker_lifecycle_tools, digitalocean_cloud_agents, k8s_infrastructure_procs,
+   gcp_cloud_agents, gke_infrastructure_procs, digitalocean_infrastructure_procs,
+   compiled_infra_runtime_whitelist — all dead since the ancestry-walk design; git history has
+   the data). Loader: removed dead `Detection`/`MacroDef`/`Network` types, `RulesDB`
+   Macros/Detections/Network fields, `GetMacro`. **List placement decision: ALL lists stay in
+   common.yaml** — several are shared across sensors/pipeline, and per-sensor lists would need
+   loader merge + cross-file ref validation for zero behavior gain. `make test` green
+   (loader real-rules guard passes). Awaiting real-env validation.
 5. `response:` per detection in YAML (kill_process / block_ip); `response_policy.go` reads
    from rules data instead of its Go table. Only after detection is proven.
 

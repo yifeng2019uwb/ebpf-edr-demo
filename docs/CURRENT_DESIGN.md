@@ -28,7 +28,7 @@ ebpf-edr-demo/
 │   ├── config/                 # env/config (ALERT_LOG_PATH, etc.)
 │   ├── processor/              # ProcessEvent / FileEvent / NetEvent structs + parsing
 │   └── alert/                  # Alert type + Level / Action
-├── rules/default.yaml          # detection data (lists, exceptions, network, namespaces)
+├── rules/common.yaml          # detection data (lists, exceptions, network, namespaces)
 ├── k8s/ebpf-edr-ds.yaml        # DaemonSet manifest
 └── Makefile
 ```
@@ -45,7 +45,7 @@ kernel sensor  ──►  rawCh  ──►  enrich
                                   ▼
                              enrichedCh  ──►  YAMLDetector.Detect
                                                  │ Layer 1/2 filters + rule match (Go)
-                                                 │ data from rules/default.yaml
+                                                 │ data from rules/common.yaml
                                                  ▼
                                             Alert?  ──►  ResponseFor (kill_process / block_ip)
                                                  │

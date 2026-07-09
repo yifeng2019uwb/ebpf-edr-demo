@@ -1,0 +1,27 @@
+# Network detections — lsm-connect (lsm/socket_connect).
+# Sees: dst_ip, dst_port, comm, pid, ppid, uid, mnt_ns_id on every connect().
+#
+# This file is the SOURCE OF TRUTH for network rule matching, severity, and
+# check order (CRITICAL → LOW, validated at load).
+#
+# Schema: see rules/process.yaml. Network-specific primitives:
+#   dst_ip_not_in:  dst IP is OUTSIDE every CIDR in the list (external traffic)
+#   dst_port_in:    dst port equals any list item
+#   service_in:     resolved workload service name equals any list item
+
+detections:
+
+  # T1041 / T1048 — Exfiltration Over C2 Channel / Alternative Protocol
+  # Container connecting to a non-private IP → potential data exfiltration.
+  # Exceptions: DNS/NTP/Supabase-pgbouncer ports (allowed_ports) and services
+  # with legitimate external APIs (allowed_services — inventory calls CoinGecko).
+  # Response: block_ip (LSM-level enforcement) via response policy.
+  - name: T1041_exfiltration_over_c2
+    severity: HIGH
+    require_container: true
+    match:
+      dst_ip_not_in: private_ranges
+    exceptions:
+      - dst_port_in: allowed_ports
+      - service_in: allowed_services
+    message: "Container made unauthorized external connection"

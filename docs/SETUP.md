@@ -43,7 +43,7 @@ pkg/bpf/gen.go   — go:generate directives; one per BPF program:
 pkg/bpf/         — generated Go wrappers (committed, no clang needed in CI)
 pkg/detector/    — detection engine: yaml_detector.go (matching + severity),
                      response_policy.go (kill/block actions), ancestry_cache.go
-rules/default.yaml — detection rule data (self-documented)
+rules/common.yaml — detection rule data (self-documented)
 pkg/workload/    — WorkloadResolver: DockerResolver, K8sResolver
 pkg/alertsink/   — file / redis / supabase sinks
 internal/config/ — env-var config (sinks, workload identity)
@@ -75,7 +75,7 @@ bash scripts/deploy-ebpf-k8s.sh
 ./validate-do-k8s.sh
 ```
 
-### When you change only Go code (pkg/ or cmd/) or rules (rules/default.yaml)
+### When you change only Go code (pkg/ or cmd/) or rules (rules/common.yaml)
 
 `go generate` is not needed — BPF objects are unchanged. Safe to build on any machine.
 

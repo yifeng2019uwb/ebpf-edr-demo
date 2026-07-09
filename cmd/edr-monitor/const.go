@@ -15,7 +15,7 @@ const (
 	logNameNet     = "net"
 
 	// Rules file path
-	rulesFilePath = "rules/default.yaml"
+	rulesFilePath = "rules/common.yaml"
 
 	// Environment names
 	envGCP = "gcp"

@@ -79,7 +79,7 @@ See: [DEPLOYMENT.md](DEPLOYMENT.md#configuration)
 kernel/          → eBPF C programs
 pkg/bpf/         → Generated Go wrappers (from bpf2go)
 pkg/detector/    → Detection rules (YAML-based)
-pkg/rules/       → Rule loader + default.yaml
+pkg/rules/       → Rule loader + common.yaml
 pkg/workload/    → Container/pod resolver
 pkg/alertsink/   → Alert outputs (file, Redis, Supabase)
 cmd/edr-monitor/ → Main agent binary
@@ -96,7 +96,7 @@ rules/           → Detection rules in YAML
 |---------------------|---------------------|---------------------------------|
 | BPF C code          | `make rebuild`      | [DEPLOYMENT.md](DEPLOYMENT.md)   |
 | Go code only        | `make build`        | [DEPLOYMENT.md](DEPLOYMENT.md)   |
-| Detection rules     | Edit `rules/default.yaml` | [HANDOFF.md](HANDOFF.md)   |
+| Detection rules     | Edit `rules/common.yaml` | [HANDOFF.md](HANDOFF.md)   |
 | DaemonSet config    | Edit `k8s/ebpf-edr-ds.yaml` | [DEPLOYMENT.md](DEPLOYMENT.md) |
 
 ---
@@ -126,7 +126,7 @@ redis-cli -u redis://... SUBSCRIBE edr-alerts
 
 - **[DEPLOYMENT.md](DEPLOYMENT.md)** — Full deployment guide (K8s, Docker, config)
 - **[HANDOFF.md](HANDOFF.md)** — Session progress, architecture, known issues
-- **[rules/default.yaml](rules/default.yaml)** — Detection rules (self-documented)
+- **[rules/common.yaml](rules/common.yaml)** — Detection rules (self-documented)
 - **[MITRE-COVERAGE.md](docs/MITRE-COVERAGE.md)** — Supported attack techniques
 
 ---

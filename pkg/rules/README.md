@@ -1,6 +1,6 @@
 # pkg/rules — Detection Rules Loader
 
-Loads security rules from `rules/default.yaml` and provides a queryable interface for the detector engine.
+Loads security rules from `rules/common.yaml` and provides a queryable interface for the detector engine.
 
 ## What It Does
 
@@ -16,7 +16,7 @@ Loads security rules from `rules/default.yaml` and provides a queryable interfac
   - `DetectEnvironment()` — checks cloud metadata (timeout 1.5s)
   - `MergeWhitelists()` — adds cloud agents + K8s infrastructure
   
-- **default.yaml** — All detection rules in one file
+- **common.yaml** — All detection rules in one file
   - `lists:` — reusable collections (shell_binaries, network_tools, etc.)
   - `macros:` — compound conditions (is_container, accessing_ssh_keys, etc.)
   - `detections:` — 14 MITRE techniques with condition + severity + output
@@ -37,7 +37,7 @@ Loads security rules from `rules/default.yaml` and provides a queryable interfac
 
 ```go
 // Load rules
-rulesDB, err := rules.LoadRulesForEnvironment("rules/default.yaml")
+rulesDB, err := rules.LoadRulesForEnvironment("rules/common.yaml")
 
 // Create detector with environment awareness
 det := detector.NewYAMLDetectorWithEnv(rulesDB, string(rulesDB.Env))

@@ -131,7 +131,7 @@ isParentTrusted(ppid):                       # climbs up to ancestryWalkMaxDepth
 ```
 
 **YAML is the source of the knowledge, Go is only the mechanism.** New list in
-`rules/default.yaml`:
+`rules/common.yaml`:
 
 ```yaml
 # Trusted parent names — processes allowed to spawn transient utilities.

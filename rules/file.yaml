@@ -1,0 +1,129 @@
+# File detections — opensnoop (tracepoint sys_enter_openat / sys_exit_openat).
+# Sees: filename, comm, pid, ppid, uid, mnt_ns_id on every successful openat().
+#
+# This file is the SOURCE OF TRUTH for file rule matching, severity, and check
+# order. The detector evaluates entries in file order — keep them sorted
+# CRITICAL → LOW; the loader rejects the file if the order is violated.
+#
+# Schema: see rules/process.yaml. File-specific primitives:
+#   file_prefix_in:    filename starts with any list item
+#   file_suffix_in:    filename ends with any list item
+#   file_exact_in:     filename equals any list item
+#   file_contains_in:  filename contains any list item
+#
+# All entries are require_container: true — file rules only fire for verified
+# containers (state resolved, runtime docker/k8s). The T1611
+# host-reads-container-overlay rule is NOT here: it is disabled pending its
+# allowlist (deferred validate.sh T7 work).
+#
+# Every rule excepts customer_applications (replaces the detector's old global
+# comm whitelist for file events — now explicit per rule).
+
+detections:
+
+  # T1552.004 — Unsecured Credentials: Private Keys (SSH directories)
+  # Container reading /root/.ssh/, /home/.ssh/ → credential theft.
+  - name: T1552_004_private_keys
+    severity: CRITICAL
+    require_container: true
+    match:
+      file_prefix_in: ssh_key_dirs
+    exceptions:
+      - comm_base_in: customer_applications
+    message: "Container accessed SSH credential directory"
+
+  # T1003.008 — OS Credential Dumping
+  # Container reading /etc/shadow → password hash extraction.
+  - name: T1003_008_os_credential_dumping
+    severity: CRITICAL
+    require_container: true
+    match:
+      file_prefix_in: credential_dump_paths
+    exceptions:
+      - comm_base_in: customer_applications
+    message: "Container accessed OS credential file"
+
+  # T1611 — Escape to Host (Procfs)
+  # Container reading /proc/1/ → host init process access (escape attempt).
+  # proc_escape_allowed excepts the read-only files monitoring tools use
+  # (/proc/1/stat, /proc/1/status, /proc/1/cmdline, /proc/1/mountinfo).
+  - name: T1611_escape_to_host_proc
+    severity: HIGH
+    require_container: true
+    match:
+      file_prefix_in: proc_escape_paths
+    exceptions:
+      - file_exact_in: proc_escape_allowed
+      - comm_base_in: customer_applications
+    message: "Container accessed host process namespace"
+
+  # T1552.001 — Unsecured Credentials: Credentials in Files (secret mounts)
+  # Container reading /run/secrets/ → secret extraction.
+  - name: T1552_001_credentials_in_files
+    severity: HIGH
+    require_container: true
+    match:
+      file_prefix_in: credential_file_dirs
+    exceptions:
+      - comm_base_in: customer_applications
+    message: "Container accessed secret mount"
+
+  # T1552.004 — Unsecured Credentials: Private Keys (key files by extension)
+  # .key, .pem, id_rsa, id_ed25519 anywhere on disk. pem_exclude_paths excepts
+  # CA bundles (certifi/site-packages) that Python loads on every HTTPS request.
+  - name: T1552_004_private_keys
+    severity: HIGH
+    require_container: true
+    match:
+      file_suffix_in: ssh_key_suffixes
+    exceptions:
+      - file_contains_in: pem_exclude_paths
+      - comm_base_in: customer_applications
+    message: "Container accessed private key file"
+
+  # T1552.001 — Unsecured Credentials: Credentials in Files (.env)
+  # Container reading .env files → credential extraction.
+  - name: T1552_001_credentials_in_files
+    severity: HIGH
+    require_container: true
+    match:
+      file_suffix_in: credential_file_suffixes
+    exceptions:
+      - comm_base_in: customer_applications
+    message: "Container accessed credential file"
+
+  # T1053.003 — Scheduled Task/Job: Cron
+  # Container accessing /etc/cron.d/, /var/spool/cron/, /etc/crontab → persistence.
+  - name: T1053_003_scheduled_task_cron
+    severity: HIGH
+    require_container: true
+    match:
+      file_prefix_in: cron_paths
+    exceptions:
+      - comm_base_in: customer_applications
+    message: "Container accessed cron configuration"
+
+  # T1082 — System Information Discovery (/etc/passwd, /etc/group)
+  # Gated on the READER: these files are world-readable and read constantly by
+  # libc NSS (getpwuid/getgrgid), so an app's own reads are benign. Only a
+  # recon/shell tool reading them (cat, grep, getent, ...) is the discovery signal.
+  - name: T1082_system_info_discovery
+    severity: MEDIUM
+    require_container: true
+    match:
+      comm_base_in: recon_file_readers
+      file_prefix_in: system_info_paths
+    exceptions:
+      - comm_base_in: customer_applications
+    message: "Container accessed system file"
+
+  # T1070.003 — Indicator Removal: Clear Command History
+  # Container accessing .bash_history, .zsh_history → covering tracks.
+  - name: T1070_003_clear_command_history
+    severity: MEDIUM
+    require_container: true
+    match:
+      file_suffix_in: shell_history_suffixes
+    exceptions:
+      - comm_base_in: customer_applications
+    message: "Container accessed command history file"

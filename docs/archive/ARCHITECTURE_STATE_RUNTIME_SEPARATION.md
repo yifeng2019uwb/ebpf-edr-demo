@@ -318,7 +318,7 @@ if alert.runtime == "host":
 
 3. **Rule Filtering:**
    ```yaml
-   # In rules/default.yaml
+   # In rules/common.yaml
    t1082_system_info_discovery:
        exclude_runtimes:
            - runtime: host

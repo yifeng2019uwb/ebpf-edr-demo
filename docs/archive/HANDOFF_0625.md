@@ -294,7 +294,7 @@ Service coverage: auth-service (V3/V8/V10), provider-service (V2/V7/V11), gatewa
 
 **Plan:**
 1. Create `pkg/rules/` package — YAML loader + applier
-2. Add `rules/default.yaml` — move all rules from policy.go into structured YAML
+2. Add `rules/common.yaml` — move all rules from policy.go into structured YAML
 3. Refactor `pkg/detector/` to load rules from YAML instead of hardcoded slices
 4. Test: ensure behavior identical to before (same alerts on same tests)
 5. Document each rule in `/workspace/learning/ebpf-edr/MITRE-STUDY.md` while refactoring

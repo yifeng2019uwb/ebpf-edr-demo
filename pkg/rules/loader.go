@@ -41,14 +41,12 @@ type GlobalException struct {
 	FilePrefixes  []string `yaml:"file_prefixes"`
 }
 
-// RulesSection contains all rule definitions (lists, macros, detections).
+// RulesSection contains the shared rule config (Layer 1/2 filters, lists).
+// Detections live in the per-sensor files (process/file/network.yaml).
 type RulesSection struct {
 	InfrastructureFilters InfrastructureFilters `yaml:"infrastructure_filters"`
 	GlobalExceptions      []GlobalException     `yaml:"global_exceptions"`
 	Lists                 []ListDef             `yaml:"lists"`
-	Macros                []MacroDef            `yaml:"macros"`
-	Detections            map[string]Detection  `yaml:"detections"`
-	Network               Network               `yaml:"network"`
 	IgnoreNamespaces      []string              `yaml:"ignore_namespaces"`
 }
 
@@ -58,56 +56,30 @@ type ListDef struct {
 	Items []interface{} `yaml:"items"`
 }
 
-// MacroDef defines a named macro (reusable condition).
-type MacroDef struct {
-	Name      string `yaml:"name"`
-	Condition string `yaml:"condition"`
-}
-
-// Detection represents a single detection rule.
-type Detection struct {
-	// Simple field matching (backward compatible)
-	DirPrefixes  []string `yaml:"dir_prefixes"`
-	Suffixes     []string `yaml:"suffixes"`
-	Paths        []string `yaml:"paths"`
-	Tools        []string `yaml:"tools"`
-	Binaries     []string `yaml:"binaries"`
-	ExcludePaths []string `yaml:"exclude_paths"`
-
-	// Container escape specific
-	ContainerFS       []string `yaml:"container_fs"`
-	ProcEscape        []string `yaml:"proc_escape"`
-	ProcEscapeAllowed []string `yaml:"proc_escape_allowed"`
-	SuspiciousPaths   []string `yaml:"suspicious_paths"`
-
-	// Future: condition-based (Falco-style)
-	Condition       string   `yaml:"condition"`        // e.g., "spawned_shell and in_container"
-	ExceptionMacros []string `yaml:"exception_macros"` // macro names to exclude
-	Severity        string   `yaml:"severity"`         // CRITICAL, HIGH, MEDIUM
-	Output          string   `yaml:"output"`           // output message template
-}
-
-// Network contains network policy.
-type Network struct {
-	AllowedPorts    []uint16 `yaml:"allowed_ports"`
-	AllowedServices []string `yaml:"allowed_services"`
-}
-
 // ── Structured detections (per-sensor YAML files) ─────────────────────────────
 
 // MatchSpec holds declarative match primitives for a structured detection.
 // Each field names a list from the shared lists; all specified fields must
 // match (AND). An empty spec matches nothing.
 type MatchSpec struct {
-	CommSuffixIn string `yaml:"comm_suffix_in"` // comm ends with any list item
-	CommBaseIn   string `yaml:"comm_base_in"`   // filepath.Base(comm) equals any list item
-	CommPrefixIn string `yaml:"comm_prefix_in"` // comm starts with any list item
+	CommSuffixIn   string `yaml:"comm_suffix_in"`   // comm ends with any list item
+	CommBaseIn     string `yaml:"comm_base_in"`     // filepath.Base(comm) equals any list item
+	CommPrefixIn   string `yaml:"comm_prefix_in"`   // comm starts with any list item
+	FilePrefixIn   string `yaml:"file_prefix_in"`   // filename starts with any list item
+	FileSuffixIn   string `yaml:"file_suffix_in"`   // filename ends with any list item
+	FileExactIn    string `yaml:"file_exact_in"`    // filename equals any list item
+	FileContainsIn string `yaml:"file_contains_in"` // filename contains any list item
+	DstIPNotIn     string `yaml:"dst_ip_not_in"`    // dst IP outside every CIDR in the list
+	DstPortIn      string `yaml:"dst_port_in"`      // dst port equals any list item
+	ServiceIn      string `yaml:"service_in"`       // resolved service name equals any list item
 }
 
 // listRefs returns the list names referenced by the spec (for validation).
 func (m MatchSpec) listRefs() []string {
 	var refs []string
-	for _, name := range []string{m.CommSuffixIn, m.CommBaseIn, m.CommPrefixIn} {
+	for _, name := range []string{m.CommSuffixIn, m.CommBaseIn, m.CommPrefixIn,
+		m.FilePrefixIn, m.FileSuffixIn, m.FileExactIn, m.FileContainsIn,
+		m.DstIPNotIn, m.DstPortIn, m.ServiceIn} {
 		if name != "" {
 			refs = append(refs, name)
 		}
@@ -117,12 +89,14 @@ func (m MatchSpec) listRefs() []string {
 
 // DetectionRule is one structured detection entry from a per-sensor rules file.
 // Entries are evaluated in file order (CRITICAL → LOW, validated at load).
+// Exceptions are OR-ed: the rule is suppressed if ANY spec matches (each spec
+// still ANDs its own fields).
 type DetectionRule struct {
 	Name             string      `yaml:"name"`              // emitted rule name
 	Severity         alert.Level `yaml:"severity"`          // CRITICAL | HIGH | MEDIUM | LOW
 	RequireContainer bool        `yaml:"require_container"` // false = also host/unknown
 	Match            MatchSpec   `yaml:"match"`
-	Exceptions       MatchSpec   `yaml:"exceptions"`
+	Exceptions       []MatchSpec `yaml:"exceptions"`
 	Message          string      `yaml:"message"`
 }
 
@@ -175,7 +149,14 @@ func validateDetections(dets []DetectionRule, lists map[string][]interface{}) er
 		if len(det.Match.listRefs()) == 0 {
 			return fmt.Errorf("detection %s: match must specify at least one primitive", det.Name)
 		}
-		for _, ref := range append(det.Match.listRefs(), det.Exceptions.listRefs()...) {
+		refs := det.Match.listRefs()
+		for _, ex := range det.Exceptions {
+			if len(ex.listRefs()) == 0 {
+				return fmt.Errorf("detection %s: empty exception spec", det.Name)
+			}
+			refs = append(refs, ex.listRefs()...)
+		}
+		for _, ref := range refs {
 			if _, ok := lists[ref]; !ok {
 				return fmt.Errorf("detection %s: unknown list reference %q", det.Name, ref)
 			}
@@ -189,10 +170,9 @@ type RulesDB struct {
 	InfrastructureFilters InfrastructureFilters // Layer 1: fast-path infrastructure whitelist
 	GlobalExceptions      []GlobalException     // Layer 2 pre-filter: context-aware exceptions
 	Lists                 map[string][]interface{}
-	Macros                map[string]string
-	Detections            map[string]Detection
 	ProcessDetections     []DetectionRule // structured process rules (rules/process.yaml, ordered)
-	Network               Network
+	FileDetections        []DetectionRule // structured file rules (rules/file.yaml, ordered)
+	NetworkDetections     []DetectionRule // structured network rules (rules/network.yaml, ordered)
 	IgnoreNs              map[string]bool
 	Env                   Environment // detected environment: gcp, digitalocean, local
 }
@@ -215,7 +195,16 @@ func LoadRules(path string) (*RulesDB, error) {
 	// Compile to RulesDB
 	db := CompileRules(&cfg)
 
-	db.ProcessDetections, err = loadSensorDetections(filepath.Join(filepath.Dir(path), "process.yaml"), db.Lists)
+	dir := filepath.Dir(path)
+	db.ProcessDetections, err = loadSensorDetections(filepath.Join(dir, "process.yaml"), db.Lists)
+	if err != nil {
+		return nil, err
+	}
+	db.FileDetections, err = loadSensorDetections(filepath.Join(dir, "file.yaml"), db.Lists)
+	if err != nil {
+		return nil, err
+	}
+	db.NetworkDetections, err = loadSensorDetections(filepath.Join(dir, "network.yaml"), db.Lists)
 	if err != nil {
 		return nil, err
 	}
@@ -233,12 +222,6 @@ func CompileRules(cfg *Config) *RulesDB {
 		lists[list.Name] = list.Items
 	}
 
-	// Build macros map
-	macros := make(map[string]string)
-	for _, macro := range r.Macros {
-		macros[macro.Name] = macro.Condition
-	}
-
 	// Build ignore namespaces set
 	ignoreNs := make(map[string]bool)
 	for _, ns := range r.IgnoreNamespaces {
@@ -249,9 +232,6 @@ func CompileRules(cfg *Config) *RulesDB {
 		InfrastructureFilters: r.InfrastructureFilters,
 		GlobalExceptions:      r.GlobalExceptions,
 		Lists:                 lists,
-		Macros:                macros,
-		Detections:            r.Detections,
-		Network:               r.Network,
 		IgnoreNs:              ignoreNs,
 	}
 }
@@ -259,11 +239,6 @@ func CompileRules(cfg *Config) *RulesDB {
 // GetList returns items from a named list.
 func (db *RulesDB) GetList(name string) []interface{} {
 	return db.Lists[name]
-}
-
-// GetMacro returns the condition string for a named macro.
-func (db *RulesDB) GetMacro(name string) string {
-	return db.Macros[name]
 }
 
 // IsIgnoredNamespace checks if namespace should be ignored.
@@ -329,8 +304,7 @@ func tryMetadata(ctx context.Context, method, url string, headers map[string]str
 }
 
 // LoadRulesForEnvironment loads rules and records the detected cloud environment.
-// Environment-specific trust (gcp_cloud_agents, gke_infrastructure_procs,
-// digitalocean_* lists) is not merged here — it belongs in the YAML-rule-driven
+// Environment-specific trust is not merged here — it belongs in the YAML-rule-driven
 // trust checks (trusted_parent_names / ancestry), not a startup list merge.
 func LoadRulesForEnvironment(path string) (*RulesDB, error) {
 	db, err := LoadRules(path)

@@ -13,11 +13,12 @@
 #                              runtime docker/k8s)
 #                      false = also fires for host and state=unknown processes
 #   match:             all specified primitives must match (AND); values are
-#                      list names from rules/default.yaml
+#                      list names from rules/common.yaml
 #     comm_suffix_in:  comm ends with any item in the list
 #     comm_base_in:    filepath.Base(comm) equals any item in the list
 #     comm_prefix_in:  comm starts with any item in the list
-#   exceptions:        same primitives; if they match, the rule does not fire
+#   exceptions:        LIST of specs, same primitives; the rule does not fire if
+#                      ANY spec matches (fields within one spec still AND)
 #   message:           plain string (no templating — comm/service/pid are
 #                      structured alert fields)
 
@@ -31,7 +32,7 @@ detections:
     match:
       comm_suffix_in: shell_processes
     exceptions:
-      comm_base_in: customer_applications
+      - comm_base_in: customer_applications
     message: "Shell spawned from container — possible RCE"
 
   # T1105 / T1095 — Ingress Tool Transfer
@@ -42,7 +43,7 @@ detections:
     match:
       comm_suffix_in: network_tools
     exceptions:
-      comm_base_in: customer_applications
+      - comm_base_in: customer_applications
     message: "Network tool executed from container — possible exfiltration or tool staging"
 
   # T1613 — Container and Resource Discovery
@@ -53,7 +54,7 @@ detections:
     match:
       comm_suffix_in: container_mgmt_tools
     exceptions:
-      comm_base_in: customer_applications
+      - comm_base_in: customer_applications
     message: "Container management tool executed inside container — possible discovery"
 
   # T1036 — Masquerading

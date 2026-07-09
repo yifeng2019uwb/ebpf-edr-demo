@@ -30,38 +30,98 @@ type YAMLDetector struct {
 	trustedParentNames map[string]bool   // precomputed from trusted_parent_names (hot path)
 	suspiciousPrefixes []string          // precomputed from suspicious_exec_paths (writable-location denylist)
 	shellNames         map[string]bool   // precomputed from shell_processes (hot path)
-	reconReaders       map[string]bool   // precomputed from recon_file_readers (T1082 reader gate)
 	processDetections  []compiledDetection // structured process rules (rules/process.yaml, ordered)
+	fileDetections     []compiledDetection // structured file rules (rules/file.yaml, ordered)
+	netDetections      []compiledDetection // structured network rules (rules/network.yaml, ordered)
+}
+
+// matchInput carries the event attributes a structured detection can match on.
+// Unset fields are the zero value (filename "" for process events, dstIP nil
+// for non-network events), and their primitives then never match.
+type matchInput struct {
+	comm     string
+	filename string
+	dstIP    net.IP
+	dstPort  uint16
+	service  string
 }
 
 // compiledMatch is a MatchSpec with its list references resolved to lookup
-// structures (rules are immutable after load, so this is done once).
+// structures (rules are immutable after load, so this is done once — including
+// CIDR parsing, which the old per-event isPrivateIP re-did on every packet).
 // All non-empty primitives must match (AND); an empty match matches nothing.
 type compiledMatch struct {
 	commSuffixes []string        // comm_suffix_in
 	commBases    map[string]bool // comm_base_in
 	commPrefixes []string        // comm_prefix_in
+	filePrefixes []string        // file_prefix_in
+	fileSuffixes []string        // file_suffix_in
+	fileExacts   map[string]bool // file_exact_in
+	fileContains []string        // file_contains_in
+	dstIPNotIn   []*net.IPNet    // dst_ip_not_in (match = IP outside every range)
+	dstPorts     map[uint16]bool // dst_port_in
+	services     map[string]bool // service_in
 }
 
 func (m *compiledMatch) empty() bool {
-	return len(m.commSuffixes) == 0 && len(m.commBases) == 0 && len(m.commPrefixes) == 0
+	return len(m.commSuffixes) == 0 && len(m.commBases) == 0 && len(m.commPrefixes) == 0 &&
+		len(m.filePrefixes) == 0 && len(m.fileSuffixes) == 0 && len(m.fileExacts) == 0 &&
+		len(m.fileContains) == 0 && len(m.dstIPNotIn) == 0 && len(m.dstPorts) == 0 &&
+		len(m.services) == 0
 }
 
-// matchesComm reports whether comm satisfies every specified primitive.
-func (m *compiledMatch) matchesComm(comm string) bool {
+// matches reports whether the event satisfies every specified primitive.
+func (m *compiledMatch) matches(in matchInput) bool {
 	if m.empty() {
 		return false
 	}
-	if len(m.commSuffixes) > 0 && !hasAnySuffix(comm, m.commSuffixes) {
+	if len(m.commSuffixes) > 0 && !hasAnySuffix(in.comm, m.commSuffixes) {
 		return false
 	}
-	if len(m.commBases) > 0 && !m.commBases[filepath.Base(comm)] {
+	if len(m.commBases) > 0 && !m.commBases[filepath.Base(in.comm)] {
 		return false
 	}
-	if len(m.commPrefixes) > 0 && !hasAnyPrefix(comm, m.commPrefixes) {
+	if len(m.commPrefixes) > 0 && !hasAnyPrefix(in.comm, m.commPrefixes) {
+		return false
+	}
+	if len(m.filePrefixes) > 0 && !hasAnyPrefix(in.filename, m.filePrefixes) {
+		return false
+	}
+	if len(m.fileSuffixes) > 0 && !hasAnySuffix(in.filename, m.fileSuffixes) {
+		return false
+	}
+	if len(m.fileExacts) > 0 && !m.fileExacts[in.filename] {
+		return false
+	}
+	if len(m.fileContains) > 0 && !containsAny(in.filename, m.fileContains) {
+		return false
+	}
+	if len(m.dstIPNotIn) > 0 {
+		if in.dstIP == nil {
+			return false // no destination IP → cannot be verified external
+		}
+		for _, n := range m.dstIPNotIn {
+			if n.Contains(in.dstIP) {
+				return false // inside a listed range → not external
+			}
+		}
+	}
+	if len(m.dstPorts) > 0 && !m.dstPorts[in.dstPort] {
+		return false
+	}
+	if len(m.services) > 0 && !m.services[in.service] {
 		return false
 	}
 	return true
+}
+
+func containsAny(s string, subs []string) bool {
+	for _, sub := range subs {
+		if strings.Contains(s, sub) {
+			return true
+		}
+	}
+	return false
 }
 
 func hasAnySuffix(s string, suffixes []string) bool {
@@ -88,8 +148,18 @@ type compiledDetection struct {
 	level            alert.Level
 	requireContainer bool
 	match            compiledMatch
-	exceptions       compiledMatch
+	exceptions       []compiledMatch // OR-ed: any spec matching suppresses the rule
 	message          string
+}
+
+// excepted reports whether any exception spec matches the event.
+func (c *compiledDetection) excepted(in matchInput) bool {
+	for i := range c.exceptions {
+		if c.exceptions[i].matches(in) {
+			return true
+		}
+	}
+	return false
 }
 
 // NewYAMLDetector creates a detector with no runtime awareness.
@@ -115,16 +185,12 @@ func NewYAMLDetectorWithRuntime(db *rules.RulesDB, runtime workload.Runtime) *YA
 			d.shellNames[s] = true
 		}
 	}
-	d.reconReaders = make(map[string]bool)
-	for _, item := range db.GetList("recon_file_readers") {
-		if s, ok := item.(string); ok {
-			d.reconReaders[s] = true
-		}
-	}
 	// Anti-spoof path validation (env-agnostic): rather than allowlisting per-distro
 	// system dirs, we denylist attacker-writable locations. Precompute the list once.
 	d.suspiciousPrefixes = d.getListStrings("suspicious_exec_paths")
 	d.processDetections = d.compileDetections(db.ProcessDetections)
+	d.fileDetections = d.compileDetections(db.FileDetections)
+	d.netDetections = d.compileDetections(db.NetworkDetections)
 	return d
 }
 
@@ -134,12 +200,16 @@ func NewYAMLDetectorWithRuntime(db *rules.RulesDB, runtime workload.Runtime) *YA
 func (d *YAMLDetector) compileDetections(dets []rules.DetectionRule) []compiledDetection {
 	compiled := make([]compiledDetection, 0, len(dets))
 	for _, det := range dets {
+		exceptions := make([]compiledMatch, 0, len(det.Exceptions))
+		for _, ex := range det.Exceptions {
+			exceptions = append(exceptions, d.compileMatch(ex))
+		}
 		compiled = append(compiled, compiledDetection{
 			name:             det.Name,
 			level:            det.Severity,
 			requireContainer: det.RequireContainer,
 			match:            d.compileMatch(det.Match),
-			exceptions:       d.compileMatch(det.Exceptions),
+			exceptions:       exceptions,
 			message:          det.Message,
 		})
 	}
@@ -159,6 +229,42 @@ func (d *YAMLDetector) compileMatch(spec rules.MatchSpec) compiledMatch {
 	}
 	if spec.CommPrefixIn != "" {
 		m.commPrefixes = d.getListStrings(spec.CommPrefixIn)
+	}
+	if spec.FilePrefixIn != "" {
+		m.filePrefixes = d.getListStrings(spec.FilePrefixIn)
+	}
+	if spec.FileSuffixIn != "" {
+		m.fileSuffixes = d.getListStrings(spec.FileSuffixIn)
+	}
+	if spec.FileExactIn != "" {
+		m.fileExacts = make(map[string]bool)
+		for _, s := range d.getListStrings(spec.FileExactIn) {
+			m.fileExacts[s] = true
+		}
+	}
+	if spec.FileContainsIn != "" {
+		m.fileContains = d.getListStrings(spec.FileContainsIn)
+	}
+	if spec.DstIPNotIn != "" {
+		for _, cidr := range d.getListStrings(spec.DstIPNotIn) {
+			if _, n, err := net.ParseCIDR(cidr); err == nil {
+				m.dstIPNotIn = append(m.dstIPNotIn, n)
+			}
+		}
+	}
+	if spec.DstPortIn != "" {
+		m.dstPorts = make(map[uint16]bool)
+		for _, item := range d.rules.GetList(spec.DstPortIn) {
+			if p, ok := item.(int); ok && p >= 0 && p <= 65535 {
+				m.dstPorts[uint16(p)] = true
+			}
+		}
+	}
+	if spec.ServiceIn != "" {
+		m.services = make(map[string]bool)
+		for _, s := range d.getListStrings(spec.ServiceIn) {
+			m.services[s] = true
+		}
 	}
 	return m
 }
@@ -224,47 +330,12 @@ func (d *YAMLDetector) getListStrings(name string) []string {
 	return result
 }
 
-func (d *YAMLDetector) isProcEscapeAllowed(filename string) bool {
-	allowed := d.getListStrings("proc_escape_allowed")
-	for _, path := range allowed {
-		if filename == path {
-			return true
-		}
-	}
-	return false
-}
-
-func (d *YAMLDetector) isPemExcluded(filename string) bool {
-	excluded := d.getListStrings("pem_exclude_paths")
-	for _, path := range excluded {
-		if strings.Contains(filename, path) {
-			return true
-		}
-	}
-	return false
-}
-
 func (d *YAMLDetector) isWhitelisted(comm string) bool {
 	base := filepath.Base(comm)
 	// Check customer_applications (whitelisted apps that should not trigger alerts)
 	apps := d.getListStrings("customer_applications")
 	for _, w := range apps {
 		if base == w {
-			return true
-		}
-	}
-	return false
-}
-
-func (d *YAMLDetector) isPrivateIP(ip net.IP) bool {
-	// Parse private_ranges list from YAML
-	ranges := d.getListStrings("private_ranges")
-	for _, cidr := range ranges {
-		_, n, err := net.ParseCIDR(cidr)
-		if err != nil {
-			continue
-		}
-		if n.Contains(ip) {
 			return true
 		}
 	}
@@ -512,15 +583,16 @@ func (d *YAMLDetector) checkProcessRules(event processor.ProcessEvent, res workl
 	// (state resolved, runtime docker/k8s); require_container: false rules
 	// (T1036) also cover host and state=unknown processes.
 	isVerifiedContainer := isContainerContext(res)
+	in := matchInput{comm: comm}
 	for i := range d.processDetections {
 		det := &d.processDetections[i]
 		if det.requireContainer && !isVerifiedContainer {
 			continue
 		}
-		if !det.match.matchesComm(comm) {
+		if !det.match.matches(in) {
 			continue
 		}
-		if det.exceptions.matchesComm(comm) {
+		if det.excepted(in) {
 			continue
 		}
 		return newProcessAlert(event, res, comm, det.level, det.name, det.message)
@@ -582,6 +654,7 @@ func (d *YAMLDetector) checkFileRules(event processor.FileEvent, res workload.Re
 		return nil
 	}
 
+	// Special runc states during container initialization (runc:[2:INIT], ...)
 	fileCommWhitelist := d.getListStrings("whitelisted_file_access_procs")
 	base := filepath.Base(comm)
 	for _, w := range fileCommWhitelist {
@@ -590,129 +663,27 @@ func (d *YAMLDetector) checkFileRules(event processor.FileEvent, res workload.Re
 		}
 	}
 
-	// Check whitelisted_processes (infrastructure + customer apps)
-	if d.isWhitelisted(comm) {
-		return nil
-	}
+	// T1611 host-reads-container-overlay is intentionally NOT implemented here:
+	// disabled pending its allowlist (deferred validate.sh T7 work). When wired,
+	// it becomes a require_container: false entry in rules/file.yaml.
 
-	// Container context gating: only apply container-specific rules if state is VERIFIED (not unknown)
-	// This prevents state=unknown processes from triggering container-only detections
+	// Structured detections from rules/file.yaml, evaluated in file order
+	// (CRITICAL → LOW). All current file rules are container-gated; the old
+	// global customer_applications whitelist is now a per-rule exception.
 	isVerifiedContainer := isContainerContext(res)
-
-	// T1611 — host process reading container overlay filesystem
-	// if res.Identity.Runtime == workload.RuntimeHost {
-	// 	containerFSPaths := d.getListStrings("container_fs_paths")
-	// 	for _, prefix := range containerFSPaths {
-	// 		if strings.HasPrefix(filename, prefix) {
-	// 			return newFileAlert(event, res, comm, filename, alert.Critical, RuleT1611EscapeToHostFs, "Host process accessed container filesystem: "+filename)
-	// 		}
-	// 	}
-	// 	return nil
-	// }
-
-	// T1611 — container reading host init process (/proc/1/)
-	// Only alert if we can verify this is a container process (state != unknown)
-	if isVerifiedContainer {
-		procEscapePaths := d.getListStrings("proc_escape_paths")
-		for _, prefix := range procEscapePaths {
-			if strings.HasPrefix(filename, prefix) && !d.isProcEscapeAllowed(filename) {
-				return newFileAlert(event, res, comm, filename, alert.High, RuleT1611EscapeToHostProc, "Container accessed host process namespace: "+filename)
-			}
+	in := matchInput{comm: comm, filename: filename}
+	for i := range d.fileDetections {
+		det := &d.fileDetections[i]
+		if det.requireContainer && !isVerifiedContainer {
+			continue
 		}
-	}
-
-	// T1552.004 — SSH key directories (CRITICAL)
-	// Only alert if we can verify this is a container process (state != unknown)
-	if isVerifiedContainer && !d.isWhitelisted(comm) {
-		sshKeyDirs := d.getListStrings("ssh_key_dirs")
-		for _, prefix := range sshKeyDirs {
-			if strings.HasPrefix(filename, prefix) {
-				return newFileAlert(event, res, comm, filename, alert.Critical, RuleT1552PrivateKeys, "Container accessed SSH credential directory: "+filename)
-			}
+		if !det.match.matches(in) {
+			continue
 		}
-	}
-
-	// T1003.008 — OS credential dumping (/etc/shadow)
-	// Only alert if we can verify this is a container process (state != unknown)
-	if isVerifiedContainer && !d.isWhitelisted(comm) {
-		shadowPaths := d.getListStrings("credential_dump_paths")
-		for _, path := range shadowPaths {
-			if strings.HasPrefix(filename, path) {
-				return newFileAlert(event, res, comm, filename, alert.Critical, RuleT1003OsCredentialDumping, "Container accessed OS credential file: "+filename)
-			}
+		if det.excepted(in) {
+			continue
 		}
-	}
-
-	// T1552.001 — credentials in secret mounts (/run/secrets/)
-	// Only alert if we can verify this is a container process
-	if isVerifiedContainer && !d.isWhitelisted(comm) {
-		credFileDirs := d.getListStrings("credential_file_dirs")
-		for _, prefix := range credFileDirs {
-			if strings.HasPrefix(filename, prefix) {
-				return newFileAlert(event, res, comm, filename, alert.High, RuleT1552CredentialsInFiles, "Container accessed secret mount: "+filename)
-			}
-		}
-	}
-
-	// T1552.004 — private key files by extension
-	// Only alert if we can verify this is a container process
-	if isVerifiedContainer && !d.isWhitelisted(comm) {
-		sshKeySuffixes := d.getListStrings("ssh_key_suffixes")
-		for _, suffix := range sshKeySuffixes {
-			if strings.HasSuffix(filename, suffix) {
-				if suffix == ".pem" && d.isPemExcluded(filename) {
-					continue
-				}
-				return newFileAlert(event, res, comm, filename, alert.High, RuleT1552PrivateKeys, "Container accessed private key file: "+filename)
-			}
-		}
-	}
-
-	// T1552.001 — credentials in env files (.env)
-	// Only alert if we can verify this is a container process
-	if isVerifiedContainer && !d.isWhitelisted(comm) {
-		credSuffixes := d.getListStrings("credential_file_suffixes")
-		for _, suffix := range credSuffixes {
-			if strings.HasSuffix(filename, suffix) {
-				return newFileAlert(event, res, comm, filename, alert.High, RuleT1552CredentialsInFiles, "Container accessed credential file: "+filename)
-			}
-		}
-	}
-
-	// T1082 — system information discovery (/etc/passwd, /etc/group).
-	// Gate on the READER: these files are world-readable and read constantly by libc
-	// NSS (getpwuid/getgrgid), so the app's own process reading them is benign and was
-	// producing a FP storm. Only a recon/shell tool reading them (cat /etc/passwd, grep,
-	// getent, ...) is the actual discovery signal.
-	if isVerifiedContainer && d.reconReaders[filepath.Base(comm)] {
-		systemFiles := d.getListStrings("system_info_paths")
-		for _, prefix := range systemFiles {
-			if strings.HasPrefix(filename, prefix) {
-				return newFileAlert(event, res, comm, filename, alert.Medium, RuleT1082SystemInfoDiscovery, "Container accessed system file: "+filename)
-			}
-		}
-	}
-
-	// T1053.003 — scheduled task/cron
-	// Only alert if we can verify this is a container process
-	if isVerifiedContainer {
-		cronPaths := d.getListStrings("cron_paths")
-		for _, prefix := range cronPaths {
-			if strings.HasPrefix(filename, prefix) {
-				return newFileAlert(event, res, comm, filename, alert.High, RuleT1053ScheduledTaskCron, "Container accessed cron configuration: "+filename)
-			}
-		}
-	}
-
-	// T1070.003 — clear command history
-	// Only alert if we can verify this is a container process
-	if isVerifiedContainer {
-		historySuffixes := d.getListStrings("shell_history_suffixes")
-		for _, suffix := range historySuffixes {
-			if strings.HasSuffix(filename, suffix) {
-				return newFileAlert(event, res, comm, filename, alert.Medium, RuleT1070ClearCommandHistory, "Container accessed command history file: "+filename)
-			}
-		}
+		return newFileAlert(event, res, comm, filename, det.level, det.name, det.message)
 	}
 
 	return nil
@@ -721,47 +692,28 @@ func (d *YAMLDetector) checkFileRules(event processor.FileEvent, res workload.Re
 // ── Network rules ─────────────────────────────────────────────────────────────
 
 func (d *YAMLDetector) checkNetworkRules(event processor.NetEvent, res workload.ResolveResult, ip net.IP, port uint16) *alert.Alert {
-
-	if d.isPrivateIP(ip) {
-		return nil
-	}
-
 	comm := processor.CString(event.Comm[:])
-	ipStr := ip.String()
-	id := res.Identity
 
-	// Container context gating: only apply container-specific rules if state is VERIFIED (not unknown)
+	// Structured detections from rules/network.yaml, evaluated in file order
+	// (CRITICAL → LOW). T1041's match (dst_ip_not_in: private_ranges) replaces
+	// the old isPrivateIP early return; allowed ports/services are exceptions.
 	isVerifiedContainer := isContainerContext(res)
-	if !isVerifiedContainer {
-		return nil
-	}
-
-	// Check allowed ports
-	for _, p := range d.rules.Network.AllowedPorts {
-		if port == p {
-			return nil
+	in := matchInput{comm: comm, dstIP: ip, dstPort: port, service: res.Identity.Service}
+	for i := range d.netDetections {
+		det := &d.netDetections[i]
+		if det.requireContainer && !isVerifiedContainer {
+			continue
 		}
-	}
-
-	// Check allowed services
-	for _, allowed := range d.rules.Network.AllowedServices {
-		if id.Service == allowed {
-			return nil
+		if !det.match.matches(in) {
+			continue
 		}
+		if det.excepted(in) {
+			continue
+		}
+		return newNetAlert(event, res, comm, ip.String(), port, det.level, det.name, det.message)
 	}
 
-	return &alert.Alert{
-		Level:    alert.High,
-		Rule:     RuleT1041ExfiltrationOverC2,
-		Message:  fmt.Sprintf("Container made unauthorized external connection to %s:%d", ipStr, port),
-		Pid:      event.Pid,
-		Ppid:     event.Ppid,
-		Uid:      int32(event.Uid),
-		Comm:     comm,
-		Workload: res,
-		DstIP:    ipStr,
-		DstPort:  port,
-	}
+	return nil
 }
 
 // ── Alert Constructors ────────────────────────────────────────────────────────
@@ -779,5 +731,13 @@ func newProcessAlert(event processor.ProcessEvent, res workload.ResolveResult, c
 		Level: level, Rule: rule, Message: msg,
 		Pid: event.Pid, Ppid: event.Ppid, Uid: event.Uid,
 		Comm: comm, Workload: res,
+	}
+}
+
+func newNetAlert(event processor.NetEvent, res workload.ResolveResult, comm, dstIP string, dstPort uint16, level alert.Level, rule, msg string) *alert.Alert {
+	return &alert.Alert{
+		Level: level, Rule: rule, Message: msg,
+		Pid: event.Pid, Ppid: event.Ppid, Uid: int32(event.Uid),
+		Comm: comm, Workload: res, DstIP: dstIP, DstPort: dstPort,
 	}
 }

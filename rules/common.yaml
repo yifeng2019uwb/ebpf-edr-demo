@@ -101,15 +101,6 @@ rules:
 
   lists:
 
-    # Shell binaries — full paths to shell interpreters.
-    # Two detection paths for shell execution (different attack signals):
-    #   1. Exec path (proc.name): catches when shell process is SPAWNED
-    #   2. File path (fd.name): catches when shell BINARY is ACCESSED
-    # Currently: Exec path is primary (detects T1059 instantly when process starts).
-    # Future behavioral detection: File path deviations (shell accessed from /tmp vs /bin).
-    - name: shell_binaries
-      items: [/bash, /sh, /zsh, /dash]
-
     # Shell processes — process names (without path) of shell interpreters.
     # Used in exec detection: proc.name in (shell_processes)
     # eBPF captures: when execsnoop (eBPF) traces execve() syscall
@@ -186,7 +177,11 @@ rules:
       items: [.bash_history, .zsh_history, .ash_history, .sh_history]
 
     # Container filesystem paths — Docker overlay layers.
-    # T1611 — reading these indicates escape to host filesystem.
+    # T1611 host-reads-container-overlay — reading these from the host indicates
+    # tampering with container filesystems. Rule currently DISABLED (commented out
+    # in checkFileRules pending its allowlist — see HANDOFF deferred validate.sh T7);
+    # list kept as the rule's data. When wired, becomes a require_container: false
+    # entry in rules/file.yaml.
     - name: container_fs_paths
       items: [/var/lib/docker/overlay2/, /run/containerd/]
 
@@ -205,24 +200,11 @@ rules:
     - name: suspicious_exec_paths
       items: [/tmp/, /dev/shm/, /var/tmp/, /run/user/]
 
-    # Ephemeral processes — short-lived utilities spawned by infrastructure for health checks or admin tasks.
-    # System container detection tools — admin tools that probe namespace boundaries.
-    # T1611 escape detection: medium confidence (legitimate but monitor for abuse).
-    # Examples: ps (process listing), apparmor_parser (AppArmor configuration).
-    - name: system_container_detection_tools
-      items: [ps, apparmor_parser]
-
     # Universal system tools — safe to skip in ANY environment.
     # These are eBPF capture artifacts or universal utilities (not real threats).
     # Example: fd (symlink resolution quirk in /proc/self/fd capture).
     - name: universal_system_tools
       items: [fd]
-
-    # Container runtime executables — runc, containerd-shim, etc.
-    # These are core infrastructure tools that may appear in unknown namespaces.
-    # Excluded from T1611 escape detection to prevent false positives.
-    - name: container_runtime_execs
-      items: [runc, containerd-shim, containerd-shim-runc-v2, dockerd, containerd, docker, ls, debian-sa1, droplet-agent, do-agent]
 
     # Trusted parent names — processes allowed to spawn transient utilities
     # (health checks, deploy scripts, SSH session tooling) without alerting.
@@ -237,61 +219,11 @@ rules:
       items: [containerd-shim, containerd-shim-runc-v2, dockerd, containerd, docker-proxy, runc, sshd, systemd, snapd, snap, cron,
               kubelet, kube-proxy, crio, conmon]
 
-    # Docker lifecycle and deployment tools
-    # Spawned during docker deploy/destroy, exit too fast for resolver to complete
-    # When state=unknown (couldn't resolve before process exited), these should not trigger T1611
-    - name: docker_lifecycle_tools
-      items: [snap, snap-seccomp, snap-confine, snap-exec, docker-compose, getent, dpkg-query, cut, tr, wget, sort, tail, debian-sa1, net-interface-handler, grep, sleep, find, dirname, basename, env, sed, rm, id, ping]
-
     # eBPF artifact patterns — processes with these path patterns are eBPF symlink resolution artifacts.
     # Safe to ignore: not actual process execution, just kernel introspection.
     # Pattern: /proc/*/fd/* catches /proc/self/fd/6, /proc/1/fd/7, etc.
     - name: proc_fd_patterns
       items: [/proc/*/fd/*]
-
-
-    # AWS and Azure support (design extensible, currently only validating GCP + DigitalOcean)
-    # - name: aws_cloud_agents
-    #   items: [amazon-ssm-agent]
-    # - name: azure_cloud_agents
-    #   items: [waagent]
-
-    - name: digitalocean_cloud_agents
-      items: [droplet-agent, do-agent]
-
-    # K8s infrastructure processes — common across all K8s distributions.
-    # These run outside pod namespaces (on nodes) but are legitimate.
-    - name: k8s_infrastructure_procs
-      items:
-        - iptables                 # kube-proxy network rules
-        - iptables-legacy
-        - iptables-restore
-        - ip6tables
-        - conntrack
-        - ip                       # iproute2 — route/addr management
-        - kube-proxy               # K8s network proxy
-        - systemd-sysctl           # node sysctl configuration
-        - bridge-network-interface # udev network bridge setup
-
-    # gcp-specific infrastructure processes.
-    # Conditionally merged at runtime when environment is detected as DigitalOcean.
-    - name: gcp_cloud_agents
-      items: []
-
-    # GKE-specific infrastructure processes.
-    # Conditionally merged at runtime when environment is detected as GCP.
-    - name: gke_infrastructure_procs
-      items: [pause]
-
-    # DigitalOcean-specific infrastructure processes.
-    # Conditionally merged at runtime when environment is detected as DigitalOcean.
-    - name: digitalocean_infrastructure_procs
-      items: []
-
-    # Whitelisted unknown namespace procs — merged from base + environment-specific lists.
-    # Built at runtime by combining k8s_infrastructure_procs + environment-specific items.
-    - name: compiled_infra_runtime_whitelist
-      items: []
 
     # Customer applications — non-infrastructure apps that should not trigger alerts.
     # Infrastructure processes are in infrastructure_filters (Layer 1).
@@ -323,210 +255,33 @@ rules:
         - fc00::/7              # IPv6 unique local
         - fe80::/10             # IPv6 link-local
 
-  # ─────────────────────────────────────────────────────────
-  # MACROS — Reusable conditions
-  # ─────────────────────────────────────────────────────────
-
-  macros:
-
-    # Spawned shell — process is a shell interpreter.
-    # Base condition for T1059 (command & scripting execution).
-    - name: spawned_shell
-      condition: proc.name in (shell_processes)
-
-    # Is container — workload resolved to a known container/pod.
-    # Includes both Docker containers and K8s pods (identified by runtime, not state).
-    - name: is_container
-      condition: workload.identity.runtime == "docker" || workload.identity.runtime == "k8s"
-
-    # Is unknown namespace — workload state unresolved (potential escape).
-    # Process in an unresolved namespace indicates possible escape from container to host.
-    # Used for T1611 escape detection. States: unknown = mnt_ns_id not found in resolver cache after grace period.
-    - name: is_unknown_namespace
-      condition: workload.state == unknown
-
-    # Is customer application — process in customer_applications list.
-    # Used as exception: suppress alert if process is a known customer app.
-    - name: is_customer_app
-      condition: proc.name in (customer_applications)
-
-    # Accessing SSH keys directory — opening /root/.ssh/ or /home/.ssh/.
-    # T1552.004 — private key access (CRITICAL severity).
-    - name: accessing_ssh_keys_dir
-      condition: fd.name in (ssh_key_dirs)
-
-    # Accessing SSH key file — opening .key, .pem, id_rsa, etc.
-    # T1552.004 — specific private key file access.
-    - name: accessing_ssh_key_file
-      condition: fd.name in (ssh_key_suffixes)
-
-    # Accessing credentials file — opening .env files.
-    # T1552.001 — credentials stored in plain-text files.
-    - name: accessing_credentials_file
-      condition: fd.name in (credential_file_suffixes)
-
-    # Accessing sensitive system file — reading passwd, shadow, group.
-    # T1082 (discovery) and T1003.008 (credential dumping).
-    - name: accessing_sensitive_system_file
-      condition: fd.name in (system_info_paths)
-
-    # Accessing cron file — modifying scheduled tasks.
-    # T1053.003 — persistence mechanism (containers shouldn't access).
-    - name: accessing_cron_file
-      condition: fd.name in (cron_paths)
-
-    # Accessing history file — reading/writing shell history.
-    # T1070.003 — attacker covering tracks by clearing history.
-    - name: accessing_history_file
-      condition: fd.name in (shell_history_suffixes)
-
-    # Accessing container filesystem — reading Docker overlay layers.
-    # T1611 — escape to host by accessing container's filesystem data.
-    - name: accessing_container_fs
-      condition: fd.name in (container_fs_paths)
-
-    # Accessing proc escape path — reading /proc/1/ outside allowed files.
-    # T1611 — escape attempt via procfs (not allowed read-only files).
-    - name: accessing_proc_escape
-      condition: fd.name in (proc_escape_paths) and fd.name not_in (proc_escape_allowed)
-
-    # External connection — outbound socket to non-private IP.
-    # T1041 — exfiltration over C2 channel.
-    - name: external_connection
-      condition: evt.type == socket_connect and dst.ip not_in (private_ranges)
-
-    # Suspicious shell in container — container spawned shell process.
-    # T1059.004 / T1609 — remote code execution indicator.
-    - name: suspicious_shell_in_container
-      condition: spawned_shell and is_container
-
-    # Sensitive file access — container accessing credential or system files.
-    # Combined condition for T1552 / T1003 / T1082 detection.
-    - name: sensitive_file_access
-      condition: is_container and (accessing_ssh_keys_dir or accessing_ssh_key_file or accessing_sensitive_system_file)
-
-  # ─────────────────────────────────────────────────────────
-  # DETECTIONS — Rules using lists and macros
-  # ─────────────────────────────────────────────────────────
-
-  # Process detections (T1059, T1105, T1613, T1036) moved to rules/process.yaml
-  # (structured matchers — source of truth for match, severity, order).
-  detections:
-
-    # T1552.004 — Unsecured Credentials: Private Keys
-    # Container reading SSH keys → credential theft for lateral movement.
-    T1552_004_private_keys:
-      condition: is_container and (accessing_ssh_keys_dir or accessing_ssh_key_file)
-      severity: CRITICAL
-      exception_macros: [is_customer_app]
-      output: "SSH private key access (file=%fd.name service=%service)"
-
-    # T1552.001 — Unsecured Credentials: Credentials in Files
-    # Container reading .env files → credential extraction.
-    T1552_001_credentials_in_files:
-      condition: is_container and accessing_credentials_file
-      severity: HIGH
-      output: "Credentials file access (file=%fd.name service=%service)"
-
-    # T1003.008 — OS Credential Dumping
-    # Container reading /etc/shadow → password hash extraction.
-    T1003_008_os_credential_dumping:
-      condition: is_container and fd.name == /etc/shadow
-      severity: HIGH
-      exception_macros: [is_customer_app]
-      output: "Credential dump attempt (file=%fd.name service=%service)"
-
-    # T1082 — System Information Discovery
-    # Container reading /etc/passwd, /etc/group → reconnaissance.
-    T1082_system_discovery:
-      condition: is_container and accessing_sensitive_system_file
-      severity: MEDIUM
-      exception_macros: [is_customer_app]
-      output: "System info discovery (file=%fd.name service=%service)"
-
-    # T1053.003 — Scheduled Task/Job: Cron
-    # Container accessing /etc/cron.d/, /var/spool/cron/ → persistence.
-    T1053_003_scheduled_task:
-      condition: is_container and accessing_cron_file
-      severity: HIGH
-      output: "Cron file access (file=%fd.name service=%service)"
-
-    # T1070.003 — Indicator Removal: Clear Command History
-    # Container accessing .bash_history, .zsh_history → covering tracks.
-    T1070_003_clear_history:
-      condition: is_container and accessing_history_file
-      severity: MEDIUM
-      output: "History file access (file=%fd.name service=%service)"
-
-    # T1611 — Escape to Host (Filesystem)
-    # Container reading /var/lib/docker/overlay2/, /run/containerd/ → escape.
-    T1611_escape_host_fs:
-      condition: is_container and accessing_container_fs
-      severity: CRITICAL
-      output: "Container escape attempt - filesystem (file=%fd.name service=%service)"
-
-    # T1611 — Escape to Host (Procfs)
-    # Container reading /proc/1/ → accessing host init process (escape).
-    T1611_escape_host_proc:
-      condition: is_container and accessing_proc_escape
-      severity: HIGH
-      output: "Container escape attempt - procfs (file=%fd.name service=%service)"
-
-    # T1611 — Escape to Host (Namespace)
-    # Process in an unknown namespace (should be inside a pod/container NS).
-    # SUPERSEDED (Phase 3 / §3.6): a bare unresolved namespace is NOT treated as an
-    # escape any more. "Unknown" is a resolver-timing artifact, not a threat signal
-    # (Falco has no equivalent). Runtime behavior (Go, source of truth):
-    #   - ancestry roots in verified infrastructure (isParentTrusted — Layer 1 PIDs +
-    #     ancestry-cache walk with trusted-path validation) → suppressed;
-    #   - eBPF capture artifacts (proc_fd_patterns, universal_system_tools) → suppressed;
-    #   - everything else → LOW EDR_telemetry_unresolved_namespace (below), not CRITICAL.
-    # Real escape detection lives in the behavioral/file T1611 rules (fs, proc). This
-    # entry is retained only as the technique reference. See §3.5–3.6.
-    T1611_escape_host_ns:
-      condition: is_unknown_namespace
-      severity: LOW
-      exception_macros: [is_customer_app]
-      output: "Container escape attempt - namespace (proc=%proc.name service=%service)"
-
-    # EDR_telemetry_unresolved_namespace — active routing target for Phase 3.
-    # Visibility gap: namespace never resolved AND ancestry could not be verified as
-    # infrastructure. Not a security alert — a validation breadcrumb (resolver timeouts,
-    # capacity issues, fork-without-exec gaps). Emitted at LOW so it still reaches the
-    # log / dashboard / Supabase for tuning, without CRITICAL noise.
-    EDR_telemetry_unresolved_namespace:
-      condition: is_unknown_namespace
-      severity: LOW
-      output: "EDR visibility gap: Process in unresolved namespace (proc=%proc.name pid=%proc.pid)"
-
-    # T1041 / T1048 — Exfiltration Over C2 Channel / Alternative Protocol
-    # Container making external connection → potential data exfiltration.
-    T1041_exfiltration_over_c2:
-      condition: is_container and external_connection
-      severity: HIGH
-      exception_macros: [is_customer_app]
-      output: "External connection from container (dst=%dst.ip:%dst.port service=%service)"
-
-  # ─────────────────────────────────────────────────────────
-  # NETWORK POLICY
-  # ─────────────────────────────────────────────────────────
-
-  network:
-    # Allowed destination ports — services that all containers may connect to.
-    # 53 — DNS (legitimate system traffic, exclude from T1041 exfiltration alerts).
-    # 123 — NTP (time synchronization, exclude from T1041).
-    # 6543 — Supabase pgbouncer (all health-ai services use Supabase).
-    allowed_ports:
-      - 53
-      - 123
-      - 6543
+    # Allowed destination ports — services all containers may connect to.
+    # Used by T1041 exceptions (rules/network.yaml).
+    # 53 — DNS, 123 — NTP, 6543 — Supabase pgbouncer (all health-ai services use Supabase).
+    - name: allowed_ports
+      items: [53, 123, 6543]
 
     # Allowed services — services permitted to make external connections.
-    # These services have legitimate reasons to call external APIs.
+    # Used by T1041 exceptions (rules/network.yaml).
     # inventory-service calls CoinGecko for live market data.
-    allowed_services:
-      - inventory-service
-      - inventory_service
+    - name: allowed_services
+      items: [inventory-service, inventory_service]
+
+  # ─────────────────────────────────────────────────────────
+  # DETECTIONS live in the per-sensor files (structured matchers):
+  #   rules/process.yaml — T1059, T1105, T1613, T1036
+  #   rules/file.yaml    — T1552_004/001, T1003, T1611_proc, T1082, T1053, T1070
+  #   rules/network.yaml — T1041
+  # Those files are the source of truth for match, severity, and check order.
+  # This file holds what is shared across sensors and the Go pipeline:
+  # Layer 1 infrastructure_filters, Layer 2 global_exceptions, lists,
+  # ignore_namespaces.
+  #
+  # The state=unknown namespace path is Go pipeline logic, not a YAML rule:
+  # verified-infrastructure ancestry → suppressed; everything else → LOW
+  # EDR_telemetry_unresolved_namespace telemetry (resolver-timing artifact,
+  # not an escape signal). See docs/DESIGN-PROCESS-ANCESTRY-CACHE.md §3.5–3.6.
+  # ─────────────────────────────────────────────────────────
 
   # ─────────────────────────────────────────────────────────
   # SYSTEM NAMESPACES (suppress alerts)

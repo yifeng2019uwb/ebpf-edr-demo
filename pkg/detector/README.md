@@ -5,7 +5,7 @@ Detection engine that applies YAML-based security rules to enriched kernel event
 ## What It Does
 
 1. **Receives events** from enricher (process, file, network with workload identity)
-2. **Applies detection rules** from `rules/default.yaml` (14 MITRE techniques)
+2. **Applies detection rules** from `rules/common.yaml` (14 MITRE techniques)
 3. **Issues alerts** with severity (CRITICAL, HIGH, MEDIUM, LOW)
 4. **Executes response actions** (kill_process, blockIP) based on rule policy
 
@@ -26,7 +26,7 @@ Detection engine that applies YAML-based security rules to enriched kernel event
 
 ## Key Concepts
 
-**Detection Rules:** All rules live in `rules/default.yaml`. No hardcoding in Go.
+**Detection Rules:** All rules live in `rules/common.yaml`. No hardcoding in Go.
 
 **Environment Awareness:** Rules adapt to deployment environment (GCP, DigitalOcean, Kubernetes). Environment-specific whitelists merged at runtime.
 

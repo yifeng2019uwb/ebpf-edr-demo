@@ -59,7 +59,7 @@ USERSPACE (Go Agent)
 
 **Resolution & Detection:**
 - `pkg/workload/` — Real-time container and pod identity resolution
-- `pkg/detector/` + `pkg/rules/` — Detection engine with YAML-based ruleset (`rules/default.yaml`)
+- `pkg/detector/` + `pkg/rules/` — Detection engine with YAML-based ruleset (`rules/common.yaml`)
 - `pkg/detector/responder.go` — Active mitigation (kill_process, blockIP)
 
 **Alert Distribution:**
@@ -91,7 +91,7 @@ USERSPACE (Go Agent)
 - 🗺️ [HANDOFF.md](HANDOFF.md) — Current project state, known limitations, and future research roadmap.
 
 **Component Details:**
-- 🛡️ [rules/default.yaml](rules/default.yaml) — 14 MITRE detection rules with environment-aware whitelisting (self-documented).
+- 🛡️ [rules/common.yaml](rules/common.yaml) — 14 MITRE detection rules with environment-aware whitelisting (self-documented).
 - 📊 [MITRE-COVERAGE.md](docs/MITRE-COVERAGE.md) — Full mapping of eBPF hooks to MITRE ATT&CK techniques.
 - 📖 `pkg/*/README.md` — Deep dives into each component (detector, rules, workload resolver, alertsink).
 - 🔧 `kernel/README.md` — eBPF C programs, limitations, and extending detection logic.

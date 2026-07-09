@@ -59,7 +59,7 @@ make build
 Useful log patterns:
 
 ```
-rules: loaded from rules/default.yaml
+rules: loaded from rules/common.yaml
 redis sink connected: redis://...
 supabase sink connection test passed
 BPF programs loaded: execsnoop, opensnoop, lsm-connect

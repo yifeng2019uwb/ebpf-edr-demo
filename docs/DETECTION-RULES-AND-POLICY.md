@@ -1,6 +1,6 @@
 # Detection Rules & Policy Design
 
-**Status:** Current — matches `pkg/detector/yaml_detector.go` + `rules/default.yaml` (2026-07-08)
+**Status:** Current — matches `pkg/detector/yaml_detector.go` + `rules/common.yaml` (2026-07-08)
 
 Single source of truth for **how each detection fires** and **the policy layers around it**.
 Companion docs: [MITRE-COVERAGE.md](MITRE-COVERAGE.md) (technique table),
@@ -23,12 +23,12 @@ enrich + workload resolver        →  attaches identity {runtime, service, stat
 detector (pkg/detector/yaml_detector.go)   ←  THE matching logic lives here (Go)
         │      uses lists / exceptions / network / ignore_namespaces from ↓
         ▼
-rules/default.yaml                →  tunable DATA (lists, macros, exceptions, network, namespaces)
+rules/common.yaml                →  tunable DATA (lists, macros, exceptions, network, namespaces)
 ```
 
 **Important — where truth lives.** The eBPF `.bpf.c` files are **sensors only**; they carry no
 detection logic. The matching, severities, and responses are **hardcoded in Go**
-(`yaml_detector.go`, `response_policy.go`). `default.yaml` supplies the **data** those checks read
+(`yaml_detector.go`, `response_policy.go`). `common.yaml` supplies the **data** those checks read
 (the `lists:`, `global_exceptions:`, `network:`, `ignore_namespaces:`). The YAML `detections:`
 block and its `macros:`/`condition:` fields are **declarative reference** — there is no expression
 evaluator yet, so they document intent but do **not** drive matching. When the YAML block and the
@@ -243,7 +243,7 @@ which monitoring tools legitimately read).
 (`/var/lib/docker/overlay2/…`, `/run/containerd/…`), bypassing container isolation to steal
 secrets.
 
-**Current state.** The rule exists in `default.yaml` (`container_fs_paths`) but its check in
+**Current state.** The rule exists in `common.yaml` (`container_fs_paths`) but its check in
 `checkFileRules` is **commented out** — GKE/host system processes (containerd, installers)
 legitimately touch these paths and the whitelist to separate them is not built. **Not firing
 today.** To re-enable: uncomment the `RuntimeHost` block in `checkFileRules`, complete the host

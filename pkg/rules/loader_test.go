@@ -10,9 +10,9 @@ import (
 )
 
 // TestLoadRealRules loads the repo's shipped rules files — guards against a
-// default.yaml / process.yaml edit that would fail at agent startup.
+// common.yaml / process.yaml edit that would fail at agent startup.
 func TestLoadRealRules(t *testing.T) {
-	db, err := LoadRules("../../rules/default.yaml")
+	db, err := LoadRules("../../rules/common.yaml")
 	if err != nil {
 		t.Fatalf("LoadRules failed on shipped rules: %v", err)
 	}
@@ -26,19 +26,36 @@ func TestLoadRealRules(t *testing.T) {
 	if !first.RequireContainer {
 		t.Errorf("T1059 must be container-gated")
 	}
+
+	if len(db.FileDetections) != 9 {
+		t.Fatalf("expected 9 file detections, got %d", len(db.FileDetections))
+	}
+	firstFile := db.FileDetections[0]
+	if firstFile.Name != "T1552_004_private_keys" || firstFile.Severity != alert.Critical {
+		t.Errorf("first file detection = %s/%s, want T1552_004_private_keys/CRITICAL", firstFile.Name, firstFile.Severity)
+	}
 }
 
 // TestLoadRulesMissingSensorFile — sensor files are required (fail-fast),
 // otherwise the detector would silently run with no process rules.
 func TestLoadRulesMissingSensorFile(t *testing.T) {
 	dir := t.TempDir()
-	base := filepath.Join(dir, "default.yaml")
+	base := filepath.Join(dir, "common.yaml")
 	if err := os.WriteFile(base, []byte("rules:\n  lists: []\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	_, err := LoadRules(base)
 	if err == nil || !strings.Contains(err.Error(), "process.yaml") {
 		t.Fatalf("expected missing process.yaml error, got: %v", err)
+	}
+
+	// With process.yaml present, file.yaml is required next.
+	if err := os.WriteFile(filepath.Join(dir, "process.yaml"), []byte("detections: []\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err = LoadRules(base)
+	if err == nil || !strings.Contains(err.Error(), "file.yaml") {
+		t.Fatalf("expected missing file.yaml error, got: %v", err)
 	}
 }
 
@@ -64,9 +81,14 @@ func TestValidateDetections(t *testing.T) {
 		{"valid single", []DetectionRule{valid()}, ""},
 		{"valid with exceptions", []DetectionRule{func() DetectionRule {
 			d := valid()
-			d.Exceptions = MatchSpec{CommBaseIn: "apps"}
+			d.Exceptions = []MatchSpec{{CommBaseIn: "apps"}}
 			return d
 		}()}, ""},
+		{"empty exception spec", []DetectionRule{func() DetectionRule {
+			d := valid()
+			d.Exceptions = []MatchSpec{{}}
+			return d
+		}()}, "empty exception spec"},
 		{"missing name", []DetectionRule{func() DetectionRule {
 			d := valid()
 			d.Name = ""
