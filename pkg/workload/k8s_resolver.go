@@ -104,19 +104,14 @@ func (r *K8sResolver) Resolve(event interface{}) ResolveResult {
 		pid = uint32(ev.Pid)
 		comm = processor.CString(ev.Comm[:])
 	default:
-		// log.Printf("DEBUG k8s Resolve - return default as StateUnknow")
 		return r.bareResult(StateUnknown)
 	}
-
-	// log.Printf("DEBUG k8s Resolve start")
 
 	// Fast path: host namespace — known at startup, resolved synchronously.
 	// Transient node/host processes (kubelet-spawned probe helpers, SSH sessions on
 	// the node) die before async resolution completes; without this they time out to
 	// state=unknown. Mirrors the Docker resolver's host fast path.
 	if r.hostNsID != 0 && mntNsID == r.hostNsID {
-		// log.Printf("DEBUG k8s Resolve: ns=%d comm=%s -> state=%s via=%s",
-		// 	mntNsID, comm, StateResolved, "hostfastpath|cachehit|pending")
 		return ResolveResult{
 			Identity: WorkloadIdentity{Runtime: RuntimeHost, Service: HostProcessService, Env: r.env},
 			Meta:     WorkloadMeta{Node: r.node, Region: r.region, Cluster: r.cluster},
@@ -129,15 +124,11 @@ func (r *K8sResolver) Resolve(event interface{}) ResolveResult {
 	r.mu.RUnlock()
 
 	if exists {
-		// log.Printf("DEBUG k8s Resolve: ns=%d comm=%s -> state=%s via=%s",
-		// 	mntNsID, comm, result.State, "hostfastpath|cachehit|pending")
 		return result
 	}
 
 	// Deduplicate: if this namespace is already being looked up, don't spawn another worker
 	if _, loading := r.resolvingTasks.LoadOrStore(mntNsID, true); loading {
-		// log.Printf("DEBUG k8s Resolve: ns=%d comm=%s -> state=%s via=%s",
-		// 	mntNsID, comm, StatePending, "hostfastpath|cachehit|pending")
 		return ResolveResult{State: StatePending}
 	}
 
@@ -145,8 +136,6 @@ func (r *K8sResolver) Resolve(event interface{}) ResolveResult {
 	go r.asyncResolveNamespace(mntNsID, pid, comm)
 
 	// Return instantly (<1 microsecond execution path)
-	// log.Printf("DEBUG k8s Resolve: ns=%d comm=%s -> state=%s via=%s",
-	// 	mntNsID, comm, StatePending, "hostfastpath|cachehit|pending")
 	return ResolveResult{State: StatePending}
 }
 

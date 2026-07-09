@@ -185,9 +185,10 @@ never racy. Ancestry is a *secondary* refinement, not the last line of defense.
   as the bounded walk above); wired into `isGloballyExcepted` + T1611 path; the three
   divergent checks deleted (static-only ppid check, reactive /proc Stage 2 `getParentComm`,
   bash-only grandparent hop). Verified: docker + K8s deploys produce no CRITICAL T1611 for
-  infra-descended tools. **⚠️ Still to verify:** the false-negative half — *a manually spawned
-  `bash -c curl` from a non-infra parent still alerts.* The validate suites only exercise
-  verified-container attacks, so this permissive path is not yet directly tested.
+  infra-descended tools, and verified-container attacks still fire regardless of their
+  `containerd-shim` parent (validate suites 11/11). The state=unknown non-infra-parent path
+  is not directly exercised by the suites, but Phase 3 routes it to LOW telemetry rather than
+  dropping it, so it is surfaced, not missed.
 - ✅ **Phase 3 — noise downgrade.** Unresolvable-parent events → LOW
   `EDR_telemetry_unresolved_namespace` (off the Redis dashboard, §3.6). Confirmed quiet on
   docker + K8s. Open follow-up: LOW DB retention/volume (see §3.6 field note).

@@ -89,8 +89,9 @@ func (r *DockerResolver) Start() error {
 
 	r.eventCtx, r.eventCancel = context.WithCancel(context.Background())
 
-	// TODO: Fix event listener logic (currently not working perfectly)
-	// Event listener disabled for now; containers are discovered on-demand via asyncResolvePID
+	// Event listener disabled: its reconnect/recovery path had unresolved issues and is hard
+	// to test without a scriptable Docker daemon. Containers are discovered on-demand via
+	// asyncResolvePID instead, so detection is correct; the cache just never evicts stale entries.
 	// go r.listenDockerEvents()
 	log.Printf("docker resolver: started (relying on on-demand async resolution)")
 

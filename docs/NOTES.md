@@ -20,34 +20,6 @@
 
 ---
 
-## False Positives & Whitelisting
-
-### Known False Positives (Phase 1 Testing)
-
-**T1611_escape_to_host_ns on system services:**
-- `open-iscsi/net-interface-handler` — network interface handler (repeating)
-- `fwupd` / `fwupdmgr` — firmware update daemon (legitimate)
-- All run in unknown namespace (host-level, not pod) → triggered as escape attempts
-- These are legitimate system operations, not escape attempts
-
-### Design Decision: Whitelist vs. Behavioral Detection
-
-**Problem:** Whitelisting every system service → bloat, maintenance burden, false negatives
-
-**Falco's approach:**
-- Context-aware rules (parent process, startup context)
-- Baseline learning (what's normal in this environment)
-- Multi-event correlation (chains suspicious events)
-
-**Our Phase 2 approach:**
-- Don't bloat whitelist with every service
-- Learn baseline: which processes normally run in unknown NS at startup
-- Alert on deviations: unexpected process in unknown NS = anomaly signal
-
-**For Phase 1:** Keep whitelist minimal. System service noise is expected — Phase 2 behavioral detection will filter intelligently.
-
----
-
 ## Deployment Workflow
 
 ### Go-only changes (safe on Mac)
@@ -97,10 +69,6 @@ Each alert line contains:
 
 ### Real-time monitoring service
 
-If enabled via `GOOGLE_CLOUD_PROJECT` env var:
-- **Cloud Logging**: GCP console or `gcloud logging read` CLI (if GOOGLE_CLOUD_PROJECT set)
-- **Pub/Sub**: Alert Router WebSocket UI (if configured)
-
 ---
 
 ## Troubleshooting
@@ -132,22 +100,9 @@ See [DETECTION-POLICY.md](DETECTION-POLICY.md) — update whitelists in `pkg/det
 
 ## Known Limitations
 
-- **GCP metadata server call**: `gkeServiceCIDR()` in `policy.go` auto-detects GKE service CIDR from GCP metadata — only works if running in GCP
-- **IP blocking disabled**: LPMTrie map removed due to BPF verifier limits on some kernels
-- **No DNS monitoring**: Limited to process, file, network syscalls
-- **Deduplication window**: 1 second — same file opened by same PID twice within 1s is counted as one alert
-
 ---
 
 ## Environment Variables
-
-| Var | Purpose | Required? |
-|-----|---------|-----------|
-| `GOOGLE_CLOUD_PROJECT` | GCP project for Cloud Logging + Pub/Sub (optional) | No |
-| `CLUSTER_NAME` | K8s cluster name (logged in alerts) | For K8s |
-| `REGION` | GCP region (logged in alerts) | For K8s |
-
-If not set, agent works with local file + stdout only.
 
 ---
 
@@ -156,9 +111,6 @@ If not set, agent works with local file + stdout only.
 Infrastructure and deployment docs for past environments (GCP, DigitalOcean transition):
 
 - `docs/archive/SETUP.md` — GCP infrastructure setup (Pulumi, GKE, credentials)
-- `docs/archive/TESTING-GUIDE.md` — Full system testing on GCP + GKE
-- `docs/archive/AGENT-DEPLOY.md` — Agent deployment procedures (GCP-specific)
 - `docs/archive/DO-MIGRATE.md` — DigitalOcean migration guide
-- `docs/archive/NOTES-legacy.md` — Implementation work log (detailed history)
 
 These are kept for reference if setting up similar infrastructure. For current operations, use this NOTES.md.

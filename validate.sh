@@ -98,7 +98,7 @@ if ! pgrep -x ebpf-edr > /dev/null 2>&1; then
 fi
 
 echo ""
-echo "EDR Validation — 13 attack tests + concurrent integration traffic"
+echo "EDR Validation — 10 attack tests + concurrent integration traffic"
 echo "Log: tail -f ${LOG}"
 
 # ── Start integration tests in background ────────────────────────────────────
@@ -124,7 +124,7 @@ sleep 3
 # ── T1: Shell spawn in container — user_service ───────────────────────────────
 # T1059.004 · T1609
 
-header 1 13 "Shell spawn in container (user_service)" "CRITICAL T1059_unix_shell_execution"
+header 1 10 "Shell spawn in container (user_service)" "CRITICAL T1059_unix_shell_execution"
 T1_SINCE=$(date +%s%N)
 docker exec "${USER_SVC}" bash -c "id" 2>/dev/null || true
 if expect_alert "CRITICAL.*T1059_unix_shell_execution.*user_service" 30; then
@@ -134,44 +134,44 @@ else
 fi
 sleep 2
 
-# ── T3: OS credential dumping — order_service ────────────────────────────────
+# ── T2: OS credential dumping — order_service ────────────────────────────────
 # T1003.008
 
-header 3 13 "Read /etc/shadow from container (order_service)" "CRITICAL T1003_008_os_credential_dumping"
+header 2 10 "Read /etc/shadow from container (order_service)" "CRITICAL T1003_008_os_credential_dumping"
 T3_SINCE=$(date +%s%N)
 docker exec "${ORDER_SVC}" cat /etc/shadow 2>/dev/null || true
 if expect_alert "CRITICAL.*T1003_008_os_credential_dumping.*order_service" 30; then
-    pass "T3: CRITICAL T1003_008 detected"
+    pass "T2: CRITICAL T1003_008 detected"
 else
-    fail "T3: no CRITICAL T1003_008 alert within timeout"
+    fail "T2: no CRITICAL T1003_008 alert within timeout"
 fi
 sleep 2
 
-# ── T4: SSH private key access — user_service ────────────────────────────────
+# ── T3: SSH private key access — user_service ────────────────────────────────
 # T1552.004
 # Use docker cp to create the file — avoids bash spawn (which would trigger T1059
 # and be killed before the file write completes).
 # /tmp/id_rsa matches the id_rsa suffix → fires T1552_004 at HIGH.
 
-header 4 13 "Read SSH private key from container (user_service)" "HIGH T1552_004_private_keys"
+header 3 10 "Read SSH private key from container (user_service)" "HIGH T1552_004_private_keys"
 echo 'test-key-material' > "${TESTDIR}/id_rsa"
 docker cp "${TESTDIR}/id_rsa" "${USER_SVC}":/tmp/id_rsa 2>/dev/null || true
 docker exec "${USER_SVC}" cat /tmp/id_rsa 2>/dev/null || true
 if expect_alert "HIGH.*T1552_004_private_keys.*user_service" 30; then
-    pass "T4: HIGH T1552_004 detected"
+    pass "T3: HIGH T1552_004 detected"
 else
-    fail "T4: no HIGH T1552_004 alert within timeout"
+    fail "T3: no HIGH T1552_004 alert within timeout"
 fi
 sleep 3
 
-# ── T5: Unauthorized external connect + LPMTrie block verification — auth_service
+# ── T4: Unauthorized external connect + LPMTrie block verification — auth_service
 # T1041 · T1048
 # First connect: fires T1041 alert + writes 8.8.8.8 to blocked_ips BPF map.
 # Second connect to same IP: must get EPERM (blocked at kernel before handshake).
 # Third connect to private IP: must NOT get EPERM (private IPs never blocked).
 # Map is flushed before the test so each validate.sh run is independent.
 
-header 5 13 "Unauthorized external connect — block verification (auth_service)" "HIGH T1041_exfiltration_over_c2 + block_ip"
+header 4 10 "Unauthorized external connect — block verification (auth_service)" "HIGH T1041_exfiltration_over_c2 + block_ip"
 
 # Flush blocked_ips map so the test is repeatable across multiple validate.sh runs.
 BLOCK_MAP_ID=$(sudo bpftool map show 2>/dev/null | awk '/blocked_ips/{print id} {id=$1}' | tr -d ':' | head -1)
@@ -230,93 +230,93 @@ except OSError as e:
 echo "  ${UNBLOCK_RESULT}"
 
 if expect_alert "HIGH.*T1041_exfiltration_over_c2.*auth_service.*8\.8\.8\.8" 30; then
-    pass "T5: HIGH T1041 detected (block verification printed above)"
+    pass "T4: HIGH T1041 detected (block verification printed above)"
 else
-    fail "T5: no HIGH T1041 alert within timeout"
+    fail "T4: no HIGH T1041 alert within timeout"
 fi
 sleep 3
 
-# ── T8: System information discovery — insights_service ──────────────────────
+# ── T5: System information discovery — insights_service ──────────────────────
 # T1082
 
-header 8 13 "Read /etc/passwd from container — system recon (insights_service)" "MEDIUM T1082_system_info_discovery"
+header 5 0 "Read /etc/passwd from container — system recon (insights_service)" "MEDIUM T1082_system_info_discovery"
 docker exec "${INSIGHTS_SVC}" cat /etc/passwd 2>/dev/null || true
 if expect_alert "MEDIUM.*T1082_system_info_discovery.*insights_service.*passwd" 30; then
-    pass "T8: MEDIUM T1082 detected"
+    pass "T5: MEDIUM T1082 detected"
 else
-    fail "T8: no MEDIUM T1082 alert within timeout"
+    fail "T5: no MEDIUM T1082 alert within timeout"
 fi
 sleep 3
 
-# ── T9: Binary masquerading — order_service ───────────────────────────────────
+# ── T6: Binary masquerading — order_service ───────────────────────────────────
 # T1036
 # Two separate docker exec calls — avoids /bin/sh wrapper which would trigger T1059.
 
-header 9 13 "Binary masquerading from /tmp (order_service)" "HIGH T1036_masquerading"
+header 6 10 "Binary masquerading from /tmp (order_service)" "HIGH T1036_masquerading"
 docker exec "${ORDER_SVC}" cp /bin/cat /tmp/sshd 2>/dev/null || true
 sleep 1
 docker exec "${ORDER_SVC}" /tmp/sshd /etc/hostname 2>/dev/null || true
 if expect_alert "HIGH.*T1036_masquerading.*order_service" 30; then
-    pass "T9: HIGH T1036 detected"
+    pass "T6: HIGH T1036 detected"
 else
-    fail "T9: no HIGH T1036 alert within timeout"
+    fail "T6: no HIGH T1036 alert within timeout"
 fi
 sleep 3
 
-# ── T10: Cron configuration access — user_service ────────────────────────────
+# ── T7: Cron configuration access — user_service ────────────────────────────
 # T1053.003
 # Use docker cp to place the file — lsm/file_open only fires on successful opens.
 
-header 10 13 "Cron config access from container (user_service)" "HIGH T1053_003_scheduled_task_cron"
+header 7 10 "Cron config access from container (user_service)" "HIGH T1053_003_scheduled_task_cron"
 echo "* * * * * root /tmp/evil_payload" > "${TESTDIR}/crontab"
 docker cp "${TESTDIR}/crontab" "${USER_SVC}":/etc/crontab
 docker exec "${USER_SVC}" cat /etc/crontab 2>/dev/null || true
 if expect_alert "HIGH.*T1053_003_scheduled_task_cron.*user_service" 30; then
-    pass "T10: HIGH T1053_003 detected"
+    pass "T7: HIGH T1053_003 detected"
 else
-    fail "T10: no HIGH T1053_003 alert within timeout"
+    fail "T7: no HIGH T1053_003 alert within timeout"
 fi
 sleep 3
 
-# ── T11: Command history access — insights_service ───────────────────────────
+# ── T8: Command history access — insights_service ───────────────────────────
 # T1070.003
 # Use docker cp to place the file — lsm/file_open only fires on successful opens.
 # /tmp/.bash_history matches the .bash_history suffix → fires T1070 at MEDIUM.
 
-header 11 13 "Command history access from container (insights_service)" "MEDIUM T1070_003_clear_command_history"
+header 8 10 "Command history access from container (insights_service)" "MEDIUM T1070_003_clear_command_history"
 echo "rm -rf /important_data" > "${TESTDIR}/bash_history"
 docker cp "${TESTDIR}/bash_history" "${INSIGHTS_SVC}":/tmp/.bash_history 2>/dev/null || true
 docker exec "${INSIGHTS_SVC}" cat /tmp/.bash_history 2>/dev/null || true
 if expect_alert "MEDIUM.*T1070_003_clear_command_history.*insights_service" 30; then
-    pass "T11: MEDIUM T1070_003 detected"
+    pass "T8: MEDIUM T1070_003 detected"
 else
-    fail "T11: no MEDIUM T1070_003 alert within timeout"
+    fail "T8: no MEDIUM T1070_003 alert within timeout"
 fi
 sleep 3
 
-# ── T12: Credentials in .env file — user_service ─────────────────────────────
+# ── T9: Credentials in .env file — user_service ─────────────────────────────
 # T1552.001
 # Use docker cp to place the .env file — lsm/file_open fires on successful opens.
 # /tmp/app.env matches .env suffix → fires T1552_001_credentials_in_files at HIGH.
 
-header 12 13 "Credentials in .env file from container (user_service)" "HIGH T1552_001_credentials_in_files"
+header 9 10 "Credentials in .env file from container (user_service)" "HIGH T1552_001_credentials_in_files"
 echo "DB_PASSWORD=super_secret_password" > "${TESTDIR}/app.env"
 docker cp "${TESTDIR}/app.env" "${USER_SVC}":/tmp/app.env 2>/dev/null || true
 docker exec "${USER_SVC}" cat /tmp/app.env 2>/dev/null || true
 if expect_alert "HIGH.*T1552_001_credentials_in_files.*user_service" 30; then
-    pass "T12: HIGH T1552_001 detected"
+    pass "T9: HIGH T1552_001 detected"
 else
-    fail "T12: no HIGH T1552_001 alert within timeout"
+    fail "T9: no HIGH T1552_001 alert within timeout"
 fi
 sleep 3
 
-# ── T13: Container management tool execution — auth_service ──────────────────
+# ── T10: Container management tool execution — auth_service ──────────────────
 # T1613
 # Copy the docker binary from the host into the container and execute it.
 # /usr/local/bin/docker matches the /docker suffix → fires T1613_container_resource_discovery.
 # The command fails at runtime (no socket in container) but the execve fires the alert.
 
-header 13 13 "Container management tool in container (auth_service)" "HIGH T1613_container_resource_discovery"
+header 10 10 "Container management tool in container (auth_service)" "HIGH T1613_container_resource_discovery"
 if which docker > /dev/null 2>&1; then
     docker cp "$(which docker)" "${AUTH_SVC}":/usr/local/bin/docker 2>/dev/null || true
     docker exec "${AUTH_SVC}" /usr/local/bin/docker ps 2>/dev/null || true
@@ -324,9 +324,9 @@ else
     echo "  SKIP: docker not on PATH — cannot copy binary to container"
 fi
 if expect_alert "HIGH.*T1613_container_resource_discovery.*auth_service" 30; then
-    pass "T13: HIGH T1613 detected"
+    pass "T10: HIGH T1613 detected"
 else
-    fail "T13: no HIGH T1613 alert within timeout"
+    fail "T10: no HIGH T1613 alert within timeout"
 fi
 sleep 3
 

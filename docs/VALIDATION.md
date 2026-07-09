@@ -291,12 +291,12 @@ level=HIGH rule=T1613_container_resource_discovery service=auth_service comm=/us
 **Attack detection:**
 
 - [x] T1  — CRITICAL `T1059_unix_shell_execution`
-- [x] T2  — HIGH `T1105_ingress_tool_transfer` (requires nc/wget in container — see T2 note)
+- [ ] T2  — HIGH `T1105_ingress_tool_transfer` (requires nc/wget in container — see T2 note) — not in `validate.sh`
 - [x] T3  — HIGH `T1003_008_os_credential_dumping` + kill_process
 - [x] T4  — HIGH `T1552_004_private_keys` + kill_process
 - [x] T5  — HIGH `T1041_exfiltration_over_c2` + block_ip (EPERM on retry verified)
-- [x] T6  — No alert (inventory_service allowlisted — correct)
-- [x] T7  — CRITICAL `T1611_escape_to_host_fs` + kill_process
+- [ ] T6  — No alert (inventory_service allowlisted — correct) — not in `validate.sh`
+- [ ] T7  — CRITICAL `T1611_escape_to_host_fs` + kill_process — not in `validate.sh`
 - [x] T8  — MEDIUM `T1082_system_info_discovery`
 - [x] T9  — HIGH `T1036_masquerading`
 - [x] T10 — HIGH `T1053_003_scheduled_task_cron`
