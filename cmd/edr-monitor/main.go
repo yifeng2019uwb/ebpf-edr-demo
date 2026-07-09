@@ -38,9 +38,9 @@ const (
 	alertChCap    = 8096  // alerts are rare, but may have many Low/Info telemetry
 
 	// fileDedupWindow deduplicates file events from the same process within this window.
-	// Why: multi-threaded processes trigger lsm/file_open once per thread (N threads = N syscalls).
-	// But from detection perspective: file open happened once; threads share file descriptor & RAM.
-	// Solution: keep only first occurrence within window; discard thread duplicates as noise.
+	// Why: multi-threaded processes open the same file once per thread (N threads = N openat
+	// events from the sensor). From the detection perspective the file open happened once;
+	// threads share file descriptors & RAM. Keep only the first occurrence within the window.
 	fileDedupWindow = time.Second
 
 	cacheCleanUpWorkerInterval     = 5 * time.Minute
@@ -50,10 +50,15 @@ const (
 	shutdownWaitInterval = 100 * time.Millisecond // time for goroutines to finish between channel closes
 )
 
+// fileDedupKey is {process, path} — deliberately NO comm. The sensor's pid is the
+// tgid (same for every thread of a process), but its comm is the THREAD name
+// (bpf_get_current_comm), so differently-named threads of one process opening the
+// same file used to produce distinct keys and double-fire alerts ~80ms apart.
+// Filename is the CString form, NOT the raw [N]byte: trailing bytes after the
+// null differ between events for the same open, defeating byte-array dedup.
 type fileDedupKey struct {
 	Pid      uint32
-	Comm     string // CString form, NOT the raw [N]byte: trailing bytes after the null
-	Filename string // differ between events for the same open, defeating byte-array dedup
+	Filename string
 }
 
 const fileDedupShards = 32 // shard count: distributes lock contention across cores
@@ -322,7 +327,6 @@ func startEnricherWorker(
 				// Optimization: Use sharded locks (32 shards indexed by PID) to reduce contention on multi-core systems.
 				key := fileDedupKey{
 					Pid:      uint32(ev.File.Pid),
-					Comm:     processor.CString(ev.File.Comm[:]),
 					Filename: processor.CString(ev.File.Filename[:]),
 				}
 				shardIdx := uint32(ev.File.Pid) % fileDedupShards

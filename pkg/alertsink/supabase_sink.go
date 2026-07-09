@@ -74,11 +74,11 @@ func NewSupabaseSink(url, key string) (*SupabaseSink, error) {
 
 	// Test connection
 	if err := db.PingContext(context.Background()); err != nil {
-		log.Printf("supabase sink connection test failed: %v", err)
+		log.Printf("supabase sink connection test failed (host=%s): %v", hostname, err)
 		return nil, err
 	}
 
-	log.Printf("supabase sink connected")
+	log.Printf("supabase sink connected via %s", hostname)
 	return &SupabaseSink{db: db}, nil
 }
 

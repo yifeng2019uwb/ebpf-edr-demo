@@ -4,8 +4,7 @@
 **Status:** ✅ Detection + response working on DO K8s (`./validate-do-k8s.sh` 11/11) and
 Docker VM (`validate.sh` 10/10). YAML rules engine complete — no active task.
 
-**Next candidates:** deferred issues below, or the Behavioral & Anomaly Detection
-initiative (last section).
+**Next:** see **Plan** section below (issue fixes → K8s load test via order service).
 For multi-step work: STOP after each step for user review before starting the next.
 
 ---
@@ -34,29 +33,56 @@ the engine (plus Go-only pipeline logic: ppid==1 skip, ancestry walk, telemetry)
 
 ---
 
+## Plan — next steps (prioritized 2026-07-09)
+
+1. ✅ **Supabase sink on K8s → IPv4 Supavisor pooler.** DONE (2026-07-09) — `supabase sink
+   connected` on DO K8s. The lever is `DATABASE_REGION` (=`1-us-east-1`, already in
+   `infra/.env`), which selects `aws-<region>.pooler.supabase.com` + `postgres.<project>`
+   user, port 5432 session mode. Wired: DS manifest env (optional configMapKeyRef
+   `database-region`), deploy-ebpf-k8s.sh ConfigMap keys (also added `alert-log-path` —
+   previously only the removed set-env workaround provided it), sink logs `connected via
+   <host>` (visible after next image push). health-ai `deploy.sh` now runs
+   `_ensure_ebpf_config` before the DS apply — refreshes ConfigMap/Secret from the ebpf
+   repo's `infra/.env`, so no manual `kubectl patch` in the future (keep its keys in sync
+   with deploy-ebpf-k8s.sh). Validated: alert rows confirmed in the Supabase `alerts` table.
+2. **Fix file-dedup double-fire** — root cause found + fixed (2026-07-09), pending real-env
+   validation. The sensor's pid is the tgid (process), but its comm is the THREAD name
+   (`bpf_get_current_comm`), so two differently-named threads opening the same file made
+   distinct dedup keys → double alerts. Fix: `Comm` removed from `fileDedupKey`
+   ({Pid, Filename} only, main.go). Confirm diagnosis against historical data: a dup pair
+   in Supabase should show different `comm` values. Validate: rebuild/push image, redeploy,
+   rerun the noisy scenario → single alert.
+3. **validate.sh cheap fixes:** `/13` header → 10; add `no_alert` helper to restore T6;
+   stage a static `nc`/`wget` to restore T2. (T7 stays blocked on the T1611 overlay-rule
+   allowlist — separate design task.)
+4. **K8s load test — via the order service.** health-ai is unsuitable for load testing
+   (each account needs manual creation work). The order service already has extensive
+   integration tests incl. traffic load tests, but is NOT yet deployed to K8s — deploying
+   it there is the prerequisite (extra work, scope TBD). Then run the load test per the
+   open task in `docs/PERFORMANCE.md`: baseline → ramp load → find per-source ceiling
+   (watch `rawDropped`/`enrichedDropped`/`alertDropped` + `produced≫resolved` backlog +
+   agent CPU) → `validate-do-k8s.sh` under peak load → soak for memory growth.
+5. **Activate `block_ip` kernel side — AFTER the load test** (active blocking would skew
+   test traffic). Needs `lsm-connect.bpf.c` map uncomment + `go generate` on the Linux VM
+   (documented activation path in `pkg/detector/response.go`) — the sanctioned exception
+   to the no-BPF-edits rule.
+6. **Opportunistic, no schedule:** remove dead `network_init.go` privateNets when next in
+   the detector; Docker cache eviction stays deferred (test-VM-only slow leak).
+
+---
+
 ## Deferred / known issues (documented, none blocking)
 
-- **`./deploy.sh app` never applies the eBPF DaemonSet — Pulumi hang.** health-ai
-  `kubernetes/deploy.sh` → `_apply_daemonset()` hangs at two `pulumi stack output` calls
-  (region/cluster) that run before `kubectl apply` — GKE/Pulumi-era code we no longer use, so
-  the DaemonSet's `kubectl apply` + `rollout restart` never run (the image still lands via
-  `rollout restart` + `imagePullPolicy: Always`, so the binary is current but env changes are
-  not). Workaround in place: `kubectl -n kube-system set env daemonset/ebpf-edr
-  ALERT_LOG_PATH=/alerts/alert.log` — persists in the DS spec and is not clobbered by the
-  hanging apply. Proper fix would drop the `pulumi stack output` lookups (hardcode/env
-  `${REGION}`/`${CLUSTER_NAME}` for `envsubst`, or move `kubectl apply` ahead of them); the Go
-  side (config.go env read + file_sink dir create) is already correct.
-- **Supabase sink disabled on K8s.** `DATABASE_URL` resolves over IPv6 and DO nodes have no
-  IPv6 route, so LOW telemetry persists only to the node file until the URL uses the
-  IPv4/Supavisor endpoint.
 - **Docker container cache never evicts.** `listenDockerEvents()` is disabled in
   `DockerResolver.Start()` — its reconnect/recovery path had unresolved issues and is hard to
   test without a scriptable Docker daemon. Cache-cleanup (and `lightweightRefresh()`) lived
   only there, so `r.cache`/`r.containerToNs` only grow. Not a correctness problem — containers
   are still discovered on-demand via `asyncResolvePID` — just a slow memory/staleness leak.
-- **File-dedup double-fire.** Some file alerts fire twice ~80ms apart despite the 1s
-  `fileDedupWindow` — cosmetic noise, low priority. Likely the dedup key differs subtly between
-  the two events (thread vs group-leader pid, or trailing bytes in `Comm`/`Filename`).
+- **File-dedup double-fire — FIXED 2026-07-09, pending real-env validation** (see plan item 2).
+- **File-dedup shard maps never evict.** `fileDedupShards_array` (main.go) has no sweep — the
+  cleanup worker only sweeps the ancestry cache — so entries ({pid, filename} → time) accumulate
+  forever. Tiny entries, slow growth; same class as the Docker cache leak. Fix is a periodic
+  sweep dropping entries older than `fileDedupWindow`.
 - **`validate.sh` T2/T6/T7 removed** — each needs work before it can assert honestly: T2 needs a
   working static `nc`/`wget` in the container; T6 needs a `no_alert` helper; T7's T1611
   host-reads-container-overlay rule is disabled (its data `container_fs_paths` stays in

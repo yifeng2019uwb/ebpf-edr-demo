@@ -72,7 +72,9 @@ main() {
         info "Creating eBPF configuration ConfigMap..."
         kubectl create configmap ebpf-alerts \
             --from-literal=database-url="${DATABASE_URL}" \
+            --from-literal=database-region="${DATABASE_REGION:-}" \
             --from-literal=pubsub-addr="${PUBSUB_ADDR:-}" \
+            --from-literal=alert-log-path="${ALERT_LOG_PATH:-/alerts/alert.log}" \
             -n kube-system \
             --dry-run=client -o yaml | kubectl apply -f -
         success "ConfigMap created"

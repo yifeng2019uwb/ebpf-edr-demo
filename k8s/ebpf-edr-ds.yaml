@@ -50,6 +50,16 @@ spec:
             configMapKeyRef:
               name: ebpf-alerts
               key: database-url
+        # Supavisor pooler region (e.g. 0-us-east-1) — selects the IPv4 pooler endpoint
+        # aws-<region>.pooler.supabase.com. Required on DO nodes: no IPv6 route to the
+        # direct db.<project>.supabase.co endpoint. optional: when unset the sink falls
+        # back to the direct endpoint (works where an IPv4 route exists).
+        - name: DATABASE_REGION
+          valueFrom:
+            configMapKeyRef:
+              name: ebpf-alerts
+              key: database-region
+              optional: true
         - name: PUBSUB_ADDR
           valueFrom:
             configMapKeyRef:
