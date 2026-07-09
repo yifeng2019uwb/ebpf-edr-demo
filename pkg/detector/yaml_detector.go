@@ -31,6 +31,65 @@ type YAMLDetector struct {
 	suspiciousPrefixes []string          // precomputed from suspicious_exec_paths (writable-location denylist)
 	shellNames         map[string]bool   // precomputed from shell_processes (hot path)
 	reconReaders       map[string]bool   // precomputed from recon_file_readers (T1082 reader gate)
+	processDetections  []compiledDetection // structured process rules (rules/process.yaml, ordered)
+}
+
+// compiledMatch is a MatchSpec with its list references resolved to lookup
+// structures (rules are immutable after load, so this is done once).
+// All non-empty primitives must match (AND); an empty match matches nothing.
+type compiledMatch struct {
+	commSuffixes []string        // comm_suffix_in
+	commBases    map[string]bool // comm_base_in
+	commPrefixes []string        // comm_prefix_in
+}
+
+func (m *compiledMatch) empty() bool {
+	return len(m.commSuffixes) == 0 && len(m.commBases) == 0 && len(m.commPrefixes) == 0
+}
+
+// matchesComm reports whether comm satisfies every specified primitive.
+func (m *compiledMatch) matchesComm(comm string) bool {
+	if m.empty() {
+		return false
+	}
+	if len(m.commSuffixes) > 0 && !hasAnySuffix(comm, m.commSuffixes) {
+		return false
+	}
+	if len(m.commBases) > 0 && !m.commBases[filepath.Base(comm)] {
+		return false
+	}
+	if len(m.commPrefixes) > 0 && !hasAnyPrefix(comm, m.commPrefixes) {
+		return false
+	}
+	return true
+}
+
+func hasAnySuffix(s string, suffixes []string) bool {
+	for _, suf := range suffixes {
+		if strings.HasSuffix(s, suf) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasAnyPrefix(s string, prefixes []string) bool {
+	for _, pre := range prefixes {
+		if strings.HasPrefix(s, pre) {
+			return true
+		}
+	}
+	return false
+}
+
+// compiledDetection is a DetectionRule ready for the hot path.
+type compiledDetection struct {
+	name             string
+	level            alert.Level
+	requireContainer bool
+	match            compiledMatch
+	exceptions       compiledMatch
+	message          string
 }
 
 // NewYAMLDetector creates a detector with no runtime awareness.
@@ -65,7 +124,43 @@ func NewYAMLDetectorWithRuntime(db *rules.RulesDB, runtime workload.Runtime) *YA
 	// Anti-spoof path validation (env-agnostic): rather than allowlisting per-distro
 	// system dirs, we denylist attacker-writable locations. Precompute the list once.
 	d.suspiciousPrefixes = d.getListStrings("suspicious_exec_paths")
+	d.processDetections = d.compileDetections(db.ProcessDetections)
 	return d
+}
+
+// compileDetections resolves each detection's list references to lookup
+// structures once. References were validated at load time (loader fail-fast),
+// so missing lists cannot occur here.
+func (d *YAMLDetector) compileDetections(dets []rules.DetectionRule) []compiledDetection {
+	compiled := make([]compiledDetection, 0, len(dets))
+	for _, det := range dets {
+		compiled = append(compiled, compiledDetection{
+			name:             det.Name,
+			level:            det.Severity,
+			requireContainer: det.RequireContainer,
+			match:            d.compileMatch(det.Match),
+			exceptions:       d.compileMatch(det.Exceptions),
+			message:          det.Message,
+		})
+	}
+	return compiled
+}
+
+func (d *YAMLDetector) compileMatch(spec rules.MatchSpec) compiledMatch {
+	var m compiledMatch
+	if spec.CommSuffixIn != "" {
+		m.commSuffixes = d.getListStrings(spec.CommSuffixIn)
+	}
+	if spec.CommBaseIn != "" {
+		m.commBases = make(map[string]bool)
+		for _, s := range d.getListStrings(spec.CommBaseIn) {
+			m.commBases[s] = true
+		}
+	}
+	if spec.CommPrefixIn != "" {
+		m.commPrefixes = d.getListStrings(spec.CommPrefixIn)
+	}
+	return m
 }
 
 // SetInfrastructurePIDs sets the Layer 1 infrastructure PIDs for pre-filter validation.
@@ -127,16 +222,6 @@ func (d *YAMLDetector) getListStrings(name string) []string {
 		}
 	}
 	return result
-}
-
-func (d *YAMLDetector) matchesSuffix(comm string, listName string) bool {
-	list := d.getListStrings(listName)
-	for _, s := range list {
-		if strings.HasSuffix(comm, s) {
-			return true
-		}
-	}
-	return false
 }
 
 func (d *YAMLDetector) isProcEscapeAllowed(filename string) bool {
@@ -422,19 +507,32 @@ func (d *YAMLDetector) checkProcessRules(event processor.ProcessEvent, res workl
 		return nil
 	}
 
-	// T1036 — masquerading: checked BEFORE whitelist
-	t1036Paths := d.getListStrings("suspicious_exec_paths")
-	for _, prefix := range t1036Paths {
-		if strings.HasPrefix(comm, prefix) {
-			return newProcessAlert(event, res, comm, alert.High, RuleT1036Masquerading, "Process running from suspicious path: "+comm)
+	// Structured detections from rules/process.yaml, evaluated in file order
+	// (CRITICAL → LOW). Container-gated rules only fire for verified containers
+	// (state resolved, runtime docker/k8s); require_container: false rules
+	// (T1036) also cover host and state=unknown processes.
+	isVerifiedContainer := isContainerContext(res)
+	for i := range d.processDetections {
+		det := &d.processDetections[i]
+		if det.requireContainer && !isVerifiedContainer {
+			continue
 		}
-	}
-
-	if d.isWhitelisted(comm) {
-		return nil
+		if !det.match.matchesComm(comm) {
+			continue
+		}
+		if det.exceptions.matchesComm(comm) {
+			continue
+		}
+		return newProcessAlert(event, res, comm, det.level, det.name, det.message)
 	}
 
 	if res.State == workload.StateUnknown {
+		// Whitelisted apps (customer_applications) in unresolved namespaces are
+		// known-benign — not telemetry noise (preserves the pre-refactor early
+		// whitelist return for state=unknown).
+		if d.isWhitelisted(comm) {
+			return nil
+		}
 		// Initialization context (ppid=1, shell scripts) is handled by the
 		// global_exceptions pre-filter; remaining state=unknown processes are here.
 
@@ -468,21 +566,6 @@ func (d *YAMLDetector) checkProcessRules(event processor.ProcessEvent, res workl
 		// for the anomaly service) but the Redis sink drops LOW so it stays off the live
 		// dashboard — avoids LOW-level alert fatigue.
 		return newProcessAlert(event, res, comm, alert.Low, RuleEDRTelemetryUnresolvedNamespace, "EDR visibility gap: process in unresolved namespace")
-	}
-
-	// Container context gating: only apply container-specific rules if state is VERIFIED (not unknown)
-	isVerifiedContainer := isContainerContext(res)
-
-	if isVerifiedContainer && d.matchesSuffix(comm, "shell_processes") {
-		return newProcessAlert(event, res, comm, alert.Critical, RuleT1059UnixShellExecution, "Shell spawned from container — possible RCE")
-	}
-
-	if isVerifiedContainer && d.matchesSuffix(comm, "network_tools") {
-		return newProcessAlert(event, res, comm, alert.High, RuleT1105IngressToolTransfer, "Network tool executed from container — possible exfiltration or tool staging")
-	}
-
-	if isVerifiedContainer && d.matchesSuffix(comm, "container_mgmt_tools") {
-		return newProcessAlert(event, res, comm, alert.High, RuleT1613ContainerDiscovery, "Container management tool executed inside container — possible discovery")
 	}
 
 	return nil

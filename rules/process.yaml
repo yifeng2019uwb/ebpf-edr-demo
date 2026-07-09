@@ -1,0 +1,68 @@
+# Process detections — execsnoop (tracepoint sys_enter_execve).
+# Sees: comm (full exec path), pid, ppid, uid, mnt_ns_id on every execve().
+#
+# This file is the SOURCE OF TRUTH for process rule matching, severity, and
+# check order. The detector (pkg/detector/yaml_detector.go) evaluates these
+# entries in file order — keep them sorted CRITICAL → LOW; the loader rejects
+# the file if the order is violated.
+#
+# Schema per entry:
+#   name:              emitted rule name (validate scripts assert these strings)
+#   severity:          CRITICAL | HIGH | MEDIUM | LOW
+#   require_container: true  = only fires for verified containers (state resolved,
+#                              runtime docker/k8s)
+#                      false = also fires for host and state=unknown processes
+#   match:             all specified primitives must match (AND); values are
+#                      list names from rules/default.yaml
+#     comm_suffix_in:  comm ends with any item in the list
+#     comm_base_in:    filepath.Base(comm) equals any item in the list
+#     comm_prefix_in:  comm starts with any item in the list
+#   exceptions:        same primitives; if they match, the rule does not fire
+#   message:           plain string (no templating — comm/service/pid are
+#                      structured alert fields)
+
+detections:
+
+  # T1059.004 / T1609 — Command & Scripting: Unix Shell
+  # Container spawning /bin/sh, /bin/bash, etc. → remote code execution.
+  - name: T1059_unix_shell_execution
+    severity: CRITICAL
+    require_container: true
+    match:
+      comm_suffix_in: shell_processes
+    exceptions:
+      comm_base_in: customer_applications
+    message: "Shell spawned from container — possible RCE"
+
+  # T1105 / T1095 — Ingress Tool Transfer
+  # Container running nc, ncat, wget → attacker brought in attack tools.
+  - name: T1105_ingress_tool_transfer
+    severity: HIGH
+    require_container: true
+    match:
+      comm_suffix_in: network_tools
+    exceptions:
+      comm_base_in: customer_applications
+    message: "Network tool executed from container — possible exfiltration or tool staging"
+
+  # T1613 — Container and Resource Discovery
+  # Container executing kubectl, docker, crictl → discovering infrastructure.
+  - name: T1613_container_resource_discovery
+    severity: HIGH
+    require_container: true
+    match:
+      comm_suffix_in: container_mgmt_tools
+    exceptions:
+      comm_base_in: customer_applications
+    message: "Container management tool executed inside container — possible discovery"
+
+  # T1036 — Masquerading
+  # Binary running from /tmp/, /dev/shm/, etc. → attacker hiding malware.
+  # No require_container and no exceptions: fires for host and state=unknown
+  # processes too, and a whitelisted name running from /tmp is still suspicious.
+  - name: T1036_masquerading
+    severity: HIGH
+    require_container: false
+    match:
+      comm_prefix_in: suspicious_exec_paths
+    message: "Process running from suspicious path"

@@ -11,8 +11,8 @@
 - LOW telemetry stream (`state=unknown` residual) → file + Supabase, kept off the Redis dashboard
 - Docs aligned with the current design (GKE / Cloud-Logging-era files archived under `docs/archive/`)
 
-**Current focus:** none active. Next candidates are the two YAML rules-engine refactors in
-**Planned** below. Work task-by-task; the user reviews each before the next.
+**Current focus:** YAML rules engine — structured matchers (see **Active task** below).
+Work step-by-step; STOP after each step for user review before starting the next.
 
 ---
 
@@ -110,27 +110,60 @@ Setup / build / sink details: `docs/SETUP.md`. Self-documented rule data: `rules
 
 ---
 
-## Planned — YAML rules engine evolution
+## Active task — YAML rules engine: structured matchers (design agreed 2026-07-08)
 
-Two related refactors toward making `default.yaml` the real source of truth. Today the Go
-detector hardcodes the matching order and severity; the YAML `detections:` block is declarative
-reference only (there is no expression evaluator), so Go wins and the two can drift — see
-`docs/DETECTION-RULES-AND-POLICY.md` §0/§4.
+**Goal:** YAML is the only source of truth for detection rules + policy. Option B agreed —
+**structured matchers** (declarative match primitives referencing lists), NOT a Falco-style
+expression evaluator (maybe later). One YAML file per eBPF hook, so adding a hook = adding a file.
 
-1. **Read rule/policy from YAML (order + severity as data).** Make the detector look up each
-   rule's severity by name from the loaded rules instead of hardcoding `alert.High`/`alert.Critical`
-   at the ~15 `newXAlert(...)` call sites, and define the rule *check order* explicitly in YAML so
-   the YAML is the spec. Needs the loader to expose `detection.severity` (`RulesDB` currently only
-   surfaces `GetList`/`GlobalExceptions`/`Network`). Kills the Go-vs-YAML severity drift (e.g.
-   `/etc/shadow` is CRITICAL in Go but HIGH in the YAML block).
+**Why:** today the Go detector hardcodes matching, order, and severity; the YAML `detections:`
+block is loaded but never read → three-way drift (severity: `/etc/shadow` CRITICAL in Go vs HIGH
+in YAML; rule NAMES: `T1082_system_discovery` vs Go's `T1082_system_info_discovery`; order:
+YAML map has none). YAML detection names must adopt the Go rule names — validate scripts assert
+those exact strings.
 
-2. **Split `default.yaml` by sensor** (process / file / network), so adding an eBPF hook = adding
-   one file. Recommended shape: a shared `common.yaml` for the cross-cutting layers
-   (`infrastructure_filters`, `global_exceptions`, `ignore_namespaces`, `trusted_parent_names`,
-   `private_ranges`, response mapping) + one file per sensor holding that sensor's detections
-   (ordered, with severity) and its type-specific lists. Avoid a naive 3-way split — it would
-   fragment the shared lists. Do this **after** item 1 (loader work overlaps); the loader then
-   loads + merges the set.
+**Agreed schema** (detections are an ordered LIST, CRITICAL→LOW = check order; loader validates
+order, list refs, and severity at load, fail-fast):
+
+```yaml
+detections:
+  - name: T1059_unix_shell_execution      # = emitted rule name (validate.sh asserts it)
+    severity: CRITICAL
+    require_container: true               # false = fires for host/unknown too (T1036)
+    match:      { comm_suffix_in: shell_processes }     # primitives: comm_suffix_in,
+    exceptions: { comm_base_in: customer_applications } #   comm_base_in, comm_prefix_in,
+    message: "Shell spawned from container — possible RCE" # file_prefix_in, file_suffix_in,
+    response: ~                           # Step 5                # exclude_contains
+```
+
+**Agreed decisions:**
+- Duplicate `name:` entries allowed (T1552_004: ssh dirs=CRITICAL entry + key-file suffixes=HIGH entry).
+- Messages are plain strings (no `%proc.name` templating — comm/service are structured alert fields).
+- Severity ordering is a visible behavior change: `/tmp/bash` in container fires T1059 (CRITICAL)
+  not T1036 (HIGH) — order is YAML-defined now, accepted.
+- Pipeline flow unchanged: Layer 1 safeProcs skip → global_exceptions → rules check. The
+  `state=unknown` ancestry-walk → LOW telemetry path, `ppid==1` skip stay Go pipeline logic.
+- Shared lists STAY in `default.yaml` until Step 4 (`shell_processes` feeds the ancestry walk,
+  `suspicious_exec_paths` feeds anti-spoof — moving them early would break pipeline precomputes).
+- Old `macros:` + free-text `condition:` are dead with Option B — deleted in Step 4, not before.
+
+**Steps (STOP after each — user reviews/validates before the next):**
+1. ✅ `rules/process.yaml` — DONE (2026-07-08). 4 process detections moved (T1059, T1105,
+   T1613, T1036); loader has `DetectionRule`/`MatchSpec` (severity typed `alert.Level`, no
+   hardcoded strings), loads process.yaml from the default.yaml dir, REQUIRED + fail-fast
+   validation (severity, CRITICAL→LOW order, list refs); `checkProcessRules` = one loop over
+   precompiled detections, telemetry path untouched; Dockerfile now `COPY rules/` (whole dir —
+   K8s image needs process.yaml or agent fails at startup). Unit tests added
+   (`pkg/rules/loader_test.go` incl. real-rules load guard; `pkg/detector/yaml_detector_test.go`
+   11 cases). Verified: `make test` green, Docker VM `validate.sh` **10/10**.
+   K8s `validate-do-k8s.sh` not yet re-run (needs image push — Dockerfile changed).
+2. `rules/file.yaml` — the 9 file detections, same way (incl. T1552_004 two-severity split,
+   pem excludes, proc_escape_allowed, T1082 reader gate as `comm_base_in: recon_file_readers`).
+3. `rules/network.yaml` — T1041 + network policy (allowed_ports/services, private_ranges).
+4. Clean up `default.yaml` → becomes the "common" file (Layer 1/2 config + shared lists);
+   delete dead `detections:`/`macros:` blocks; decide per-sensor list placement.
+5. `response:` per detection in YAML (kill_process / block_ip); `response_policy.go` reads
+   from rules data instead of its Go table. Only after detection is proven.
 
 ---
 

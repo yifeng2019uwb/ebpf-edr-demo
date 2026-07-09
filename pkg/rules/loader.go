@@ -6,9 +6,12 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"ebpf-edr-demo/internal/alert"
 )
 
 // Config is the top-level rules configuration.
@@ -90,6 +93,97 @@ type Network struct {
 	AllowedServices []string `yaml:"allowed_services"`
 }
 
+// ── Structured detections (per-sensor YAML files) ─────────────────────────────
+
+// MatchSpec holds declarative match primitives for a structured detection.
+// Each field names a list from the shared lists; all specified fields must
+// match (AND). An empty spec matches nothing.
+type MatchSpec struct {
+	CommSuffixIn string `yaml:"comm_suffix_in"` // comm ends with any list item
+	CommBaseIn   string `yaml:"comm_base_in"`   // filepath.Base(comm) equals any list item
+	CommPrefixIn string `yaml:"comm_prefix_in"` // comm starts with any list item
+}
+
+// listRefs returns the list names referenced by the spec (for validation).
+func (m MatchSpec) listRefs() []string {
+	var refs []string
+	for _, name := range []string{m.CommSuffixIn, m.CommBaseIn, m.CommPrefixIn} {
+		if name != "" {
+			refs = append(refs, name)
+		}
+	}
+	return refs
+}
+
+// DetectionRule is one structured detection entry from a per-sensor rules file.
+// Entries are evaluated in file order (CRITICAL → LOW, validated at load).
+type DetectionRule struct {
+	Name             string      `yaml:"name"`              // emitted rule name
+	Severity         alert.Level `yaml:"severity"`          // CRITICAL | HIGH | MEDIUM | LOW
+	RequireContainer bool        `yaml:"require_container"` // false = also host/unknown
+	Match            MatchSpec   `yaml:"match"`
+	Exceptions       MatchSpec   `yaml:"exceptions"`
+	Message          string      `yaml:"message"`
+}
+
+// sensorConfig is the top-level structure of a per-sensor rules file
+// (process.yaml, file.yaml, network.yaml).
+type sensorConfig struct {
+	Detections []DetectionRule `yaml:"detections"`
+}
+
+// severityRank orders severities for load-time order validation
+// (detections must be sorted CRITICAL → LOW in each sensor file).
+var severityRank = map[alert.Level]int{alert.Critical: 4, alert.High: 3, alert.Medium: 2, alert.Low: 1}
+
+// loadSensorDetections reads and validates one per-sensor detections file.
+func loadSensorDetections(path string, lists map[string][]interface{}) ([]DetectionRule, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read sensor rules file %s: %w", path, err)
+	}
+	var cfg sensorConfig
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse sensor rules YAML %s: %w", path, err)
+	}
+	if err := validateDetections(cfg.Detections, lists); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	log.Printf("rules: loaded %d detections from %s", len(cfg.Detections), path)
+	return cfg.Detections, nil
+}
+
+// validateDetections fail-fast checks: known severity, CRITICAL→LOW file order,
+// non-empty name/message/match, and every referenced list exists.
+func validateDetections(dets []DetectionRule, lists map[string][]interface{}) error {
+	prev := severityRank[alert.Critical]
+	for i, det := range dets {
+		if det.Name == "" {
+			return fmt.Errorf("detection %d: missing name", i)
+		}
+		rank, ok := severityRank[det.Severity]
+		if !ok {
+			return fmt.Errorf("detection %s: invalid severity %q", det.Name, det.Severity)
+		}
+		if rank > prev {
+			return fmt.Errorf("detection %s: severity %s out of order — detections must be sorted CRITICAL→LOW", det.Name, det.Severity)
+		}
+		prev = rank
+		if det.Message == "" {
+			return fmt.Errorf("detection %s: missing message", det.Name)
+		}
+		if len(det.Match.listRefs()) == 0 {
+			return fmt.Errorf("detection %s: match must specify at least one primitive", det.Name)
+		}
+		for _, ref := range append(det.Match.listRefs(), det.Exceptions.listRefs()...) {
+			if _, ok := lists[ref]; !ok {
+				return fmt.Errorf("detection %s: unknown list reference %q", det.Name, ref)
+			}
+		}
+	}
+	return nil
+}
+
 // RulesDB is the compiled rules database.
 type RulesDB struct {
 	InfrastructureFilters InfrastructureFilters // Layer 1: fast-path infrastructure whitelist
@@ -97,12 +191,15 @@ type RulesDB struct {
 	Lists                 map[string][]interface{}
 	Macros                map[string]string
 	Detections            map[string]Detection
+	ProcessDetections     []DetectionRule // structured process rules (rules/process.yaml, ordered)
 	Network               Network
 	IgnoreNs              map[string]bool
 	Env                   Environment // detected environment: gcp, digitalocean, local
 }
 
-// LoadRules loads and compiles rules from YAML file.
+// LoadRules loads and compiles rules from YAML file, plus the per-sensor
+// detection files next to it (process.yaml). Sensor files are required —
+// without them the detector would silently run with no rules.
 func LoadRules(path string) (*RulesDB, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -116,7 +213,14 @@ func LoadRules(path string) (*RulesDB, error) {
 	}
 
 	// Compile to RulesDB
-	return CompileRules(&cfg), nil
+	db := CompileRules(&cfg)
+
+	db.ProcessDetections, err = loadSensorDetections(filepath.Join(filepath.Dir(path), "process.yaml"), db.Lists)
+	if err != nil {
+		return nil, err
+	}
+
+	return db, nil
 }
 
 // CompileRules converts Config to RulesDB (preprocessed for fast lookup).

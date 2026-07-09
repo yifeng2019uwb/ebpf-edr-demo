@@ -409,22 +409,9 @@ rules:
   # DETECTIONS — Rules using lists and macros
   # ─────────────────────────────────────────────────────────
 
+  # Process detections (T1059, T1105, T1613, T1036) moved to rules/process.yaml
+  # (structured matchers — source of truth for match, severity, order).
   detections:
-
-    # T1059.004 / T1609 — Command & Scripting: Unix Shell
-    # Container spawning /bin/sh, /bin/bash, etc. → remote code execution.
-    T1059_unix_shell_execution:
-      condition: spawned_shell and is_container
-      severity: CRITICAL
-      exception_macros: [is_customer_app]
-      output: "Shell spawned in container (proc=%proc.name service=%service)"
-
-    # T1105 / T1095 — Ingress Tool Transfer
-    # Container contains nc, ncat, wget → attacker brought in attack tools.
-    T1105_ingress_tool_transfer:
-      condition: is_container and proc.name in (network_tools)
-      severity: HIGH
-      output: "Network tool in container (proc=%proc.name service=%service)"
 
     # T1552.004 — Unsecured Credentials: Private Keys
     # Container reading SSH keys → credential theft for lateral movement.
@@ -456,13 +443,6 @@ rules:
       severity: MEDIUM
       exception_macros: [is_customer_app]
       output: "System info discovery (file=%fd.name service=%service)"
-
-    # T1036 — Masquerading
-    # Binary running from /tmp/, /dev/shm/, etc. → attacker hiding malware.
-    T1036_masquerading:
-      condition: is_container and proc.binary in (suspicious_exec_paths)
-      severity: HIGH
-      output: "Suspicious binary location (proc=%proc.name path=%proc.binary service=%service)"
 
     # T1053.003 — Scheduled Task/Job: Cron
     # Container accessing /etc/cron.d/, /var/spool/cron/ → persistence.
@@ -518,13 +498,6 @@ rules:
       condition: is_unknown_namespace
       severity: LOW
       output: "EDR visibility gap: Process in unresolved namespace (proc=%proc.name pid=%proc.pid)"
-
-    # T1613 — Container and Resource Discovery
-    # Container executing kubectl, docker, crictl → discovering infrastructure.
-    T1613_container_discovery:
-      condition: is_container and proc.name in (container_mgmt_tools)
-      severity: HIGH
-      output: "Container management tool in container (proc=%proc.name service=%service)"
 
     # T1041 / T1048 — Exfiltration Over C2 Channel / Alternative Protocol
     # Container making external connection → potential data exfiltration.
