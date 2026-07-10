@@ -45,16 +45,20 @@ the engine (plus Go-only pipeline logic: ppid==1 skip, ancestry walk, telemetry)
    `_ensure_ebpf_config` before the DS apply — refreshes ConfigMap/Secret from the ebpf
    repo's `infra/.env`, so no manual `kubectl patch` in the future (keep its keys in sync
    with deploy-ebpf-k8s.sh). Validated: alert rows confirmed in the Supabase `alerts` table.
-2. **Fix file-dedup double-fire** — root cause found + fixed (2026-07-09), pending real-env
-   validation. The sensor's pid is the tgid (process), but its comm is the THREAD name
-   (`bpf_get_current_comm`), so two differently-named threads opening the same file made
-   distinct dedup keys → double alerts. Fix: `Comm` removed from `fileDedupKey`
-   ({Pid, Filename} only, main.go). Confirm diagnosis against historical data: a dup pair
-   in Supabase should show different `comm` values. Validate: rebuild/push image, redeploy,
-   rerun the noisy scenario → single alert.
-3. **validate.sh cheap fixes:** `/13` header → 10; add `no_alert` helper to restore T6;
-   stage a static `nc`/`wget` to restore T2. (T7 stays blocked on the T1611 overlay-rule
-   allowlist — separate design task.)
+2. ✅ **Fix file-dedup double-fire** — DONE + validated (2026-07-09, no more dup file
+   alerts). Root cause: the sensor's pid is the tgid (process), but its comm is the THREAD
+   name (`bpf_get_current_comm`), so two differently-named threads opening the same file
+   made distinct dedup keys → double alerts. Fix: `Comm` removed from `fileDedupKey`
+   ({Pid, Filename} only, main.go).
+3. **validate.sh cheap fixes** — DONE in code (2026-07-09), pending a VM run. Now **12
+   tests** (was 10): headers/counts fixed (incl. the stale `header 5 0`); new
+   `expect_no_alert` helper; T11 restores T1105 ingress-tool (cp-rename an in-container
+   binary to `wget` and exec — the rule matches the exec path, no static tool needed);
+   T12 restores the no-alert allowlist test (inventory_service external connect →
+   suppressed; uses 1.1.1.1 so T4's future 8.8.8.8 block can't mask it; SKIPs if the
+   container isn't running). After the first green 12/12 run, sweep the "10 tests /
+   10/10" counts in docs (VALIDATION, NOTES, MITRE-COVERAGE, HANDOFF status).
+   (T1611 overlay test stays out — blocked on the rule's allowlist, separate design task.)
 4. **K8s load test — via the order service.** health-ai is unsuitable for load testing
    (each account needs manual creation work). The order service already has extensive
    integration tests incl. traffic load tests, but is NOT yet deployed to K8s — deploying
@@ -78,15 +82,14 @@ the engine (plus Go-only pipeline logic: ppid==1 skip, ancestry walk, telemetry)
   test without a scriptable Docker daemon. Cache-cleanup (and `lightweightRefresh()`) lived
   only there, so `r.cache`/`r.containerToNs` only grow. Not a correctness problem — containers
   are still discovered on-demand via `asyncResolvePID` — just a slow memory/staleness leak.
-- **File-dedup double-fire — FIXED 2026-07-09, pending real-env validation** (see plan item 2).
 - **File-dedup shard maps never evict.** `fileDedupShards_array` (main.go) has no sweep — the
   cleanup worker only sweeps the ancestry cache — so entries ({pid, filename} → time) accumulate
   forever. Tiny entries, slow growth; same class as the Docker cache leak. Fix is a periodic
   sweep dropping entries older than `fileDedupWindow`.
-- **`validate.sh` T2/T6/T7 removed** — each needs work before it can assert honestly: T2 needs a
-  working static `nc`/`wget` in the container; T6 needs a `no_alert` helper; T7's T1611
-  host-reads-container-overlay rule is disabled (its data `container_fs_paths` stays in
-  common.yaml). Header still reads `/13` (10 tests now) — cosmetic.
+- **`validate.sh` T1611 overlay test still out** (T2/T6 equivalents restored as T11/T12,
+  headers fixed — see plan item 3). Blocked on the disabled T1611
+  host-reads-container-overlay rule and its allowlist design; the rule's data
+  (`container_fs_paths`) stays in common.yaml.
 - **`block_ip` kernel side not compiled.** T1041 declares `response: block_ip` but the
   `blocked_ips` LPMTrie map in `kernel/lsm-connect.bpf.c` is commented out — responder skips
   with a log line (alert-only in practice). Activation steps in `pkg/detector/response.go`.
