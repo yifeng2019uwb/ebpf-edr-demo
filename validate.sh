@@ -348,12 +348,12 @@ sleep 3
 # ── T11: Ingress tool transfer — auth_service ─────────────────────────────────
 # T1105 · T1095
 # The rule matches the exec path suffix (network_tools: nc, ncat, wget) — the exec
-# event fires at sys_enter_execve, so the binary's behavior doesn't matter. Same
-# trick as T6/T10: copy an in-container binary under the tool name and exec it
-# (no static nc/wget needed in the image).
+# event fires at sys_enter_execve, so the binary's behavior doesn't matter. Stage
+# a host binary under the tool name via docker cp (same as T10; in-container cp is
+# not available in this image) — no static nc/wget needed.
 
 header 11 12 "Ingress tool transfer (auth_service)" "HIGH T1105_ingress_tool_transfer"
-docker exec "${AUTH_SVC}" cp /bin/cat /usr/local/bin/wget 2>/dev/null || true
+docker cp /bin/cat "${AUTH_SVC}":/usr/local/bin/wget 2>/dev/null || true
 sleep 1
 docker exec "${AUTH_SVC}" /usr/local/bin/wget /etc/hostname 2>/dev/null || true
 if expect_alert "HIGH.*T1105_ingress_tool_transfer.*auth_service" 30; then

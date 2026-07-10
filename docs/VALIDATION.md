@@ -3,8 +3,10 @@
 Manual test procedure to verify each detection rule fires correctly against real container behavior.
 Run on the GCP Docker VM while the EDR agent is running.
 
-Automated: `sudo ./validate.sh` runs the 10 automated tests with concurrent integration
-traffic (T2/T6/T7 are manual-only — see the checklist at the bottom and HANDOFF deferred issues).
+Automated: `sudo ./validate.sh` runs the 12 automated tests with concurrent integration
+traffic. Only the T1611 host-reads-container-overlay test remains manual-only (rule disabled
+pending its allowlist — see HANDOFF deferred issues). Note: this doc's T1–T13 sections use the
+ORIGINAL numbering; validate.sh's tests are numbered 1–12 in its own order.
 
 ---
 
@@ -30,7 +32,7 @@ docker ps
 # Three terminals
 tail -f alerts/alert.log          # Terminal 1: watch alerts live
 tail -f /tmp/integ_tests.log      # Terminal 2: watch integration tests
-sudo ./validate.sh                # Terminal 3: run the 10 automated tests
+sudo ./validate.sh                # Terminal 3: run the 12 automated tests
 ```
 
 ---
@@ -292,12 +294,12 @@ level=HIGH rule=T1613_container_resource_discovery service=auth_service comm=/us
 **Attack detection:**
 
 - [x] T1  — CRITICAL `T1059_unix_shell_execution`
-- [ ] T2  — HIGH `T1105_ingress_tool_transfer` (requires nc/wget in container — see T2 note) — not in `validate.sh`
+- [ ] T2  — HIGH `T1105_ingress_tool_transfer` — in `validate.sh` (T11: host binary staged as `wget` via docker cp, exec fires the rule)
 - [x] T3  — HIGH `T1003_008_os_credential_dumping` + kill_process
 - [x] T4  — HIGH `T1552_004_private_keys` + kill_process
 - [x] T5  — HIGH `T1041_exfiltration_over_c2` + block_ip (EPERM on retry verified)
-- [ ] T6  — No alert (inventory_service allowlisted — correct) — not in `validate.sh`
-- [ ] T7  — CRITICAL `T1611_escape_to_host_fs` + kill_process — not in `validate.sh`
+- [ ] T6  — No alert (inventory_service allowlisted — correct) — in `validate.sh` (T12, `expect_no_alert`; SKIPs if container not running)
+- [ ] T7  — CRITICAL `T1611_escape_to_host_fs` — not in `validate.sh` (rule disabled pending allowlist)
 - [x] T8  — MEDIUM `T1082_system_info_discovery`
 - [x] T9  — HIGH `T1036_masquerading`
 - [x] T10 — HIGH `T1053_003_scheduled_task_cron`

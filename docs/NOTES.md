@@ -3,7 +3,7 @@
 ## Current Status
 
 **Coverage:** 15 of ~15 single-event-detectable MITRE techniques implemented and validated
-- Docker VM: `validate.sh` 10/10 (T2/T6/T7 removed pending fixes — see HANDOFF deferred issues)
+- Docker VM: `validate.sh` 12/12 (only the T1611 overlay test is out — rule disabled)
 - DO K8s: `validate-do-k8s.sh` 11/11
 - See [MITRE-COVERAGE.md](MITRE-COVERAGE.md) for complete technique list
 

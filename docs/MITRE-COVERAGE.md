@@ -115,8 +115,9 @@ Declared per detection via `response:` in `rules/*.yaml` (executed by `pkg/detec
 
 ## Atomic Red Team Tests
 
-Run via `sudo ./validate.sh` on the Docker VM (10 automated tests; T2/T6/T7 removed —
-see HANDOFF deferred issues). On DO K8s: `./validate-do-k8s.sh` (11 tests).
+Run via `sudo ./validate.sh` on the Docker VM (12 automated tests, incl. ingress-tool and a
+no-alert allowlist check; only the T1611 overlay test remains out — rule disabled). On DO K8s:
+`./validate-do-k8s.sh` (11 tests).
 
 ### T1059.004 / T1609 — Unix Shell (`T1059_unix_shell_execution`)
 
@@ -222,11 +223,11 @@ docker exec order-processor-auth_service /usr/local/bin/docker ps
 ## Validation Script
 
 ```bash
-sudo ./validate.sh       # 10 automated tests on Docker VM (distributed across services)
+sudo ./validate.sh       # 12 automated tests on Docker VM (distributed across services)
 ./validate-do-k8s.sh     # 11 tests on DO K8s (distributed across services)
 ```
 
-Both validated 2026-07-09 with the complete YAML rules engine (Docker VM 10/10, DO K8s 11/11).
+Both validated 2026-07-10 with the complete YAML rules engine (Docker VM 12/12, DO K8s 11/11).
 
 ---
 

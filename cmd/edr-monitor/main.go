@@ -322,9 +322,15 @@ func startEnricherWorker(
 				continue
 			}
 
-			if ev.Type == pipeline.FileEventType {
-				// Dedup file events: multi-threaded processes trigger lsm/file_open once per thread.
-				// Optimization: Use sharded locks (32 shards indexed by PID) to reduce contention on multi-core systems.
+			if ev.Type == pipeline.FileEventType &&
+				!strings.HasPrefix(processor.CString(ev.File.Comm[:]), "runc:[") {
+				// Dedup file events: multi-threaded processes open the same file once per thread.
+				// Sharded locks (32 shards indexed by PID) reduce contention on multi-core systems.
+				// runc:[…] container-init events are excluded: runc reads /etc/passwd + /etc/group
+				// for user lookup and then execs into the target binary under the SAME pid, so
+				// recording them would dedup-shadow the target's own first read of those files
+				// (T1082 would miss `cat /etc/passwd`). They are detector-whitelisted anyway
+				// (whitelisted_file_access_procs), so skipping dedup for them costs nothing.
 				key := fileDedupKey{
 					Pid:      uint32(ev.File.Pid),
 					Filename: processor.CString(ev.File.Filename[:]),
