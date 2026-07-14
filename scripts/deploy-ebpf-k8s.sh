@@ -30,7 +30,12 @@ main() {
     # Load credentials from .env if it exists
     if [[ -f "infra/.env" ]]; then
         info "Loading credentials from infra/.env..."
-        set -a; source infra/.env; set +a
+        # Exclude CLUSTER_NAME/REGION — those are deployment-target parameters
+        # (set via env var by the caller), not credentials, and shouldn't be
+        # silently clobbered by this file's placeholder values.
+        set -a
+        source <(grep -vE '^(CLUSTER_NAME|REGION)=' infra/.env)
+        set +a
         info "✓ Loaded DATABASE_URL, PUBSUB_ADDR"
         echo ""
     fi
@@ -40,7 +45,7 @@ main() {
 
     # Check kubectl is available
     command -v kubectl >/dev/null 2>&1 || error "kubectl not found"
-    info "kubectl: $(kubectl version --client --short)"
+    info "kubectl: $(kubectl version --client -o json | python3 -c 'import json,sys; print(json.load(sys.stdin)["clientVersion"]["gitVersion"])')"
 
     # Verify cluster connection
     info "Verifying K8s connection..."
