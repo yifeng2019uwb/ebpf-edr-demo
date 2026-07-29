@@ -22,7 +22,7 @@ ctx="$(kubectl config current-context 2>/dev/null)" || error "no kubectl context
 
 if [[ -z "${CLUSTER_NAME:-}" || -z "${REGION:-}" ]]; then
     if [[ "$ctx" == do-* ]]; then
-        # do-sfo3-k8s-1-36-0-do-2-sfo3-1784000241597 -> region=sfo3, name=rest
+        # do-sfo3-k8s-1-36-0-do-2-sfo3-xxxx -> region=sfo3, name=rest
         REGION="${REGION:-$(echo "$ctx" | cut -d- -f2)}"
         CLUSTER_NAME="${CLUSTER_NAME:-${ctx#do-*-}}"
     else
