@@ -145,7 +145,7 @@ func processEvent(comm string, ppid int32) processor.ProcessEvent {
 	var ev processor.ProcessEvent
 	ev.Pid = 100
 	ev.Ppid = ppid
-	copy(ev.Comm[:], comm)
+	copy(ev.ExecPath[:], comm)
 	return ev
 }
 
@@ -232,12 +232,12 @@ func TestCheckProcessRules(t *testing.T) {
 func TestResponseAction(t *testing.T) {
 	d := newTestDetector(t)
 
-	a := d.checkFileRules(fileEvent("/usr/bin/python3", "/root/.ssh/id_rsa", unresolvablePpid), verifiedContainer)
+	a := d.checkFileRules(fileEvent("python3", "/root/.ssh/id_rsa", unresolvablePpid), verifiedContainer)
 	if a == nil || a.ResponseAction != alert.ActionKillProcess {
 		t.Fatalf("ssh-dir alert ResponseAction = %v, want kill_process", a)
 	}
 
-	a = d.checkFileRules(fileEvent("/usr/bin/python3", "/etc/shadow", unresolvablePpid), verifiedContainer)
+	a = d.checkFileRules(fileEvent("python3", "/etc/shadow", unresolvablePpid), verifiedContainer)
 	if a == nil || a.ResponseAction != alert.ActionNone {
 		t.Fatalf("no-response rule ResponseAction = %v, want none", a)
 	}
@@ -261,23 +261,23 @@ func TestCheckFileRules(t *testing.T) {
 	}{
 		// Order: /root/.ssh/id_rsa matches both the dirs entry (CRITICAL) and
 		// the suffix entry (HIGH); file order (CRITICAL first) must win.
-		{"ssh dir", "/usr/bin/python3", "/root/.ssh/id_rsa", verifiedContainer, "T1552_004_private_keys", alert.Critical},
-		{"shadow", "/usr/bin/python3", "/etc/shadow", verifiedContainer, "T1003_008_os_credential_dumping", alert.Critical},
-		{"proc escape", "/usr/bin/python3", "/proc/1/environ", verifiedContainer, "T1611_escape_to_host_proc", alert.High},
+		{"ssh dir", "python3", "/root/.ssh/id_rsa", verifiedContainer, "T1552_004_private_keys", alert.Critical},
+		{"shadow", "python3", "/etc/shadow", verifiedContainer, "T1003_008_os_credential_dumping", alert.Critical},
+		{"proc escape", "python3", "/proc/1/environ", verifiedContainer, "T1611_escape_to_host_proc", alert.High},
 		// file_exact_in exception: allowed read-only /proc/1/ files.
-		{"proc escape allowed", "/usr/bin/python3", "/proc/1/stat", verifiedContainer, "", ""},
+		{"proc escape allowed", "python3", "/proc/1/stat", verifiedContainer, "", ""},
 		// Key file outside ssh dirs → suffix entry (HIGH).
-		{"key file suffix", "/usr/bin/python3", "/app/id_rsa", verifiedContainer, "T1552_004_private_keys", alert.High},
+		{"key file suffix", "python3", "/app/id_rsa", verifiedContainer, "T1552_004_private_keys", alert.High},
 		// file_contains_in exception: CA bundles.
-		{"pem CA bundle excluded", "/usr/bin/python3", "/lib/certifi/cacert.pem", verifiedContainer, "", ""},
+		{"pem CA bundle excluded", "python3", "/lib/certifi/cacert.pem", verifiedContainer, "", ""},
 		// comm_base_in exception on a file rule.
-		{"customer app excepted", "/usr/bin/safe-tool", "/root/.ssh/id_rsa", verifiedContainer, "", ""},
+		{"customer app excepted", "safe-tool", "/root/.ssh/id_rsa", verifiedContainer, "", ""},
 		// T1082 reader gate: recon tool reading /etc/passwd fires; the app's own read does not.
-		{"passwd via cat", "/bin/cat", "/etc/passwd", verifiedContainer, "T1082_system_info_discovery", alert.Medium},
-		{"passwd via app", "/usr/bin/python3", "/etc/passwd", verifiedContainer, "", ""},
+		{"passwd via cat", "cat", "/etc/passwd", verifiedContainer, "T1082_system_info_discovery", alert.Medium},
+		{"passwd via app", "python3", "/etc/passwd", verifiedContainer, "", ""},
 		// Container gating: file rules never fire off-container or for unknown state.
-		{"shadow on host", "/usr/bin/python3", "/etc/shadow", verifiedHost, "", ""},
-		{"shadow unknown state", "/usr/bin/python3", "/etc/shadow", unknownState, "", ""},
+		{"shadow on host", "python3", "/etc/shadow", verifiedHost, "", ""},
+		{"shadow unknown state", "python3", "/etc/shadow", unknownState, "", ""},
 		// runc init states are whitelisted before any rule (Go pipeline).
 		{"runc init state", "runc:[2:INIT]", "/etc/shadow", verifiedContainer, "", ""},
 	}
