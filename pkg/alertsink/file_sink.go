@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"time"
 
 	"ebpf-edr-demo/internal/alert"
 )
@@ -36,7 +35,7 @@ func NewFileSink(path string) (*FileSink, error) {
 }
 
 func (s *FileSink) Write(ctx context.Context, a alert.Alert) error {
-	now := time.Now()
+	now := eventWallTime(a.EventTime) // kernel event time, not detect time
 	ts := now.Format("2006-01-02 15:04:05.000000")
 
 	extra := ""

@@ -37,6 +37,9 @@ CREATE TABLE alerts (
     -- Response information
     response_action TEXT,                  -- What action was taken (none, blocked, killed, etc.)
 
+    -- Container context
+    cgroup TEXT,                           -- Leaf cgroup name captured in-kernel (container id source; empty for host/net)
+
     -- Database metadata
     created_at TIMESTAMPTZ DEFAULT NOW(),  -- When inserted into database
 

@@ -92,6 +92,7 @@ type alertRow struct {
 	Ppid           int32     `json:"ppid"`
 	Uid            int32     `json:"uid"`
 	Comm           string    `json:"comm"`
+	Cgroup         string    `json:"cgroup"`
 	Runtime        string    `json:"runtime"`
 	Service        string    `json:"service"`
 	Env            string    `json:"env"`
@@ -112,16 +113,16 @@ func (s *SupabaseSink) Write(ctx context.Context, a alert.Alert) error {
 		INSERT INTO alerts (
 			timestamp, level, rule, message, pid, ppid, uid, comm,
 			runtime, service, env, state, cluster, pod, namespace, node, region,
-			filename, dst_ip, dst_port, response_action
+			filename, dst_ip, dst_port, response_action, cgroup
 		) VALUES (
 			$1, $2, $3, $4, $5, $6, $7, $8,
 			$9, $10, $11, $12, $13, $14, $15, $16, $17,
-			$18, $19, $20, $21
+			$18, $19, $20, $21, $22
 		)
 	`
 
 	_, err := s.db.ExecContext(ctx, query,
-		time.Now().UTC(),
+		eventWallTime(a.EventTime), // kernel event time (monotonic→wall), not userspace detect time
 		string(a.Level),
 		a.Rule,
 		a.Message,
@@ -142,6 +143,7 @@ func (s *SupabaseSink) Write(ctx context.Context, a alert.Alert) error {
 		a.DstIP,
 		a.DstPort,
 		a.ResponseAction,
+		a.Cgroup,
 	)
 
 	if err != nil {

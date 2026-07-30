@@ -56,7 +56,7 @@ func (s *RedisSink) Write(ctx context.Context, a alert.Alert) error {
 	}
 
 	payload := map[string]interface{}{
-		"ts":              time.Now().UTC().Format(time.RFC3339),
+		"ts":              eventWallTime(a.EventTime).Format(time.RFC3339), // kernel event time, not detect time
 		"level":           string(a.Level),
 		"rule":            a.Rule,
 		"message":         a.Message,
