@@ -55,6 +55,27 @@ func getMntNsID(pid int) uint32 {
 	return getMntNsIDFromPath(path)
 }
 
+// containerIDFromCgroupLeaf extracts a container ID from a cgroup v2 leaf name
+// captured in-kernel by the exec sensor (see docs/EXECVE-EVENT-DESIGN.md).
+// Handles the systemd driver ("docker-<64hex>.scope", "cri-containerd-<64hex>.scope",
+// "crio-<64hex>.scope") and the cgroupfs driver (raw 64-hex leaf).
+// Returns "" for host/system leaves (e.g. "ssh.service", "session-1.scope").
+func containerIDFromCgroupLeaf(leaf string) string {
+	for _, prefix := range []string{"cri-containerd-", "crio-", "docker-"} {
+		if strings.HasPrefix(leaf, prefix) && strings.HasSuffix(leaf, ".scope") {
+			id := strings.TrimSuffix(strings.TrimPrefix(leaf, prefix), ".scope")
+			if len(id) == containerIDLen {
+				return id
+			}
+			return ""
+		}
+	}
+	if len(leaf) == containerIDLen && isHexID(leaf) {
+		return leaf
+	}
+	return ""
+}
+
 // normalizeServiceName strips the project/stack prefix added by Docker Compose
 // and converts underscores to dashes to match Kubernetes naming conventions.
 // e.g. "order-processor-auth_service" → "auth-service"

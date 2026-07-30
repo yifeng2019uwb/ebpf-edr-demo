@@ -115,20 +115,25 @@ func (r *DockerResolver) Resolve(event interface{}) ResolveResult {
 	var mntNsID uint32
 	var pid uint32
 	var comm string
+	var cgroupLeaf string   // kernel-captured cgroup leaf; process + file events carry it
+	var cgroupDisabled bool // net events carry no cgroup and rely on the cache — skip resolve
 
 	switch ev := event.(type) {
 	case *processor.ProcessEvent:
 		mntNsID = uint32(ev.MntNsId)
 		pid = uint32(ev.Pid)
-		comm = processor.CString(ev.Comm[:])
+		comm = processor.CString(ev.ExecPath[:])
+		cgroupLeaf = processor.CString(ev.Cgroup[:])
 	case *processor.FileEvent:
 		mntNsID = uint32(ev.MntNsId)
 		pid = uint32(ev.Pid)
 		comm = processor.CString(ev.Comm[:])
+		cgroupLeaf = processor.CString(ev.Cgroup[:])
 	case *processor.NetEvent:
 		mntNsID = uint32(ev.MntNsId)
 		pid = uint32(ev.Pid)
 		comm = processor.CString(ev.Comm[:])
+		cgroupDisabled = true
 	default:
 		return r.bareResult(StateUnknown, "")
 	}
@@ -157,25 +162,33 @@ func (r *DockerResolver) Resolve(event interface{}) ResolveResult {
 		return result
 	}
 
+	// Net events carry no cgroup leaf and never drive resolution — they piggyback on
+	// the cache warmed by exec/file events (and the startup scan), so skip the async
+	// resolver entirely (no procfs IO). Trusted-env tradeoff: an init-window miss
+	// returns pending; the next exec/file event resolves the namespace.
+	if cgroupDisabled {
+		return r.bareResult(StatePending, "")
+	}
+
 	// Dedup: Only one async worker per namespace (sync.Map LoadOrStore).
 	// If already resolving this namespace, skip (prevents goroutine explosion).
 	if _, loading := r.resolvingTasks.LoadOrStore(mntNsID, true); !loading {
 		// New namespace: spin up worker to resolve it asynchronously.
 		// Pass pid and comm so we can check whitelist without reading /proc.
-		go r.asyncResolvePID(mntNsID, pid, comm)
+		go r.asyncResolvePID(mntNsID, pid, comm, cgroupLeaf)
 	}
 
 	// Return immediately (< 1 microsecond, RAM-only path).
 	return r.bareResult(StatePending, "")
 }
 
-// asyncResolvePID resolves a container from a specific PID's cgroup (targeted, fast).
-// Reads /proc/[pid]/cgroup directly instead of scanning all of /proc/*/ns/mnt.
-// This is atomic and captures container metadata before process is completely reaped (handles docker destroy).
+// asyncResolvePID resolves a container from the event's cgroup (targeted, fast).
+// Prefers the kernel-captured cgroup leaf (process events); falls back to reading
+// /proc/[pid]/cgroup for events that don't carry it (file/net).
 // Runs with semaphore to limit concurrent disk I/O (max 10 workers).
 // Guarantees cache entry is set to prevent memory leaks and infinite pending retries.
 // comm is passed from eBPF event to avoid procfs race when checking whitelists.
-func (r *DockerResolver) asyncResolvePID(mntNsID uint32, pid uint32, comm string) {
+func (r *DockerResolver) asyncResolvePID(mntNsID uint32, pid uint32, comm string, cgroupLeaf string) {
 	log.Printf("DEBUG: asyncResolvePID called for ns=%d pid=%d comm=%s", mntNsID, pid, comm)
 	var cgroupTime, inspectTime time.Duration
 
@@ -186,9 +199,15 @@ func (r *DockerResolver) asyncResolvePID(mntNsID uint32, pid uint32, comm string
 	r.lookupSem <- struct{}{}
 	defer func() { <-r.lookupSem }()
 
-	// Read container ID from target PID's cgroup (direct, atomic, no glob scan)
+	// Container ID: the kernel-captured leaf needs no procfs read and has no
+	// exit race; the /proc fallback covers events without a cgroup field.
 	cgroupStart := time.Now()
-	containerID := containerIDFromDockerCgroup(strconv.Itoa(int(pid)))
+	var containerID string
+	if cgroupLeaf != "" {
+		containerID = containerIDFromCgroupLeaf(cgroupLeaf)
+	} else {
+		containerID = containerIDFromDockerCgroup(strconv.Itoa(int(pid)))
+	}
 	cgroupTime = time.Since(cgroupStart)
 
 	if cgroupTime > 2*time.Millisecond {
@@ -204,13 +223,17 @@ func (r *DockerResolver) asyncResolvePID(mntNsID uint32, pid uint32, comm string
 	}
 
 	if containerID == "" {
-		// PROCFS RACE PROTECTION:
+		// PROCFS RACE PROTECTION (procfs fallback only):
 		// Check if the process directory is completely missing.
 		// If it's gone, it was an ephemeral task (like a health-check curl).
 		// Drop it without updating the cache, keeping the namespace clean.
-		if _, err := os.Stat(fmt.Sprintf("/proc/%d", pid)); os.IsNotExist(err) {
-			log.Printf("DEBUG: docker resolver: skipping cache write for transient dead process %s (pid %d)", comm, pid)
-			return
+		// A kernel-captured leaf is authoritative even after the process exits,
+		// so no liveness check is needed on that path.
+		if cgroupLeaf == "" {
+			if _, err := os.Stat(fmt.Sprintf("/proc/%d", pid)); os.IsNotExist(err) {
+				log.Printf("DEBUG: docker resolver: skipping cache write for transient dead process %s (pid %d)", comm, pid)
+				return
+			}
 		}
 
 		// DECOUPLED HOST WORKLOAD FALLBACK:

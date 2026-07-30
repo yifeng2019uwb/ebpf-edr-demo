@@ -89,20 +89,25 @@ func (r *K8sResolver) Resolve(event interface{}) ResolveResult {
 	var mntNsID uint32
 	var pid uint32
 	var comm string
+	var cgroupLeaf string   // kernel-captured cgroup leaf; process + file events carry it
+	var cgroupDisabled bool // net events carry no cgroup and rely on the cache — skip resolve
 
 	switch ev := event.(type) {
 	case *processor.ProcessEvent:
 		mntNsID = uint32(ev.MntNsId)
 		pid = uint32(ev.Pid)
-		comm = processor.CString(ev.Comm[:])
+		comm = processor.CString(ev.ExecPath[:])
+		cgroupLeaf = processor.CString(ev.Cgroup[:])
 	case *processor.FileEvent:
 		mntNsID = uint32(ev.MntNsId)
 		pid = uint32(ev.Pid)
 		comm = processor.CString(ev.Comm[:])
+		cgroupLeaf = processor.CString(ev.Cgroup[:])
 	case *processor.NetEvent:
 		mntNsID = uint32(ev.MntNsId)
 		pid = uint32(ev.Pid)
 		comm = processor.CString(ev.Comm[:])
+		cgroupDisabled = true
 	default:
 		return r.bareResult(StateUnknown)
 	}
@@ -127,13 +132,21 @@ func (r *K8sResolver) Resolve(event interface{}) ResolveResult {
 		return result
 	}
 
+	// Net events carry no cgroup leaf and never drive resolution — they piggyback on
+	// the cache warmed by exec/file events (and the startup scan), so skip the async
+	// resolver entirely (no procfs IO). Trusted-env tradeoff: an init-window miss
+	// returns pending; the next exec/file event resolves the namespace.
+	if cgroupDisabled {
+		return ResolveResult{State: StatePending}
+	}
+
 	// Deduplicate: if this namespace is already being looked up, don't spawn another worker
-	if _, loading := r.resolvingTasks.LoadOrStore(mntNsID, true); loading {
+	if _, loaded := r.resolvingTasks.LoadOrStore(mntNsID, true); loaded {
 		return ResolveResult{State: StatePending}
 	}
 
 	// Offload heavy cgroup parsing to async worker pool
-	go r.asyncResolveNamespace(mntNsID, pid, comm)
+	go r.asyncResolveNamespace(mntNsID, pid, comm, cgroupLeaf)
 
 	// Return instantly (<1 microsecond execution path)
 	return ResolveResult{State: StatePending}
@@ -223,27 +236,37 @@ func (r *K8sResolver) buildInitialCache() map[uint32]ResolveResult {
 	return m
 }
 
-func (r *K8sResolver) asyncResolveNamespace(mntNsID uint32, pid uint32, comm string) {
+func (r *K8sResolver) asyncResolveNamespace(mntNsID uint32, pid uint32, comm string, cgroupLeaf string) {
 	defer r.resolvingTasks.Delete(mntNsID)
 
 	// Acquire slot from semaphore pool (max 10 concurrent disk scans)
 	r.lookupSem <- struct{}{}
 	defer func() { <-r.lookupSem }()
 
-	// 1. Targeted cgroup read for the event's PID (not global scan)
-	containerID := containerIDFromK8sCgroup(strconv.Itoa(int(pid)))
+	// 1. Container ID: the kernel-captured leaf needs no procfs read and has no
+	// exit race; the /proc fallback covers events without a cgroup field.
+	var containerID string
+	if cgroupLeaf != "" {
+		containerID = containerIDFromCgroupLeaf(cgroupLeaf)
+	} else {
+		containerID = containerIDFromK8sCgroup(strconv.Itoa(int(pid)))
+	}
 
-	// Fallback: cgroup had no kubepods container ID.
+	// Fallback: cgroup had no container ID.
 	if containerID == "" {
-		// Do NOT cache a dead transient as host. If the process already exited, its
-		// /proc entry is gone, so containerIDFromK8sCgroup returns "" whether it was a
-		// container or a host process — and the K8s cache has NO eviction, so a wrong
-		// "host" entry is permanent and poisons the whole namespace, silently disabling
-		// detection for that container. Mirror the Docker resolver: skip caching for
-		// dead transients; a later live process in the same namespace resolves it
-		// correctly. (This is what caused all container detection to go dark on K8s.)
-		if _, err := os.Stat("/proc/" + strconv.Itoa(int(pid))); os.IsNotExist(err) {
-			return
+		// Do NOT cache a dead transient as host (procfs fallback only). If the process
+		// already exited, its /proc entry is gone, so containerIDFromK8sCgroup returns ""
+		// whether it was a container or a host process — and the K8s cache has NO
+		// eviction, so a wrong "host" entry is permanent and poisons the whole namespace,
+		// silently disabling detection for that container. Mirror the Docker resolver:
+		// skip caching for dead transients; a later live process in the same namespace
+		// resolves it correctly. (This is what caused all container detection to go dark
+		// on K8s.) A kernel-captured leaf is authoritative even after exit, so that path
+		// needs no liveness check.
+		if cgroupLeaf == "" {
+			if _, err := os.Stat("/proc/" + strconv.Itoa(int(pid))); os.IsNotExist(err) {
+				return
+			}
 		}
 		r.mu.Lock()
 		r.cache[mntNsID] = ResolveResult{
@@ -386,16 +409,12 @@ func crictlContainerMap(node, region, cluster, env string) map[string]ResolveRes
 			continue
 		}
 
-		// The K8s container name (io.kubernetes.container.name) is already the clean
-		// service name, e.g. "auth-service". Do NOT run normalizeServiceName here — that
-		// is a Docker-Compose stack-prefix stripper and it wrongly chops "auth-service"
-		// → "service" (it splits on the last '-'), mislabeling every hyphenated service.
-		service := containerName
-
+		// The K8s container name (io.kubernetes.container.name) is the clean
+		// service name, e.g. "auth-service".
 		m[c.ID] = ResolveResult{
 			Identity: WorkloadIdentity{
 				Runtime: RuntimeK8s,
-				Service: service,
+				Service: containerName,
 				Env:     env,
 			},
 			Meta: WorkloadMeta{

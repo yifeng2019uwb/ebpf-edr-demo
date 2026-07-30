@@ -60,6 +60,10 @@ type WorkloadIdentity struct {
 type WorkloadMeta struct {
 	Container string
 	Pod       string
+	// Namespace is the Kubernetes namespace (e.g. kube-system, default); empty for
+	// Docker workloads. This is NOT the Linux mount namespace (mnt_ns_id) used to
+	// resolve container identity — the alert/DB field name stays "namespace", but
+	// the dashboard labels it "K8s Namespace" to avoid that confusion.
 	Namespace string
 	Node      string
 	Region    string

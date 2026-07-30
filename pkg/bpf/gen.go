@@ -5,8 +5,8 @@
 // NOTE: go generate requires clang, llvm, and libbpf-dev installed on a Linux host.
 // The generated *_bpf*.go files must be committed so CI can build without clang.
 
-//go:generate go tool bpf2go -tags linux -cflags "-I../../kernel -I/usr/include/bpf" process ../../kernel/execsnoop.bpf.c
-//go:generate go tool bpf2go -tags linux -cflags "-I../../kernel -I/usr/include/bpf" file ../../kernel/lsm-file.bpf.c
-//go:generate go tool bpf2go -tags linux -cflags "-I../../kernel -I/usr/include/bpf" lsm ../../kernel/lsm-connect.bpf.c
+//go:generate go tool bpf2go -target amd64 -cflags "-I../../kernel -I/usr/include/bpf" process ../../kernel/execsnoop.bpf.c
+//go:generate go tool bpf2go -target amd64 -cflags "-I../../kernel -I/usr/include/bpf" file ../../kernel/lsm-file.bpf.c
+//go:generate go tool bpf2go -target amd64 -cflags "-I../../kernel -I/usr/include/bpf" lsm ../../kernel/lsm-connect.bpf.c
 
 package bpf

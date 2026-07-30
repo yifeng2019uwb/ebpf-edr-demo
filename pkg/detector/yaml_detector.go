@@ -467,7 +467,7 @@ func (d *YAMLDetector) isGloballyExcepted(ev pipeline.EnrichedEvent) bool {
 
 	switch ev.Type {
 	case pipeline.ProcessEventType:
-		comm = processor.CString(ev.Process.Comm[:])
+		comm = processor.CString(ev.Process.ExecPath[:])
 		ppid = ev.Process.Ppid
 	case pipeline.FileEventType:
 		comm = processor.CString(ev.File.Comm[:])
@@ -577,7 +577,7 @@ func (d *YAMLDetector) isGloballyExcepted(ev pipeline.EnrichedEvent) bool {
 // ── Process rules ─────────────────────────────────────────────────────────────
 
 func (d *YAMLDetector) checkProcessRules(event processor.ProcessEvent, res workload.ResolveResult) *alert.Alert {
-	comm := processor.CString(event.Comm[:])
+	comm := processor.CString(event.ExecPath[:])
 
 	// System services spawned by init (ppid=1) are trusted infrastructure
 	if event.Ppid == 1 {
@@ -739,6 +739,8 @@ func newFileAlert(event processor.FileEvent, res workload.ResolveResult, comm, f
 		Level: level, Rule: rule, Message: msg,
 		Pid: event.Pid, Ppid: event.Ppid, Uid: int32(event.Uid),
 		Comm: comm, Workload: res, Filename: filename,
+		Cgroup: processor.CString(event.Cgroup[:]), Fmode: event.Fmode, Ret: event.Ret,
+		EventTime:      event.EventTime,
 		ResponseAction: alert.ActionNone,
 	}
 }
@@ -748,6 +750,7 @@ func newProcessAlert(event processor.ProcessEvent, res workload.ResolveResult, c
 		Level: level, Rule: rule, Message: msg,
 		Pid: event.Pid, Ppid: event.Ppid, Uid: event.Uid,
 		Comm: comm, Workload: res,
+		Cgroup: processor.CString(event.Cgroup[:]), EventTime: event.EventTime,
 		ResponseAction: alert.ActionNone,
 	}
 }
@@ -757,6 +760,7 @@ func newNetAlert(event processor.NetEvent, res workload.ResolveResult, comm, dst
 		Level: level, Rule: rule, Message: msg,
 		Pid: event.Pid, Ppid: event.Ppid, Uid: int32(event.Uid),
 		Comm: comm, Workload: res, DstIP: dstIP, DstPort: dstPort,
+		EventTime:      event.EventTime,
 		ResponseAction: alert.ActionNone,
 	}
 }

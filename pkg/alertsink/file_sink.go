@@ -42,8 +42,15 @@ func (s *FileSink) Write(ctx context.Context, a alert.Alert) error {
 	extra := ""
 	if a.Filename != "" {
 		extra = " filename=" + a.Filename
+		extra += fmt.Sprintf(" fmode=0x%x ret=%d", a.Fmode, a.Ret)
 	} else if a.DstIP != "" {
 		extra = fmt.Sprintf(" dst=%s:%d", a.DstIP, a.DstPort)
+	}
+	if a.Cgroup != "" {
+		extra += " cgroup=" + a.Cgroup
+	}
+	if a.EventTime != 0 {
+		extra += fmt.Sprintf(" event_time=%d", a.EventTime)
 	}
 	if a.ResponseAction != alert.ActionNone {
 		extra += " action=" + string(a.ResponseAction)
@@ -54,7 +61,7 @@ func (s *FileSink) Write(ctx context.Context, a alert.Alert) error {
 	state := a.Workload.State
 
 	line := fmt.Sprintf(
-		"[%s] ALERT level=%s rule=%s runtime=%s service=%s env=%s state=%s pod=%s namespace=%s pid=%d ppid=%d uid=%d comm=%s%s msg=%s\n",
+		"[%s] ALERT level=%s rule=%s runtime=%s service=%s env=%s state=%s pod=%s k8s_namespace=%s pid=%d ppid=%d uid=%d comm=%s%s msg=%s\n",
 		ts,
 		a.Level,
 		a.Rule,

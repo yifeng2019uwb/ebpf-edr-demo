@@ -1,13 +1,12 @@
 // lsm/socket_connect sensor — captures outbound IPv4 connection attempts.
 // Emits net_event to ring buffer for all non-loopback connects.
 // Policy decisions (private IP filtering, allowlists, block_ip response) are made in Go.
-// SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 
 #include "vmlinux.h"
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_core_read.h>
 #include <bpf/bpf_tracing.h>
-#include "lsm-connect.h"
+#include "event.h"
 
 char LICENSE[] SEC("license") = "GPL";
 
@@ -46,7 +45,8 @@ int BPF_PROG(handle_connect, struct socket *sock, struct sockaddr *address, int 
 	u64 id   = bpf_get_current_pid_tgid();
 	u32 tgid = id >> 32;
 
-	e->mnt_ns_id = BPF_CORE_READ(task, nsproxy, mnt_ns, ns.inum);
+	e->mnt_ns_id  = BPF_CORE_READ(task, nsproxy, mnt_ns, ns.inum);
+	e->event_time = bpf_ktime_get_ns();
 	e->dst_ip    = dst_ip;
 	e->dst_port  = addr->sin_port;
 	e->pad1      = 0;

@@ -1,15 +1,14 @@
 // Package processor defines the event structs that map 1:1 onto the C structs
 // produced by each eBPF kernel program, plus byte-conversion helpers.
 //
-// Field order, types, and padding must EXACTLY match the corresponding .h header:
+// Field order, types, and padding must EXACTLY match kernel/event.h:
 //
-//	ProcessEvent  ↔  execsnoop.h   struct event
-//	ExitEvent     ↔  exitsnoop.h   struct event  (kept for reference; not loaded at runtime)
-//	FileEvent     ↔  opensnoop.h   struct file_event
-//	NetEvent      ↔  lsm-connect.h struct net_event
+//	ProcessEvent  ↔  struct exec_event
+//	FileEvent     ↔  struct file_event
+//	NetEvent      ↔  struct net_event
 //
-// Go maps raw kernel bytes directly onto these structs via binary.Read — there is
-// no serialization layer, so the layout must be byte-perfect.
+// Go maps raw kernel bytes directly onto these structs — there is no
+// serialization layer, so the layout must be byte-perfect.
 package processor
 
 import (
@@ -21,52 +20,47 @@ import (
 
 // ── Event structs ─────────────────────────────────────────────────────────────
 
-// ProcessEvent matches execsnoop.h struct event.
-// sizeof = 4+4+4+4+128 = 144 bytes, no implicit padding.
+// ProcessEvent matches event.h struct exec_event.
+// sizeof = 4+4+4+4+8+256+128 = 408 bytes, no implicit padding.
 type ProcessEvent struct {
-	Pid     int32                 // process ID (from kernel tgid)
-	Ppid    int32                 // parent process ID
-	Uid     int32                 // user ID (0=root)
-	MntNsId uint32                // mount namespace ID — identifies container
-	Comm    [pkg.TaskCommLen]byte // full executable path (e.g. /usr/bin/bash)
+	Pid       int32                 // offset 0   — process ID (from kernel tgid)
+	Ppid      int32                 // offset 4   — parent process ID
+	Uid       int32                 // offset 8   — user ID (0=root)
+	MntNsId   uint32                // offset 12  — mount namespace ID — identifies container
+	EventTime uint64                // offset 16  — bpf_ktime_get_ns() (monotonic; convert via boot offset)
+	ExecPath  [pkg.ExecPathLen]byte // offset 24  — path as invoked (execve arg 0)
+	Cgroup    [pkg.CgroupLen]byte   // offset 280 — leaf cgroup name
 }
 
-// FileEvent matches opensnoop.h struct file_event.
-// sizeof = 8+4+4+4+4+128+256 = 408 bytes, no implicit padding.
+// FileEvent matches event.h struct file_event.
+// sizeof = 8+8+4+4+4+4+4+4+16+256+128 = 440 bytes, no implicit padding.
 type FileEvent struct {
-	MntNsId  uint64                   // offset 0   — mount namespace ID
-	Pid      int32                    // offset 8   — process ID
-	Ppid     int32                    // offset 12  — parent process ID
-	Uid      uint32                   // offset 16  — user ID
-	Pad      uint32                   // offset 20  — explicit padding (see opensnoop.h)
-	Comm     [pkg.TaskCommLen]byte    // offset 24  — process name
-	Filename [pkg.MaxFilenameLen]byte // offset 152 — file path being opened
+	MntNsId   uint64                   // offset 0   — mount namespace ID
+	EventTime uint64                   // offset 8   — bpf_ktime_get_ns() (monotonic; convert via boot offset)
+	Pid       int32                    // offset 16  — process ID
+	Ppid      int32                    // offset 20  — parent process ID
+	Uid       uint32                   // offset 24  — user ID
+	Fmode     uint32                   // offset 28  — FMODE_READ(0x1)/FMODE_WRITE(0x2); 0 on denial path
+	Ret       int32                    // offset 32  — 0 = success (lsm hook); -EACCES/-EPERM = denied (kprobe)
+	Pad       uint32                   // offset 36  — explicit padding
+	Comm      [pkg.TaskCommLen]byte    // offset 40  — process name
+	Filename  [pkg.MaxFilenameLen]byte // offset 56  — canonical path (success) or raw user string (denial)
+	Cgroup    [pkg.CgroupLen]byte      // offset 312 — leaf cgroup name
 }
 
-// ExitEvent matches exitsnoop.h struct event.
-// Kept for reference — exitsnoop is not loaded at runtime (rule was dropped).
-// sizeof = 8+4+4+4+4+128 = 152 bytes, no implicit padding.
-type ExitEvent struct {
-	DurationNs uint64                // offset 0  — duration in nanoseconds
-	Pid        uint32                // offset 8
-	Ppid       uint32                // offset 12
-	ExitCode   uint32                // offset 16
-	Pad        uint32                // offset 20 — explicit pad matches C struct
-	Comm       [pkg.TaskCommLen]byte // offset 24
-}
-
-// NetEvent matches lsm-connect.h struct net_event.
-// sizeof = 8+4+2+2+4+4+4+4+128 = 160 bytes, no implicit padding.
+// NetEvent matches event.h struct net_event.
+// sizeof = 8+8+4+2+2+4+4+4+4+16 = 56 bytes, no implicit padding.
 type NetEvent struct {
-	MntNsId uint64                // offset 0  — mount namespace ID
-	DstIp   uint32                // offset 8  — destination IP (network byte order)
-	DstPort uint16                // offset 12 — destination port (network byte order)
-	Pad1    uint16                // offset 14 — explicit padding
-	Pid     int32                 // offset 16
-	Ppid    int32                 // offset 20
-	Uid     uint32                // offset 24
-	Pad2    uint32                // offset 28 — explicit padding
-	Comm    [pkg.TaskCommLen]byte // offset 32
+	MntNsId   uint64                // offset 0  — mount namespace ID
+	EventTime uint64                // offset 8  — bpf_ktime_get_ns() (monotonic; convert via boot offset)
+	DstIp     uint32                // offset 16 — destination IP (network byte order)
+	DstPort   uint16                // offset 20 — destination port (network byte order)
+	Pad1      uint16                // offset 22 — explicit padding
+	Pid       int32                 // offset 24
+	Ppid      int32                 // offset 28
+	Uid       uint32                // offset 32
+	Pad2      uint32                // offset 36 — explicit padding
+	Comm      [pkg.TaskCommLen]byte // offset 40
 }
 
 // ── Converters ────────────────────────────────────────────────────────────────

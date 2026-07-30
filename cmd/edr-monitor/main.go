@@ -309,7 +309,7 @@ func startEnricherWorker(
 			// their parent identity later.
 			if raw.Source == pipeline.SourceExecsnoop {
 				pe := (*processor.ProcessEvent)(unsafe.Pointer(&raw.Data[0]))
-				ancestry.Record(uint32(pe.Pid), uint32(pe.Ppid), processor.CString(pe.Comm[:]))
+				ancestry.Record(uint32(pe.Pid), uint32(pe.Ppid), processor.CString(pe.ExecPath[:]))
 			}
 
 			// Layer 1: Fast-path filtering (before enrichment/resolver)

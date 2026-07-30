@@ -44,6 +44,15 @@ type Alert struct {
 	DstIP    string
 	DstPort  uint16
 
+	// sensor fields surfaced for validation (not consumed by detection logic):
+	// Cgroup    — leaf cgroup name (exec + file events)
+	// EventTime — bpf_ktime_get_ns() at exec (process events)
+	// Fmode/Ret — file open mode and outcome (file events; Ret<0 = denied open)
+	Cgroup    string
+	EventTime uint64
+	Fmode     uint32
+	Ret       int32
+
 	ResponseAction Action // requested by the fired rule (rules/*.yaml response:), replaced with the action actually executed before the alert is sent; ActionNone = no action
 }
 
