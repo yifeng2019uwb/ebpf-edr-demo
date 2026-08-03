@@ -4,7 +4,6 @@ package main
 
 import (
 	"errors"
-	"flag"
 	"log"
 	"os"
 	"os/signal"
@@ -44,7 +43,7 @@ const (
 	fileDedupWindow = time.Second
 
 	cacheCleanUpWorkerInterval     = 5 * time.Minute
-	debugResolveDetecCheckInterval = 100 * time.Microsecond
+	debugResolveDetecCheckInterval = 200 * time.Microsecond
 
 	// Graceful shutdown timings
 	shutdownWaitInterval = 100 * time.Millisecond // time for goroutines to finish between channel closes
@@ -84,14 +83,6 @@ type pendingEntry struct {
 }
 
 func main() {
-	// --runtime selects the workload resolver.
-	// "k8s"    → K8sResolver (uses crictl, works with Docker/containerd/cri-o in K8s)
-	// "docker" → DockerResolver (Docker daemon, standalone VMs or Compose)
-	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
-
-	runtime := flag.String("runtime", defaultRuntime, validRuntimes)
-	flag.Parse()
-
 	// Load configuration from environment
 	cfg := config.Load()
 
@@ -105,10 +96,21 @@ func main() {
 	}
 	defer loader.Close()
 
-	// Create runtime-specific resolver
-	rt := workload.RuntimeDocker
-	if *runtime == string(workload.RuntimeK8s) {
-		rt = workload.RuntimeK8s
+	// Create the runtime-agnostic resolver engine (multi-runtime: docker + k8s/cri,
+	// clients created lazily on first sight of a runtime's cgroup).
+	env := rules.DetectEnvironment()
+	node, err := os.Hostname()
+	if err != nil {
+		log.Printf("workload: os.Hostname() failed: %v — node field will be empty in alerts", err)
+	}
+	meta := workload.WorkloadMeta{
+		Node:    node,
+		Region:  os.Getenv(config.EnvRegion),
+		Cluster: os.Getenv(config.EnvClusterName),
+	}
+	engine := workload.NewEngine(string(env), meta)
+	if err := engine.Start(); err != nil {
+		log.Fatalf("starting resolver engine: %v", err)
 	}
 
 	rulesDB, err := rules.LoadRulesForEnvironment(rulesFilePath)
@@ -123,13 +125,6 @@ func main() {
 		log.Printf("  PID %d: %s", pid, comm)
 	}
 
-	resolver := workload.NewResolver(rt)
-
-	if err := resolver.Start(); err != nil {
-		log.Fatalf("starting resolver: %v", err)
-	}
-	log.Printf("INFO: Resolver started with runtime=%s", rt)
-
 	rawCh := make(chan pipeline.RawEvent, rawChCap)
 	enrichedCh := make(chan pipeline.EnrichedEvent, enrichedChCap)
 	alertCh := make(chan alert.Alert, alertChCap)
@@ -143,7 +138,9 @@ func main() {
 	var pendingMu sync.Mutex
 	pendingBuf := make(map[uint32][]pendingEntry)
 
-	det := detector.NewYAMLDetectorWithRuntime(rulesDB, rt)
+	// d.runtime is currently unused inside the detector (no rule reads it); with the
+	// multi-runtime engine there is no single runtime to report, so pass Unknown.
+	det := detector.NewYAMLDetectorWithRuntime(rulesDB, workload.RuntimeUnknown)
 	det.SetInfrastructurePIDs(safeInfraPIDs) // Pass Layer 1 infrastructure PIDs for Layer 2 pre-filter
 	responder := detector.NewResponder(nil)
 
@@ -168,7 +165,7 @@ func main() {
 	startEnricherWorker(
 		rawCh,
 		enrichedCh,
-		resolver,
+		engine,
 		ancestry,
 		safeInfraPIDs,
 		&pendingMu,
@@ -179,7 +176,7 @@ func main() {
 
 	// 4. Retry Pending Events
 	startPendingRetryWorker(
-		resolver,
+		engine,
 		enrichedCh,
 		&pendingMu,
 		pendingBuf,
@@ -188,7 +185,7 @@ func main() {
 	)
 
 	// 5. Cache Cleanup
-	startCacheCleanupWorker(ancestry)
+	startCacheCleanupWorker(ancestry, engine)
 
 	// 6 Detector & Responder Routing
 	startDetectorAndResponder(enrichedCh, alertCh, det, responder, &alertDropped)
@@ -483,14 +480,16 @@ func startPendingRetryWorker(
 }
 
 // startCacheCleanupWorker runs a background routine that periodically evicts
-// dead or expired entries from the process ancestry cache.
-func startCacheCleanupWorker(ancestry *detector.AncestryCache) {
+// dead or expired entries from the process ancestry cache and the resolver's
+// workload cache (destroyed containers whose namespace no longer has a live process).
+func startCacheCleanupWorker(ancestry *detector.AncestryCache, engine *workload.Engine) {
 	go func() {
 		ticker := time.NewTicker(cacheCleanUpWorkerInterval)
 		defer ticker.Stop()
 
 		for range ticker.C {
 			ancestry.Sweep()
+			engine.EvictStale()
 		}
 	}()
 }
@@ -504,8 +503,14 @@ func startDetectorAndResponder(
 	responder *detector.Responder,
 	alertDropped *atomic.Int64,
 ) {
+	lastLogged := make(map[uint32]string) // debug: log a namespace's workload only when it changes
 	go func() {
 		for ev := range enrichedCh {
+			ns := mntNsIDOf(ev)
+			key := string(ev.Workload.State) + "|" + string(ev.Workload.Identity.Runtime) + "|" + ev.Workload.Identity.Service
+			if lastLogged[ns] != key {
+				lastLogged[ns] = key
+			}
 			detectStart := time.Now()
 			a := det.Detect(ev)
 			detectTime := time.Since(detectStart)
@@ -516,6 +521,8 @@ func startDetectorAndResponder(
 			if a == nil {
 				continue
 			}
+			log.Printf("DEBUG: Detect FIRED rule=%s level=%s service=%s comm=%s filename=%s dstIP=%s responseAction=%s",
+				a.Rule, a.Level, a.Workload.Identity.Service, a.Comm, a.Filename, a.DstIP, a.ResponseAction)
 
 			// Execute response BEFORE sending alert to avoid data race:
 			// If we send alert first, then modify a.ResponseAction, handler goroutine

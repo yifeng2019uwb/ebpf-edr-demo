@@ -59,14 +59,22 @@ infra-refresh:
 	cd infra && pulumi refresh --yes && pulumi up --yes
 
 ## docker-push-ghcr — build binary + image and push to ghcr.io (run on Linux VM — needs Linux for BPF headers)
+## Requires: GHCR_TOKEN env var (GitHub PAT, classic, write:packages+read:packages scope)
 docker-push-ghcr: build
+	@[ -n "$$GHCR_TOKEN" ] || { echo "GHCR_TOKEN not set — export a GitHub PAT with write:packages scope"; exit 1; }
+	echo "$$GHCR_TOKEN" | docker login ghcr.io -u yifeng2019uwb --password-stdin
 	docker build -t ghcr.io/yifeng2019uwb/ebpf-edr:latest .
 	docker push ghcr.io/yifeng2019uwb/ebpf-edr:latest
+	docker logout ghcr.io
 
 ## docker-push-ghcr-prebuilt — push image using committed binary (safe to run on Mac)
+## Requires: GHCR_TOKEN env var (GitHub PAT, classic, write:packages+read:packages scope)
 docker-push-ghcr-prebuilt:
+	@[ -n "$$GHCR_TOKEN" ] || { echo "GHCR_TOKEN not set — export a GitHub PAT with write:packages scope"; exit 1; }
+	echo "$$GHCR_TOKEN" | docker login ghcr.io -u yifeng2019uwb --password-stdin
 	docker build -t ghcr.io/yifeng2019uwb/ebpf-edr:latest .
 	docker push ghcr.io/yifeng2019uwb/ebpf-edr:latest
+	docker logout ghcr.io
 
 ## github-release — build linux/amd64 binary and publish as a GitHub release
 ## Usage: make github-release VERSION=v0.1.0

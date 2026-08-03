@@ -57,16 +57,29 @@ pass() { echo -e "${GREEN}[PASS]${NC} $*"; ((PASS++)) || true; }
 fail() { echo -e "${RED}[FAIL]${NC} $*"; ((FAIL++)) || true; }
 skip() { echo -e "${YELLOW}[SKIP]${NC} $*"; ((SKIP++)) || true; }
 
-# Wait for alert matching pattern in log (poll every 2s, timeout 30s).
-# Scans only the TAIL — the alert fires within ~2s of the attack, so it's at the very end;
-# tailing also avoids matching stale alerts from earlier in a long-running log.
+# alert.log is append-only and never cleared between runs. A fixed-size tail (the
+# previous approach) can match STALE alerts from an earlier run if this run produces
+# fewer lines than the tail window before a given check — a false PASS with zero new
+# alerts. Every line starts with "[YYYY-MM-DD HH:MM:SS.ffffff]" in UTC (matches the
+# agent's eventWallTime); TEST_START_TS is captured once, right before attacks begin,
+# and every check below only considers lines at or after that moment.
+TEST_START_TS=$(date -u +"%Y-%m-%d %H:%M:%S")
+
+# Print only alert.log lines whose bracketed timestamp is >= TEST_START_TS.
+recent_alerts() {
+    awk -v since="$TEST_START_TS" '
+        { ts = substr($0, 2, length(since)); if (ts >= since) print }
+    ' "${LOG}" 2>/dev/null
+}
+
+# Wait for alert matching pattern in log (poll every 2s, timeout 30s), scoped to this run.
 expect_alert() {
     local pattern=$1
     local timeout=${2:-30}
 
     local elapsed=0
     while [[ $elapsed -lt $timeout ]]; do
-        if tail -n 30 "${LOG}" 2>/dev/null | grep -qE "$pattern"; then
+        if recent_alerts | grep -qE "$pattern"; then
             return 0
         fi
         sleep 2
@@ -75,10 +88,10 @@ expect_alert() {
     return 1
 }
 
-# Count matching alerts in log
+# Count matching alerts in log, scoped to this run
 count_alerts() {
     local pattern=$1
-    tail -20 "${LOG}" 2>/dev/null | grep -c "$pattern" || echo 0
+    recent_alerts | grep -c "$pattern" || echo 0
 }
 
 # Assert NO alert matching pattern appears within the window (inverse of expect_alert).
@@ -88,7 +101,7 @@ expect_no_alert() {
     local pattern=$1
     local window=${2:-12}
     sleep "$window"
-    if tail -n 30 "${LOG}" 2>/dev/null | grep -qE "$pattern"; then
+    if recent_alerts | grep -qE "$pattern"; then
         return 1
     fi
     return 0

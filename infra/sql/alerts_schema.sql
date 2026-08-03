@@ -37,11 +37,13 @@ CREATE TABLE alerts (
     -- Response information
     response_action TEXT,                  -- What action was taken (none, blocked, killed, etc.)
 
-    -- Container context
-    cgroup TEXT,                           -- Leaf cgroup name captured in-kernel (container id source; empty for host/net)
-
     -- Database metadata
     created_at TIMESTAMPTZ DEFAULT NOW(),  -- When inserted into database
+
+    -- Container context
+    -- Placed last to match `ALTER TABLE ... ADD COLUMN cgroup` on existing tables
+    -- (Postgres appends new columns), so a fresh CREATE and a migrated table match.
+    cgroup TEXT,                           -- Leaf cgroup name captured in-kernel (container id source; empty for host/net)
 
     -- For efficient queries
     CONSTRAINT level_check CHECK (level IN ('CRITICAL', 'HIGH', 'MEDIUM', 'LOW'))

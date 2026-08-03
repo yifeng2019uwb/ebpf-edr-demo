@@ -1,6 +1,6 @@
 # Project Handoff — Current Status
 
-**Last Updated:** 2026-07-14
+**Last Updated:** 2026-08-03
 **Status:** ✅ Detection + response working and validated on DO K8s
 (`./validate-do-k8s.sh` 11/11) and Docker VM (`validate.sh` 12/12). Alerts + LOW
 telemetry persist to Supabase from both environments. EDR DaemonSet is deployed and running
@@ -9,6 +9,11 @@ issues observed over a multi-hour order-processor load test (see Plan item 1 bel
 `localstack`-killing crisis described in **Active design** did not reproduce here (order-
 processor now runs `amazon/dynamodb-local`, not LocalStack — see `docs/PERFORMANCE.md`
 Attempt 2). Trusted-app whitelist design itself is still **not built**.
+
+**Resolver rewritten (2026-08-03).** `DockerResolver`/`K8sResolver` (one per `--runtime` flag)
+replaced with a single runtime-agnostic `Engine` (`pkg/workload/resolver_engine.go`). Root-
+caused and fixed a real bug where containers could silently lose detection forever (cached as
+`Unknown`) — see **Resolver engine rewrite** below for the full record.
 
 **Next:** trusted-application whitelist redesign (see **Active design** below) is the next
 real feature — not urgently blocking right now, but still not built. (One EDR pod OOMKilled
@@ -77,6 +82,99 @@ from GitHub main — keep the two scripts' ConfigMap keys in sync.
 
 **Hard constraints (also in CLAUDE.md):** never run git; never edit `.bpf.c`; never edit
 `infra/.env` (secrets — user edits on the VM); no TODO / future-commitment comments.
+
+---
+
+## Resolver engine rewrite — multi-runtime Engine (2026-08-03)
+
+**Replaced `DockerResolver`/`K8sResolver`** (one resolver per `--runtime` flag) **with a single
+runtime-agnostic `Engine`** (`pkg/workload/resolver_engine.go`), dispatching to pluggable
+`RuntimeClient`s (`DockerClient`, `CriClient`) keyed by cgroup leaf prefix
+(`docker-`/`cri-containerd-`/`crio-`). A node running both Docker and K8s containers resolves
+correctly without picking a runtime up front. Old resolver files, their tests, and the
+`--runtime` flag are deleted; `containerIDLen`/`isHexID` moved into `common_resolver.go`.
+
+**Root cause found and fixed: containers could resolve to `Unknown` permanently, silently
+disabling detection for their whole life.** The engine captures a process's cgroup leaf
+in-kernel at exec time (`event.h`'s `cgroup` field) instead of re-reading `/proc/<pid>/cgroup`
+later. That capture can race an in-flight cgroup migration: a `docker exec`/health-check
+process joins the target container's mount namespace synchronously (`setns`), but under the
+systemd cgroup driver its cgroup migration is a separate, async D-Bus call. If the sensor's
+`execve` fires in that gap, it sees the container's correct, distinct namespace paired with
+**dockerd's own**, not-yet-migrated cgroup — and caching that first read permanently locked in
+`Unknown`. Observed on a 9-container docker-compose stack: whichever container's first-ever
+captured event happened to land in that gap lost detection; only whichever container "won"
+the race resolved correctly.
+
+**Fix — `prewarmFromProc()` at `Engine.Start()`.** Ports the previous
+`DockerResolver.buildCache`/`K8sResolver.buildInitialCache` approach (scan `/proc` at startup,
+resolve every already-running container before any event arrives) onto the new unified
+cgroup-leaf parser. An already-running container's cgroup has long since settled — no exec is
+in flight, so there's no race to hit. Prewarm never caches `Unknown`; anything ambiguous during
+the scan is left for the event-driven path. **Validated:** all 9 order-processor containers
+resolve correctly to their real service name immediately at agent start; full `validate.sh`
+12/12 alert flow (including `kill_process`/`block_ip` actions) confirmed working end-to-end.
+
+**Also added — `EvictStale()`, periodic cache eviction.** A `/proc`-based sweep (same scan as
+prewarm) removes cache entries whose namespace no longer has a live process — i.e. the
+container was destroyed. Runs every `cacheCleanUpWorkerInterval` (5 min) alongside the ancestry
+sweep. **Neither previous resolver actually did this in practice** — `DockerResolver`'s
+eviction code existed but its only caller (`listenDockerEvents`) was commented out;
+`K8sResolver` had no eviction at all. Closes the class of bug where a destroyed container's
+identity stuck around forever and could be handed to a later, unrelated namespace that reused
+the same ID.
+
+**Audit against the old (deleted) resolvers found and fixed 3 more gaps (2026-08-03).** Pulled
+`docker_resolver.go`/`k8s_resolver.go` from git history for a line-by-line behavior-preservation
+check against the new `Engine`:
+1. `shortIDResult` (raw-hex-leaf fallback) wasn't populating `Meta.Container`/`Meta.Pod` — fixed
+   to set both to the short ID, matching old-resolver behavior.
+2. No self-seeding of the agent's own mount namespace as `RuntimeHost` — without it, the agent's
+   own process could resolve as `Unknown` instead of `Host` (a K8s false-positive risk the old
+   `K8sResolver` avoided). Added `seedSelfAsHost()`, called from `Start()`.
+3. **Cgroup v2 startup guard** — designed in `EXECVE-EVENT-DESIGN.md` but never implemented in
+   either old resolver. Added `checkCgroupV2()`: `Start()` now fails fast (no auto-remediation)
+   if `/sys/fs/cgroup` isn't the cgroup v2 unified hierarchy (`statfs` magic number check —
+   verified equivalent to `mount -l`/`/proc/filesystems` inspection, and correctly rejects hybrid
+   cgroup mode too, which those alternatives don't cleanly distinguish). Logs a confirmation line
+   on success.
+
+**Validated (2026-08-03):** rebuilt and retested on the VM — all of the above (prewarm,
+`EvictStale`, the 3 audit fixes, cgroup v2 startup check) confirmed working.
+
+**Root cause found and fixed: `enrich()` never actually queried a runtime client on DOKS
+(2026-08-03).** `validate-do-k8s.sh` went from 2/11 to 11/11 passing after this fix.
+`containerIDFromCgroupLeaf` only reports a runtime alongside the container ID for the
+**systemd cgroup driver**'s naming (`cri-containerd-<64hex>.scope`/`docker-<64hex>.scope` — the
+prefix is what carries the runtime). DOKS's containerd uses the **cgroupfs driver**, whose leaf
+is a bare `<64hex>` string with no prefix — a perfectly valid container ID, but no runtime
+signal. The old `enrich(rt, containerID)` treated that as "runtime unknown → try every
+*already-connected* client" — but clients were only ever connected by the *known-runtime*
+branch, so on this cluster `e.clients` stayed permanently empty and `CriClient.Enrich` was
+**never called at all**. Every container silently fell back to a `container-<hash>` short-id
+name forever, which is why alerts fired but `validate-do-k8s.sh`'s `service=X namespace=Y`
+regex checks all failed. Fixed by dropping the `rt` parameter entirely: `enrich(containerID)`
+now always tries `RuntimeDocker` then `RuntimeK8s` via `clientFor` (which lazily creates each),
+since a container ID is unique to whichever runtime minted it — querying the wrong one is a
+harmless miss, not a correctness risk.
+
+**Still open:**
+- **Live-path version of the cgroup-migration race** (unrelated to the bug above). Prewarm only
+  covers containers already running at agent startup. A container that starts *after* the agent
+  (a new deploy, or K8s pod churn) still resolves via the event-driven path, which can still hit
+  the cgroup-migration race described earlier in this section on its first-ever event. Planned
+  fix: when the kernel-captured leaf is non-empty but doesn't parse as a container, retry via a
+  live `/proc/<pid>/cgroup` read (not just when the leaf is empty).
+- **Short-id fallback can still stick.** If a container resolves (correct runtime, correct ID)
+  but every `RuntimeClient.Enrich` call fails (docker/crictl briefly unreachable), the engine
+  caches a `container-<12hex>` short-id name permanently. `EvictStale` only removes it once the
+  container is destroyed, not once enrichment would succeed on retry — same shape of bug as
+  the old K8s `k8s-pod-<hash>` fallback issue (see Deferred issues below), not yet fixed here.
+- **Temporary DEBUG instrumentation partially cleaned up.** `Engine.DebugDumpCache()` (30s
+  ticker in `main.go`) removed (2026-08-03) — no longer needed now that the resolver is
+  validated. Various `log.Printf("DEBUG: ...")` lines still remain in
+  `resolver_engine.go`/`cri_client.go`/`main.go`; decide: remove, downgrade to a quieter level,
+  or keep.
 
 ---
 
@@ -180,11 +278,10 @@ CNI is up), so no service/name whitelist reliably catches it. Needs a namespace-
 - **`validate.sh` T1611 overlay test out.** Blocked on the disabled T1611
   host-reads-container-overlay rule and its allowlist design; the rule's data
   (`container_fs_paths`) stays in common.yaml.
-- **Docker container cache never evicts.** `listenDockerEvents()` is disabled in
-  `DockerResolver.Start()` — its reconnect/recovery path had unresolved issues and is hard to
-  test without a scriptable Docker daemon. Cache-cleanup (and `lightweightRefresh()`) lived
-  only there, so `r.cache`/`r.containerToNs` only grow. Not a correctness problem — containers
-  are still discovered on-demand via `asyncResolvePID` — just a slow memory/staleness leak.
+- **~~Docker container cache never evicts~~ — FIXED (2026-08-03).** `DockerResolver` (and its
+  disabled `listenDockerEvents()`) is deleted; the new `Engine.EvictStale()` periodically
+  removes cache entries for destroyed containers, runtime-agnostic. See **Resolver engine
+  rewrite** above.
 - **File-dedup shard maps never evict.** `fileDedupShards_array` (main.go) has no sweep — the
   cleanup worker only sweeps the ancestry cache — so entries ({pid, filename} → time) accumulate
   forever. Tiny entries, slow growth; same class as the Docker cache leak. Fix is a periodic
@@ -202,26 +299,20 @@ CNI is up), so no service/name whitelist reliably catches it. Needs a namespace-
   node), so `ignore_namespaces: [kube-system]` doesn't catch them. Blocks reliably trusting
   cilium; see Active design "out of scope" note. Also an instance of the write-once cache bug
   below.
-- **K8s resolver caches the `k8s-pod-<hash>` fallback permanently — SHOULD FIX.** Root cause of
-  the empty pod/namespace columns (and a chunk of the false positives). The resolution `cache`
-  (mntNsID → result) is written **once**, on a namespace's first sighting, and never reconciled.
-  If a container's first traced event beats the 5s crictl refresh (`k8sRefreshInterval`), the
-  container ID resolves but `containerIDMap` misses → the `k8s-pod-<hash>` fallback (empty
-  pod/namespace) is cached as `StateResolved` (`k8s_resolver.go` ~274). `refreshCrictlCache`
-  only rebuilds `containerIDMap` (~152), never the `cache`; the hot path returns any cache hit
-  unconditionally (~126); the K8s cache has no eviction — so the fallback sticks for the
-  container's **entire life**, even though the correct pod/namespace lands in `containerIDMap`
-  ~5s later. The 60s `StatePending` retry doesn't help: resolution "succeeds" fast with the
-  fallback, so retries are cache hits, not re-resolves. Startup/bootstrap traffic (localstack →
-  AWS, cilium bootstrap) reliably loses this race. **Cost beyond cosmetics:** the stale
-  `k8s-pod-<hash>` service means `service_in` whitelist exceptions never match (e.g. T1041's
+- **Short-id fallback caches permanently, never upgraded — SAME BUG, NOW IN THE NEW ENGINE.**
+  Originally found as `K8sResolver`'s `k8s-pod-<hash>` fallback (empty pod/namespace, written
+  once on first sighting, never reconciled once `containerIDMap` catches up ~5s later via
+  `refreshCrictlCache`). `K8sResolver` is deleted, but the same *shape* of bug exists in the new
+  `Engine`: if `RuntimeClient.Enrich` fails on a container's first resolution (docker/crictl
+  briefly unreachable), the `container-<12hex>` short-id name is cached permanently — nothing
+  ever retries the enrichment for a still-live container. **Cost beyond cosmetics:** an unresolved
+  real service name means `service_in` whitelist exceptions never match (e.g. T1041's
   inventory-service → CoinGecko), so legit traffic keeps alerting for the container's whole
   lifetime — and the trusted-app whitelist design depends on `service_in`, so this blocks it.
-  **Fix = update-in-place, NOT eviction** (the container is alive — don't remove it): the
-  fallback entry already stores `Meta.Container` (~281), so on each refresh, patch cache entries
-  still on the fallback by re-looking-up `containerIDMap[container]`. No removal, no re-resolve,
-  no `/proc` re-read, no re-running the race. (Eviction is a separate concern, only for *dead*
-  containers.) Not an eBPF/execve fix — pod name + K8s namespace are CRI-label data, absent from
+  **Fix = update-in-place, NOT eviction** (the container is alive — don't remove it): retry
+  `Enrich` periodically (or on next event) for any cache entry still on a short-id name, and
+  patch it in place once enrichment succeeds. See **Resolver engine rewrite** above, "Still
+  open." Not an eBPF/execve fix — pod name + K8s namespace are CRI-label data, absent from
   kernel data, so no sensor change can supply them.
 
 **Dedup gotcha (keep in mind when touching the enricher):** `fileDedupKey` is {Pid, Filename}

@@ -1,11 +1,4 @@
 mode: set
-ebpf-edr-demo/internal/alert/alert.go:71.40,73.2 1 1
-ebpf-edr-demo/internal/alert/alert.go:76.33,78.31 2 1
-ebpf-edr-demo/internal/alert/alert.go:78.31,79.44 1 1
-ebpf-edr-demo/internal/alert/alert.go:79.44,81.4 1 0
-ebpf-edr-demo/internal/alert/alert.go:86.27,87.31 1 1
-ebpf-edr-demo/internal/alert/alert.go:87.31,88.38 1 1
-ebpf-edr-demo/internal/alert/alert.go:88.38,90.4 1 0
 ebpf-edr-demo/internal/config/config.go:57.21,65.32 2 0
 ebpf-edr-demo/internal/config/config.go:65.32,66.45 1 0
 ebpf-edr-demo/internal/config/config.go:66.45,67.9 1 0
@@ -19,6 +12,13 @@ ebpf-edr-demo/internal/processor/processor.go:72.40,74.3 1 1
 ebpf-edr-demo/internal/processor/processor.go:75.2,75.18 1 1
 ebpf-edr-demo/internal/processor/processor.go:80.29,82.2 1 1
 ebpf-edr-demo/internal/processor/processor.go:86.31,88.2 1 1
+ebpf-edr-demo/internal/alert/alert.go:71.40,73.2 1 1
+ebpf-edr-demo/internal/alert/alert.go:76.33,78.31 2 1
+ebpf-edr-demo/internal/alert/alert.go:78.31,79.44 1 1
+ebpf-edr-demo/internal/alert/alert.go:79.44,81.4 1 0
+ebpf-edr-demo/internal/alert/alert.go:86.27,87.31 1 1
+ebpf-edr-demo/internal/alert/alert.go:87.31,88.38 1 1
+ebpf-edr-demo/internal/alert/alert.go:88.38,90.4 1 0
 ebpf-edr-demo/pkg/detector/ancestry_cache.go:44.40,46.2 1 0
 ebpf-edr-demo/pkg/detector/ancestry_cache.go:54.37,56.16 2 0
 ebpf-edr-demo/pkg/detector/ancestry_cache.go:56.16,59.3 2 0

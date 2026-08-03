@@ -63,6 +63,25 @@ type NetEvent struct {
 	Comm      [pkg.TaskCommLen]byte // offset 40
 }
 
+// ── Resolver input ────────────────────────────────────────────────────────────
+
+// ResolveInfo returns the fields the workload resolver needs from an event: the mount
+// namespace (its cache key), the pid, the cgroup leaf (dispatch hint), and whether the
+// event carries a cgroup at all. Net events return hasCgroup=false — they resolve from
+// the cache only and never drive resolution. Implemented on each event so the resolver
+// takes any event via one interface, with no per-type switch.
+func (e *ProcessEvent) ResolveInfo() (mntNsID, pid uint32, cgroupLeaf string, hasCgroup bool) {
+	return e.MntNsId, uint32(e.Pid), CString(e.Cgroup[:]), true
+}
+
+func (e *FileEvent) ResolveInfo() (mntNsID, pid uint32, cgroupLeaf string, hasCgroup bool) {
+	return uint32(e.MntNsId), uint32(e.Pid), CString(e.Cgroup[:]), true
+}
+
+func (e *NetEvent) ResolveInfo() (mntNsID, pid uint32, cgroupLeaf string, hasCgroup bool) {
+	return uint32(e.MntNsId), uint32(e.Pid), "", false
+}
+
 // ── Converters ────────────────────────────────────────────────────────────────
 
 // CString converts a fixed-size BPF byte array to a Go string using C semantics.
