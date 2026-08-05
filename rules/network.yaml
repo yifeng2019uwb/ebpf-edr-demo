@@ -8,6 +8,12 @@
 #   dst_ip_not_in:  dst IP is OUTSIDE every CIDR in the list (external traffic)
 #   dst_port_in:    dst port equals any list item
 #   service_in:     resolved workload service name equals any list item
+#
+# FUTURE FIELD (not needed by any current rule): Falco/Tetragon also expose the
+# connection's L4 protocol (fd.l4proto — tcp/udp) at this same hook point; we don't
+# capture it. No rule below needs it today, but it'd be cheap to add later (same
+# lsm-connect.bpf.c hook, one more field) for a future behavioral/anomaly project —
+# e.g. distinguishing UDP telemetry noise from TCP-based tunneling.
 
 detections:
 

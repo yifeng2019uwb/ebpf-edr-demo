@@ -17,6 +17,9 @@
 #     comm_suffix_in:  comm ends with any item in the list
 #     comm_base_in:    filepath.Base(comm) equals any item in the list
 #     comm_prefix_in:  comm starts with any item in the list
+#     tty_required:    true = process has a controlling terminal (interactive session,
+#                      e.g. kubectl exec -it); not a list reference, a plain bool
+#     args_contains_in: argv[1:] contains any item in the list (substring match)
 #   exceptions:        LIST of specs, same primitives; the rule does not fire if
 #                      ANY spec matches (fields within one spec still AND)
 #   message:           plain string (no templating — comm/service/pid are
@@ -29,25 +32,44 @@
 detections:
 
   # T1059.004 / T1609 — Command & Scripting: Unix Shell
-  # Container spawning /bin/sh, /bin/bash, etc. → remote code execution.
-  # Alert only — shells run constantly in builds, kubectl exec, health checks.
+  # Container spawning /bin/sh, /bin/bash, etc. with an attached interactive terminal
+  # (kubectl exec -it, an attacker's session) → remote code execution. tty_required
+  # excludes the non-interactive case (health checks, entrypoints running `sh -c "..."`)
+  # — matches Falco's "Terminal shell in container" rule (proc.tty != 0), the single
+  # biggest false-positive reduction available for this rule.
   - name: T1059_unix_shell_execution
     severity: CRITICAL
     require_container: true
     match:
       comm_suffix_in: shell_processes
+      tty_required: true
     exceptions:
       - comm_base_in: customer_applications
-    message: "Shell spawned from container — possible RCE"
+    message: "Interactive shell spawned from container — possible RCE"
 
-  # T1105 / T1095 — Ingress Tool Transfer
-  # Container running nc, ncat, wget → attacker brought in attack tools.
-  # Alert only — wget/curl used by package managers and health checks.
+  # T1105 / T1095 — Ingress Tool Transfer (nc/ncat — reverse shell usage)
+  # nc/ncat gated on reverse-shell flags (-e/-c/--exec/--sh-exec/--lua-exec), matching
+  # Falco's nc/ncat rule — a bare `nc -z host port` (port check) no longer fires.
   - name: T1105_ingress_tool_transfer
     severity: HIGH
     require_container: true
     match:
-      comm_suffix_in: network_tools
+      comm_suffix_in: reverse_shell_tools
+      args_contains_in: reverse_shell_flags
+    exceptions:
+      - comm_base_in: customer_applications
+    message: "Network tool executed with reverse-shell arguments — possible RCE"
+
+  # T1105 / T1095 — Ingress Tool Transfer (wget)
+  # Kept separate from nc/ncat above: wget has no reverse-shell argument form to gate
+  # on (its own "-c" means "continue partial download", a common benign flag — sharing
+  # reverse_shell_flags with it would defeat the nc/ncat gate's precision). Alert
+  # only — wget/curl used by package managers and health checks.
+  - name: T1105_ingress_tool_transfer
+    severity: HIGH
+    require_container: true
+    match:
+      comm_suffix_in: download_tools
     exceptions:
       - comm_base_in: customer_applications
     message: "Network tool executed from container — possible exfiltration or tool staging"
@@ -63,7 +85,7 @@ detections:
       - comm_base_in: customer_applications
     message: "Container management tool executed inside container — possible discovery"
 
-  # T1036 — Masquerading
+  # T1036 — Masquerading (direct execution)
   # Binary running from /tmp/, /dev/shm/, etc. → attacker hiding malware.
   # No require_container and no exceptions: fires for host and state=unknown
   # processes too, and a whitelisted name running from /tmp is still suspicious.
@@ -73,3 +95,22 @@ detections:
     match:
       comm_prefix_in: suspicious_exec_paths
     message: "Process running from suspicious path"
+
+  # T1036 — Masquerading (shell -c wrapping a suspicious path)
+  # Closes one of the two bypasses of the entry above: `sh -c /dev/shm/payload` execs
+  # /bin/sh, so exec_path is just "sh" — the suspicious path is buried in sh's own
+  # argument instead. Reuses suspicious_exec_paths as a substring check on args.
+  # Matches Falco's "Execution from /dev/shm" rule's shell_procs + proc.args check.
+  #
+  # STILL OPEN (the other bypass): `cd /dev/shm && ./payload` — exec_path is literally
+  # "./payload" (the raw argv[0] string as invoked, not a resolved path), so it never
+  # starts with /dev/shm/, and there's no shell/args signal either since ./payload
+  # execs directly. Needs a `cwd` field — deferred (see event.h: requires a sleepable
+  # hook, which this tracepoint isn't; a bigger change than adding a field).
+  - name: T1036_masquerading
+    severity: HIGH
+    require_container: false
+    match:
+      comm_base_in: shell_processes
+      args_contains_in: suspicious_exec_paths
+    message: "Shell executed a command from a suspicious path"

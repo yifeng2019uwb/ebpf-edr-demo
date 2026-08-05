@@ -151,10 +151,12 @@ sleep 3
 
 # ── T1: Shell spawn in container — user_service ───────────────────────────────
 # T1059.004 · T1609
+# -t allocates a pseudo-TTY — required since T1059 now gates on tty_required
+# (an interactive session, not a script's non-interactive `sh -c "..."`).
 
 header 1 12 "Shell spawn in container (user_service)" "CRITICAL T1059_unix_shell_execution"
 T1_SINCE=$(date +%s%N)
-docker exec "${USER_SVC}" bash -c "id" 2>/dev/null || true
+docker exec -t "${USER_SVC}" bash -c "id" 2>/dev/null || true
 if expect_alert "CRITICAL.*T1059_unix_shell_execution.*user_service" 30; then
     pass "T1: CRITICAL T1059 detected"
 else

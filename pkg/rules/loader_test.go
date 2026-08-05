@@ -16,8 +16,8 @@ func TestLoadRealRules(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadRules failed on shipped rules: %v", err)
 	}
-	if len(db.ProcessDetections) != 4 {
-		t.Fatalf("expected 4 process detections, got %d", len(db.ProcessDetections))
+	if len(db.ProcessDetections) != 6 {
+		t.Fatalf("expected 6 process detections, got %d", len(db.ProcessDetections))
 	}
 	first := db.ProcessDetections[0]
 	if first.Name != "T1059_unix_shell_execution" || first.Severity != alert.Critical {

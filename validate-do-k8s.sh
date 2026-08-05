@@ -120,9 +120,13 @@ no_alert() {
 }
 
 # ── V2: Shell spawn — provider-service ───────────────────────────────────────
+# -it allocates a pseudo-TTY — required since T1059 now gates on tty_required
+# (an interactive session, not a script's non-interactive `sh -c "..."`). -t alone
+# isn't reliable from a non-interactive script: kubectl's client-side check can
+# downgrade a lone -t when the script's own stdin isn't a real terminal.
 echo "=== V2: Shell spawn detection (provider-service) ==="
 V2_SINCE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-$KUBECTL exec "$PROVIDER_POD" -n "$NAMESPACE" -- sh -c "exit 0" >/dev/null 2>&1 || true
+$KUBECTL exec -it "$PROVIDER_POD" -n "$NAMESPACE" -- sh -c "exit 0" >/dev/null 2>&1 || true
 if expect_alert "CRITICAL.*${RULE_SHELL}.*service=provider-service.*namespace=${NAMESPACE}" 60 "$V2_SINCE"; then
     pass "V2: CRITICAL ${RULE_SHELL} — service=provider-service namespace=${NAMESPACE}"
 else
@@ -218,9 +222,11 @@ else
 fi
 
 # ── V10: Reverse shell simulation — auth-service ──────────────────────────────
+# -it allocates a pseudo-TTY — required since T1059 now gates on tty_required
+# (see V2 comment above for why -t alone isn't reliable here).
 echo "=== V10: Reverse shell simulation (auth-service) ==="
 V10_SINCE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-$KUBECTL exec "$AUTH_POD" -n "$NAMESPACE" -- sh -c \
+$KUBECTL exec -it "$AUTH_POD" -n "$NAMESPACE" -- sh -c \
     "wget --timeout=2 -q http://8.8.8.8:4444 -O /dev/null || true; sh -c 'exit 0'" \
     >/dev/null 2>&1 || true
 if expect_alert "CRITICAL.*${RULE_SHELL}.*service=auth-service" 60 "$V10_SINCE" && \

@@ -51,7 +51,18 @@ detections:
   # Container reading /proc/1/ → host init process access (escape attempt).
   # proc_escape_allowed excepts the read-only files monitoring tools use
   # (/proc/1/stat, /proc/1/status, /proc/1/cmdline, /proc/1/mountinfo).
+  # proc_net_escape_allowed excepts /proc/1/net/* as a class — read-only network
+  # stats, identical to /proc/self/net/* since the net namespace is shared pod-wide,
+  # not an escape primitive (unlike /proc/1/root, /proc/1/ns/*, /proc/1/exe, /proc/1/fd/*).
   # Alert only — GKE monitoring sidecars hit this (known FP).
+  #
+  # KNOWN GAP (compared to Falco's "release_agent" escape rule): Falco doesn't match
+  # reads at all here — it requires a WRITE to release_agent plus thread.cap_effective
+  # containing CAP_SYS_ADMIN (+ root/CAP_DAC_OVERRIDE). We already capture f_mode
+  # (FMODE_WRITE bit) in file_event but don't require it here yet — that's a Go-only
+  # change (no kernel gap). Matching Falco's capability gate exactly would need a new
+  # `cap_effective` field (BPF_CORE_READ(task, cred, cap_effective)) in lsm-file.bpf.c —
+  # not currently planned, noted here as a future option only.
   - name: T1611_escape_to_host_proc
     severity: HIGH
     require_container: true
@@ -59,6 +70,7 @@ detections:
       file_prefix_in: proc_escape_paths
     exceptions:
       - file_exact_in: proc_escape_allowed
+      - file_prefix_in: proc_net_escape_allowed
       - comm_base_in: customer_applications
     message: "Container accessed host process namespace"
 
@@ -77,6 +89,9 @@ detections:
   # T1552.004 — Unsecured Credentials: Private Keys (key files by extension)
   # .key, .pem, id_rsa, id_ed25519 anywhere on disk. pem_exclude_paths excepts
   # CA bundles (certifi/site-packages) that Python loads on every HTTPS request.
+  # own_tls_cert_services excepts services reading their own generated cert/key
+  # (e.g. localstack's server.test.pem/.pem.key — comm=python, so comm-based
+  # whitelisting can't catch it; see rules/common.yaml comment).
   # response: kill — same policy as the SSH-directory entry above.
   - name: T1552_004_private_keys
     severity: HIGH
@@ -86,6 +101,7 @@ detections:
     exceptions:
       - file_contains_in: pem_exclude_paths
       - comm_base_in: customer_applications
+      - service_in: own_tls_cert_services
     message: "Container accessed private key file"
     response: kill_process
 
@@ -103,6 +119,12 @@ detections:
 
   # T1053.003 — Scheduled Task/Job: Cron
   # Container accessing /etc/cron.d/, /var/spool/cron/, /etc/crontab → persistence.
+  #
+  # KNOWN GAP: reading cron config isn't establishing persistence — only WRITING a new
+  # cron entry is. The kernel's own comment on f_mode ("FMODE_WRITE bit scopes
+  # T1053/T1070" — kernel/event.h) shows this was the original intent, but this rule
+  # was never wired up to require it. Go-only fix, no kernel gap: require
+  # f_mode & FMODE_WRITE.
   - name: T1053_003_scheduled_task_cron
     severity: HIGH
     require_container: true
@@ -129,6 +151,19 @@ detections:
 
   # T1070.003 — Indicator Removal: Clear Command History
   # Container accessing .bash_history, .zsh_history → covering tracks.
+  #
+  # KNOWN GAP (compared to Falco's "Shell history deleted or renamed" rule): Falco
+  # detects the act of clearing — unlink/rename/truncate — not a plain read. This rule
+  # currently fires on ANY access including harmless reads (cat/less viewing).
+  # Two-step fix, both scoped to what our current openat-based hook can see:
+  # (1) Go-only, no kernel gap: require f_mode & FMODE_WRITE (already captured, same
+  #     "T1053/T1070" comment in kernel/event.h) — excludes plain reads, but a normal
+  #     bash exit-flush (history -a/-w) is ALSO a write, so this alone doesn't fully
+  #     separate legitimate housekeeping from malicious clearing.
+  # (2) Needs new field: O_TRUNC open flag (same lsm-file.bpf.c hook, read file->f_flags
+  #     alongside f_mode) — catches `> ~/.bash_history` / `cat /dev/null > ...`.
+  # unlink/rename (`rm`, `mv`) are a separate syscall entirely, not visible via openat
+  # at all — would need a new probe, out of scope for "current hooks only".
   - name: T1070_003_clear_command_history
     severity: MEDIUM
     require_container: true

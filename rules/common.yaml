@@ -108,10 +108,22 @@ rules:
     - name: shell_processes
       items: [bash, sh, zsh, dash]
 
-    # Network recon tools — raw socket utilities used for scanning.
-    # Presence in container indicates network reconnaissance.
-    - name: network_tools
-      items: [nc, ncat, wget]
+    # nc/ncat specifically — gated on reverse_shell_flags below (T1105), unlike wget
+    # (download_tools) which has no equivalent reverse-shell argument form.
+    - name: reverse_shell_tools
+      items: [nc, ncat]
+
+    # Reverse-shell indicator flags for nc/ncat (matches Falco's nc/ncat rule).
+    # Deliberately NOT applied to wget: wget's own "-c" (continue partial download) is
+    # a common, benign flag that would collide with this list's "-c" if shared —
+    # that's why wget is a separate list/rule (download_tools), not merged with this one.
+    - name: reverse_shell_flags
+      items: [-e, -c, --exec, --sh-exec, --lua-exec]
+
+    # Ingress tool transfer via wget — no reverse-shell argument form to gate on,
+    # unlike nc/ncat above; stays alert-only, ungated by args.
+    - name: download_tools
+      items: [wget]
 
     # Container management tools — docker, kubectl, etc.
     # T1613 — executing from inside container indicates resource discovery.
@@ -195,6 +207,16 @@ rules:
     - name: proc_escape_allowed
       items: [/proc/1/stat, /proc/1/status, /proc/1/cmdline, /proc/1/mountinfo]
 
+    # Allowed /proc/1/net/ reads (prefix, not exact — covers if_inet6, tcp, route, etc.
+    # as one class). The net namespace is shared by every process in the pod, so
+    # /proc/1/net/* and /proc/self/net/* show identical data: reading PID 1's copy
+    # gives no new information or capability over reading your own. JVM/Netty read
+    # files here (e.g. if_inet6) during shutdown — known FP, not an escape technique.
+    # Real host-escape primitives are /proc/1/root, /proc/1/ns/*, /proc/1/exe,
+    # /proc/1/fd/*, /proc/1/mem — none of those are covered by this exception.
+    - name: proc_net_escape_allowed
+      items: [/proc/1/net/]
+
     # Suspicious binary paths — where executables shouldn't be.
     # T1036 — masquerading detects binaries running from writable directories.
     - name: suspicious_exec_paths
@@ -242,6 +264,15 @@ rules:
     - name: pem_exclude_paths
       items: [/site-packages/, /certifi/]
 
+    # Services that legitimately generate and read their own self-signed TLS
+    # cert/key at startup — comm-based whitelisting can't catch this (e.g.
+    # localstack's cert read has comm=python, not localstack), so this is a
+    # service_in exception instead. Scoped narrowly to this one known action
+    # (T1552_004_private_keys — key file suffix), not a blanket trust of the
+    # service — matches the Active design doc's "scoped to known actions" model.
+    - name: own_tls_cert_services
+      items: [localstack]
+
     # Private IP ranges — RFC 1918 + loopback + link-local.
     # Used to exclude internal connections from external communication detection.
     - name: private_ranges
@@ -264,8 +295,10 @@ rules:
     # Allowed services — services permitted to make external connections.
     # Used by T1041 exceptions (rules/network.yaml).
     # inventory-service calls CoinGecko for live market data.
+    # localstack calls real AWS/CloudFront endpoints at startup (provider data, Lambda
+    # layers) — the IPs are dynamic AWS-owned ranges, not worth allowlisting by IP.
     - name: allowed_services
-      items: [inventory-service, inventory_service]
+      items: [inventory-service, inventory_service, localstack]
 
   # ─────────────────────────────────────────────────────────
   # DETECTIONS live in the per-sensor files (structured matchers):

@@ -38,7 +38,7 @@ ancestry walk, state=unknown telemetry) is Go code.
 Duplicate `name:` entries are allowed (e.g. T1552_004 has a CRITICAL ssh-dirs
 entry and a HIGH key-suffix entry).
 
-**Reusable lists:** `shell_processes`, `network_tools`, `ssh_key_dirs`, etc. —
+**Reusable lists:** `shell_processes`, `reverse_shell_tools`, `ssh_key_dirs`, etc. —
 referenced by name from match/exception primitives and validated at load.
 
 ## Usage

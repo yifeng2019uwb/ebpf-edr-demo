@@ -21,7 +21,7 @@ import (
 // ── Event structs ─────────────────────────────────────────────────────────────
 
 // ProcessEvent matches event.h struct exec_event.
-// sizeof = 4+4+4+4+8+256+128 = 408 bytes, no implicit padding.
+// sizeof = 4+4+4+4+8+256+128+4+128+4 = 544 bytes, no implicit padding.
 type ProcessEvent struct {
 	Pid       int32                 // offset 0   — process ID (from kernel tgid)
 	Ppid      int32                 // offset 4   — parent process ID
@@ -30,6 +30,9 @@ type ProcessEvent struct {
 	EventTime uint64                // offset 16  — bpf_ktime_get_ns() (monotonic; convert via boot offset)
 	ExecPath  [pkg.ExecPathLen]byte // offset 24  — path as invoked (execve arg 0)
 	Cgroup    [pkg.CgroupLen]byte   // offset 280 — leaf cgroup name
+	HasTty    uint32                // offset 408 — 1 = controlling terminal attached (interactive)
+	Args      [pkg.ArgsLen]byte     // offset 412 — argv[1:], space-joined, bounded
+	Pad       uint32                // offset 540 — explicit padding (keeps size an 8-multiple)
 }
 
 // FileEvent matches event.h struct file_event.

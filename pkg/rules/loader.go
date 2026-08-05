@@ -72,14 +72,17 @@ type MatchSpec struct {
 	DstIPNotIn     string `yaml:"dst_ip_not_in"`    // dst IP outside every CIDR in the list
 	DstPortIn      string `yaml:"dst_port_in"`      // dst port equals any list item
 	ServiceIn      string `yaml:"service_in"`       // resolved service name equals any list item
+	TtyRequired    bool   `yaml:"tty_required"`     // process has a controlling terminal (interactive)
+	ArgsContainsIn string `yaml:"args_contains_in"` // argv[1:] contains any list item (substring)
 }
 
 // listRefs returns the list names referenced by the spec (for validation).
+// TtyRequired is a plain bool, not a list reference, so it's not included here.
 func (m MatchSpec) listRefs() []string {
 	var refs []string
 	for _, name := range []string{m.CommSuffixIn, m.CommBaseIn, m.CommPrefixIn,
 		m.FilePrefixIn, m.FileSuffixIn, m.FileExactIn, m.FileContainsIn,
-		m.DstIPNotIn, m.DstPortIn, m.ServiceIn} {
+		m.DstIPNotIn, m.DstPortIn, m.ServiceIn, m.ArgsContainsIn} {
 		if name != "" {
 			refs = append(refs, name)
 		}

@@ -19,8 +19,21 @@
 #define EXEC_PATH_LEN    256 // invoked path — 256 makes basename truncation rare
 #define MAX_FILENAME_LEN 256 // canonical path from bpf_d_path
 #define CGROUP_LEN       128 // leaf cgroup — "cri-containerd-<64hex>.scope" ≈ 85 B; 64 truncates the ID
+#define ARGS_LEN         128 // argv[1:], space-joined, bounded — see MAX_ARGS in execsnoop.bpf.c
+#define MAX_ARGS         4   // argv entries read past argv[0] — verifier requires a compile-time bound
+#define ARG_CHUNK        32  // max bytes read per arg — a compile-time constant, not computed
+                              // "remaining space", so the verifier can prove bounds (see execsnoop.bpf.c)
 
 // ── exec_event — execsnoop.bpf.c (tracepoint/syscalls/sys_enter_execve) ──────
+// Grows past the 512-byte BPF stack limit (see total below) — held in a per-CPU
+// scratch map (exec_scratch in execsnoop.bpf.c), not a stack-local variable.
+//
+// cwd is NOT captured (considered and deferred): resolving it needs bpf_d_path(),
+// which requires a sleepable program (see lsm-file.bpf.c's "WHY lsm.s" comment);
+// this hook is a plain, non-sleepable tracepoint. Adding cwd would mean switching to
+// a different (sleepable) attach point, not just adding a field — a bigger change
+// that needs its own re-evaluation, out of scope for now. Until then, T1036's
+// `cd /dev/shm && ./x` (relative-exec) bypass stays open — see rules/process.yaml.
 struct exec_event {
 	int   pid;                      // offset 0   — response target, dedup key
 	int   ppid;                     // offset 4   — ppid==1 short-circuit, ancestry walk
@@ -29,7 +42,10 @@ struct exec_event {
 	__u64 event_time;               // offset 16  — bpf_ktime_get_ns(); anomaly service (future)
 	char  exec_path[EXEC_PATH_LEN]; // offset 24  — path as invoked (execve arg 0); T1036/T1059/T1105/T1613
 	char  cgroup[CGROUP_LEN];       // offset 280 — leaf cgroup name; replaces /proc/<pid>/cgroup read
-	// total: 4+4+4+4+8+256+128 = 408 bytes
+	__u32 has_tty;                  // offset 408 — 1 = controlling terminal attached (interactive); T1059
+	char  args[ARGS_LEN];           // offset 412 — argv[1:], space-joined, bounded; T1105/T1036
+	__u32 pad;                      // offset 540 — explicit padding (keeps size an 8-multiple)
+	// total: 408+4+128+4 = 544 bytes
 };
 
 // ── file_event — lsm-file.bpf.c (lsm.s/file_open + do_sys_openat2 probes) ────

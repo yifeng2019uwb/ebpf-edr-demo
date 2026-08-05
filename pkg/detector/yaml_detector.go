@@ -44,6 +44,10 @@ type matchInput struct {
 	dstIP    net.IP
 	dstPort  uint16
 	service  string
+	hasTty   bool   // process events only — controlling terminal attached
+	args     string // process events only — argv[1:], raw bytes (fixed NUL-padded slots;
+	// deliberately not CString-trimmed — a raw Contains search still finds a
+	// substring in any slot, embedded NULs don't affect it)
 }
 
 // compiledMatch is a MatchSpec with its list references resolved to lookup
@@ -61,13 +65,15 @@ type compiledMatch struct {
 	dstIPNotIn   []*net.IPNet    // dst_ip_not_in (match = IP outside every range)
 	dstPorts     map[uint16]bool // dst_port_in
 	services     map[string]bool // service_in
+	requireTty   bool            // tty_required
+	argsContains []string        // args_contains_in
 }
 
 func (m *compiledMatch) empty() bool {
 	return len(m.commSuffixes) == 0 && len(m.commBases) == 0 && len(m.commPrefixes) == 0 &&
 		len(m.filePrefixes) == 0 && len(m.fileSuffixes) == 0 && len(m.fileExacts) == 0 &&
 		len(m.fileContains) == 0 && len(m.dstIPNotIn) == 0 && len(m.dstPorts) == 0 &&
-		len(m.services) == 0
+		len(m.services) == 0 && !m.requireTty && len(m.argsContains) == 0
 }
 
 // matches reports whether the event satisfies every specified primitive.
@@ -110,6 +116,12 @@ func (m *compiledMatch) matches(in matchInput) bool {
 		return false
 	}
 	if len(m.services) > 0 && !m.services[in.service] {
+		return false
+	}
+	if m.requireTty && !in.hasTty {
+		return false
+	}
+	if len(m.argsContains) > 0 && !containsAny(in.args, m.argsContains) {
 		return false
 	}
 	return true
@@ -271,6 +283,10 @@ func (d *YAMLDetector) compileMatch(spec rules.MatchSpec) compiledMatch {
 		for _, s := range d.getListStrings(spec.ServiceIn) {
 			m.services[s] = true
 		}
+	}
+	m.requireTty = spec.TtyRequired
+	if spec.ArgsContainsIn != "" {
+		m.argsContains = d.getListStrings(spec.ArgsContainsIn)
 	}
 	return m
 }
@@ -589,7 +605,7 @@ func (d *YAMLDetector) checkProcessRules(event processor.ProcessEvent, res workl
 	// (state resolved, runtime docker/k8s); require_container: false rules
 	// (T1036) also cover host and state=unknown processes.
 	isVerifiedContainer := isContainerContext(res)
-	in := matchInput{comm: comm}
+	in := matchInput{comm: comm, hasTty: event.HasTty != 0, args: string(event.Args[:])}
 	for i := range d.processDetections {
 		det := &d.processDetections[i]
 		if det.requireContainer && !isVerifiedContainer {
@@ -679,7 +695,7 @@ func (d *YAMLDetector) checkFileRules(event processor.FileEvent, res workload.Re
 	// (CRITICAL → LOW). All current file rules are container-gated; the old
 	// global customer_applications whitelist is now a per-rule exception.
 	isVerifiedContainer := isContainerContext(res)
-	in := matchInput{comm: comm, filename: filename}
+	in := matchInput{comm: comm, filename: filename, service: res.Identity.Service}
 	for i := range d.fileDetections {
 		det := &d.fileDetections[i]
 		if det.requireContainer && !isVerifiedContainer {
