@@ -8,9 +8,24 @@ import (
 	_ "embed"
 	"fmt"
 	"io"
+	"structs"
 
 	"github.com/cilium/ebpf"
 )
+
+type processExecEvent struct {
+	_         structs.HostLayout
+	Pid       int32
+	Ppid      int32
+	Uid       int32
+	MntNsId   uint32
+	EventTime uint64
+	ExecPath  [256]int8
+	Cgroup    [128]int8
+	HasTty    uint32
+	Args      [128]int8
+	Pad       uint32
+}
 
 // loadProcess returns the embedded CollectionSpec for process.
 func loadProcess() (*ebpf.CollectionSpec, error) {
@@ -61,7 +76,8 @@ type processProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type processMapSpecs struct {
-	Events *ebpf.MapSpec `ebpf:"events"`
+	Events      *ebpf.MapSpec `ebpf:"events"`
+	ExecScratch *ebpf.MapSpec `ebpf:"exec_scratch"`
 }
 
 // processVariableSpecs contains global variables before they are loaded into the kernel.
@@ -90,12 +106,14 @@ func (o *processObjects) Close() error {
 //
 // It can be passed to loadProcessObjects or ebpf.CollectionSpec.LoadAndAssign.
 type processMaps struct {
-	Events *ebpf.Map `ebpf:"events"`
+	Events      *ebpf.Map `ebpf:"events"`
+	ExecScratch *ebpf.Map `ebpf:"exec_scratch"`
 }
 
 func (m *processMaps) Close() error {
 	return _ProcessClose(
 		m.Events,
+		m.ExecScratch,
 	)
 }
 
