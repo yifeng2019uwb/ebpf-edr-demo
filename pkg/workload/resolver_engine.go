@@ -60,6 +60,33 @@ func containerIDFromCgroupLeaf(leaf string) (string, Runtime) {
 	return "", RuntimeUnknown
 }
 
+// containerRuntimeDaemonCgroupSuffixes maps a container runtime daemon's own systemd
+// service unit name to the runtime it belongs to. A cgroup leaf ending in one of these is
+// the daemon's own cgroup, not a container's — e.g. a snap-confined dockerd is
+// "snap.docker.dockerd.service". Seeing one of these specifically (rather than any other
+// non-container cgroup) is the signature of the cgroup-migration case: a process exec'd
+// into an already-running container has joined its mount namespace already, but this
+// cgroup hasn't migrated yet. Which suffix matched also tells us the runtime directly —
+// not a guess, since each daemon only ever runs its own named service.
+var containerRuntimeDaemonCgroupSuffixes = map[string]Runtime{
+	"docker.service":     RuntimeDocker,
+	"dockerd.service":    RuntimeDocker,
+	"containerd.service": RuntimeK8s,
+}
+
+// isContainerRuntimeDaemonCgroup reports whether leaf is a container runtime daemon's own
+// cgroup (see containerRuntimeDaemonCgroupSuffixes) — the known-migration-in-progress case,
+// as opposed to a leaf that's genuinely unrelated to any container (e.g. exim4.service).
+// rt is the runtime that daemon belongs to when matched.
+func isContainerRuntimeDaemonCgroup(leaf string) (rt Runtime, matched bool) {
+	for suffix, rt := range containerRuntimeDaemonCgroupSuffixes {
+		if strings.HasSuffix(leaf, suffix) {
+			return rt, true
+		}
+	}
+	return "", false
+}
+
 // RuntimeClient looks up container metadata from ONE container runtime's API. It owns
 // only its connection; it never sees a mount namespace, cgroup, or the cache. Its whole
 // surface is "container ID → runtime-specific identity + metadata."
@@ -327,14 +354,25 @@ func (e *Engine) asyncResolve(mntNsID, pid uint32, cgroupLeaf string) {
 	}
 
 	if containerID == "" {
-		// cgroupLeaf is guaranteed non-empty here (the only empty case already returned
-		// above), so this is always "non-empty cgroup that didn't parse as a container."
-		// Resolve() only calls asyncResolve after its host-fast-path check (mntNsID ==
-		// hostNsID) has already failed, so this namespace is confirmed NOT the host —
-		// yet its cgroup isn't a recognized container leaf either (e.g. a snap-confined
-		// dockerd's own systemd unit). Cache it so repeated activity in this namespace
-		// doesn't re-trigger resolution on every event. RuntimeUnknown, not Host: this
-		// namespace is confirmed non-host, we just don't know what it is.
+		// Non-empty cgroup that didn't parse as a container; confirmed not the host.
+		// Daemon's own cgroup (e.g. snap.docker.dockerd.service) → the cgroup-migration
+		// case (see HANDOFF "Resolver engine rewrite"). Retrying this PID's own cgroup
+		// doesn't help — it may never individually migrate — so resolve as a container
+		// now (runtime known from which daemon matched, not guessed); name stays pending,
+		// same tradeoff already accepted for the short-id fallback below.
+		if rt2, ok := isContainerRuntimeDaemonCgroup(cgroupLeaf); ok {
+			log.Printf("DEBUG: asyncResolve ns=%d pid=%d cgroupLeaf=%q is daemon cgroup (runtime=%s, migration in progress) — resolving as container, name pending",
+				mntNsID, pid, cgroupLeaf, rt2)
+			res := e.result(StateResolved, WorkloadIdentity{Runtime: rt2, Service: PendingContainerService})
+			// "pending", not empty — reads as intentionally unknown, not broken data.
+			res.Meta.Container = PendingMetaValue
+			res.Meta.Pod = PendingMetaValue
+			e.store(mntNsID, res)
+			return
+		}
+
+		// Genuinely unrelated to any container runtime (e.g. exim4.service) — cache so
+		// repeated activity in this namespace doesn't re-trigger resolution every event.
 		log.Printf("DEBUG: asyncResolve ns=%d pid=%d cgroupLeaf=%q -> unparseable, caching Unknown", mntNsID, pid, cgroupLeaf)
 		e.store(mntNsID, e.result(StateResolved, WorkloadIdentity{Runtime: RuntimeUnknown}))
 		return
@@ -443,12 +481,9 @@ func (e *Engine) shortIDResult(rt Runtime, containerID string) ResolveResult {
 
 // leafFromProcCgroup reads the cgroup v2 leaf from /proc/<pid>/cgroup — the procfs
 // fallback used only when the in-kernel leaf is absent (a rare BPF read failure). On v2
-// the file is a single "0::/path" line; the leaf is its last path segment.
-// leafFromProcCgroup reads the cgroup v2 leaf from /proc/<pid>/cgroup — the procfs
-// fallback used only when the in-kernel leaf is absent (a rare BPF read failure). On v2
-// the file is a single "0::/path" line; the leaf is its last path segment. ok is false
-// on any read failure (process exited, permission, or anything else) — we don't
-// distinguish why; there's nothing more to learn either way.
+// the file is a single "0::/path" line; the leaf is its last path segment. ok is false on
+// any read failure (process exited, permission, or anything else) — we don't distinguish
+// why; there's nothing more to learn either way.
 func leafFromProcCgroup(pid uint32) (leaf string, ok bool) {
 	data, err := os.ReadFile("/proc/" + strconv.Itoa(int(pid)) + "/cgroup")
 	if err != nil {

@@ -24,6 +24,15 @@ const (
 	K8sInfraService    = "k8s-infra"
 )
 
+// PendingContainerService/PendingMetaValue name a container confirmed via the daemon-cgroup
+// signature (see resolver_engine.go's isContainerRuntimeDaemonCgroup) whose specific identity
+// is still unresolved. Named constants, not inline strings, so the display text can change in
+// one place if a clearer name comes up later.
+const (
+	PendingContainerService = "container-pending"
+	PendingMetaValue        = "pending"
+)
+
 // ResolveState represents how well we resolved a mnt_ns_id → workload mapping.
 type ResolveState string
 
@@ -49,10 +58,8 @@ const (
 type WorkloadIdentity struct {
 	Runtime Runtime // RuntimeK8s | RuntimeDocker
 	Service string  // logical service name used by detection rules
-	Env     string  // cloud provider + infrastructure, e.g. "gcp-vm", "gke" — set via ENV env var
-	// Note: Env currently captures cloud provider for alert whitelisting (suppress cloud-specific noise).
-	// Could split into Env (provider) + Stage (alpha/production) for deployment-stage-aware rules,
-	// but kept simple for now (single field, cloud provider filtering is sufficient).
+	Env     string  // cloud provider + infrastructure, e.g. "gcp-vm", "gke" — set via ENV env var;
+	// used for alert whitelisting (suppress cloud-specific noise)
 }
 
 // WorkloadMeta keeps raw/debug information.

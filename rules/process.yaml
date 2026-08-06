@@ -28,6 +28,11 @@
 #                      kill_process | block_ip; omit (or ~) for alert only.
 #                      The responder replaces it with the action actually
 #                      executed before the alert reaches the sinks.
+#   service_unresolved_severity/_message: optional. Process rules only. When the event
+#                      resolved to a confirmed container but no real service name yet
+#                      (container-pending / short-id), emit at this lower severity with
+#                      this message instead of severity/message. Must be lower than
+#                      severity; both fields required together.
 
 detections:
 
@@ -46,6 +51,8 @@ detections:
     exceptions:
       - comm_base_in: customer_applications
     message: "Interactive shell spawned from container — possible RCE"
+    service_unresolved_severity: LOW
+    service_unresolved_message: "Interactive shell spawned from container with unresolved service identity — possible RCE, not yet attributable to a specific service"
 
   # T1105 / T1095 — Ingress Tool Transfer (nc/ncat — reverse shell usage)
   # nc/ncat gated on reverse-shell flags (-e/-c/--exec/--sh-exec/--lua-exec), matching
@@ -59,6 +66,8 @@ detections:
     exceptions:
       - comm_base_in: customer_applications
     message: "Network tool executed with reverse-shell arguments — possible RCE"
+    service_unresolved_severity: LOW
+    service_unresolved_message: "Network tool executed with reverse-shell arguments from a container with unresolved service identity — possible RCE, not yet attributable to a specific service"
 
   # T1105 / T1095 — Ingress Tool Transfer (wget)
   # Kept separate from nc/ncat above: wget has no reverse-shell argument form to gate
@@ -73,6 +82,8 @@ detections:
     exceptions:
       - comm_base_in: customer_applications
     message: "Network tool executed from container — possible exfiltration or tool staging"
+    service_unresolved_severity: LOW
+    service_unresolved_message: "Network tool executed from a container with unresolved service identity — possible exfiltration or tool staging, not yet attributable to a specific service"
 
   # T1613 — Container and Resource Discovery
   # Container executing kubectl, docker, crictl → discovering infrastructure.
@@ -84,6 +95,8 @@ detections:
     exceptions:
       - comm_base_in: customer_applications
     message: "Container management tool executed inside container — possible discovery"
+    service_unresolved_severity: LOW
+    service_unresolved_message: "Container management tool executed from a container with unresolved service identity — possible discovery, not yet attributable to a specific service"
 
   # T1036 — Masquerading (direct execution)
   # Binary running from /tmp/, /dev/shm/, etc. → attacker hiding malware.

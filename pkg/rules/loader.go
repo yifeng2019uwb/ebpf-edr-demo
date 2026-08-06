@@ -102,6 +102,13 @@ type DetectionRule struct {
 	Exceptions       []MatchSpec  `yaml:"exceptions"`
 	Message          string       `yaml:"message"`
 	Response         alert.Action `yaml:"response"` // kill_process | block_ip; empty/~ = alert only
+
+	// ServiceUnresolvedSeverity/Message: process rules only. When the matched event's
+	// workload resolved to a confirmed container but no real service name yet
+	// (container-pending / short-id — see pkg/workload), emit at this reduced severity
+	// with this message instead of Severity/Message. Empty = no downgrade for this rule.
+	ServiceUnresolvedSeverity alert.Level `yaml:"service_unresolved_severity"`
+	ServiceUnresolvedMessage  string      `yaml:"service_unresolved_message"`
 }
 
 // sensorConfig is the top-level structure of a per-sensor rules file
@@ -139,36 +146,87 @@ func validateDetections(dets []DetectionRule, lists map[string][]interface{}) er
 		if det.Name == "" {
 			return fmt.Errorf("detection %d: missing name", i)
 		}
-		rank, ok := severityRank[det.Severity]
-		if !ok {
-			return fmt.Errorf("detection %s: invalid severity %q", det.Name, det.Severity)
-		}
-		if rank > prev {
-			return fmt.Errorf("detection %s: severity %s out of order — detections must be sorted CRITICAL→LOW", det.Name, det.Severity)
+		rank, err := validateSeverityOrder(det, prev)
+		if err != nil {
+			return err
 		}
 		prev = rank
 		if det.Message == "" {
 			return fmt.Errorf("detection %s: missing message", det.Name)
 		}
-		switch det.Response {
-		case "", alert.ActionNone, alert.ActionKillProcess, alert.ActionBlockIP:
-		default:
-			return fmt.Errorf("detection %s: invalid response %q", det.Name, det.Response)
+		if err := validateServiceUnresolved(det, rank); err != nil {
+			return err
 		}
-		if len(det.Match.listRefs()) == 0 {
-			return fmt.Errorf("detection %s: match must specify at least one primitive", det.Name)
+		if err := validateResponse(det); err != nil {
+			return err
 		}
-		refs := det.Match.listRefs()
-		for _, ex := range det.Exceptions {
-			if len(ex.listRefs()) == 0 {
-				return fmt.Errorf("detection %s: empty exception spec", det.Name)
-			}
-			refs = append(refs, ex.listRefs()...)
+		if err := validateListRefs(det, lists); err != nil {
+			return err
 		}
-		for _, ref := range refs {
-			if _, ok := lists[ref]; !ok {
-				return fmt.Errorf("detection %s: unknown list reference %q", det.Name, ref)
-			}
+	}
+	return nil
+}
+
+// validateSeverityOrder checks det.Severity is known and not out of the required
+// CRITICAL→LOW file order (rank must not exceed prevRank). Returns det's rank.
+func validateSeverityOrder(det DetectionRule, prevRank int) (int, error) {
+	rank, ok := severityRank[det.Severity]
+	if !ok {
+		return 0, fmt.Errorf("detection %s: invalid severity %q", det.Name, det.Severity)
+	}
+	if rank > prevRank {
+		return 0, fmt.Errorf("detection %s: severity %s out of order — detections must be sorted CRITICAL→LOW", det.Name, det.Severity)
+	}
+	return rank, nil
+}
+
+// validateServiceUnresolved checks the optional severity-downgrade override: if set,
+// must be a known severity strictly below rank (det's own severity), and must come
+// with its own message.
+func validateServiceUnresolved(det DetectionRule, rank int) error {
+	if det.ServiceUnresolvedSeverity == "" {
+		return nil
+	}
+	downRank, ok := severityRank[det.ServiceUnresolvedSeverity]
+	if !ok {
+		return fmt.Errorf("detection %s: invalid service_unresolved_severity %q", det.Name, det.ServiceUnresolvedSeverity)
+	}
+	if downRank >= rank {
+		return fmt.Errorf("detection %s: service_unresolved_severity %s must be lower than severity %s",
+			det.Name, det.ServiceUnresolvedSeverity, det.Severity)
+	}
+	if det.ServiceUnresolvedMessage == "" {
+		return fmt.Errorf("detection %s: service_unresolved_severity set but service_unresolved_message is missing", det.Name)
+	}
+	return nil
+}
+
+// validateResponse checks det.Response is a known action (or empty/alert-only).
+func validateResponse(det DetectionRule) error {
+	switch det.Response {
+	case "", alert.ActionNone, alert.ActionKillProcess, alert.ActionBlockIP:
+		return nil
+	default:
+		return fmt.Errorf("detection %s: invalid response %q", det.Name, det.Response)
+	}
+}
+
+// validateListRefs checks match/exceptions each specify at least one primitive, and
+// every list name they reference exists.
+func validateListRefs(det DetectionRule, lists map[string][]interface{}) error {
+	if len(det.Match.listRefs()) == 0 {
+		return fmt.Errorf("detection %s: match must specify at least one primitive", det.Name)
+	}
+	refs := det.Match.listRefs()
+	for _, ex := range det.Exceptions {
+		if len(ex.listRefs()) == 0 {
+			return fmt.Errorf("detection %s: empty exception spec", det.Name)
+		}
+		refs = append(refs, ex.listRefs()...)
+	}
+	for _, ref := range refs {
+		if _, ok := lists[ref]; !ok {
+			return fmt.Errorf("detection %s: unknown list reference %q", det.Name, ref)
 		}
 	}
 	return nil

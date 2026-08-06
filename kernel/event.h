@@ -19,10 +19,9 @@
 #define EXEC_PATH_LEN    256 // invoked path — 256 makes basename truncation rare
 #define MAX_FILENAME_LEN 256 // canonical path from bpf_d_path
 #define CGROUP_LEN       128 // leaf cgroup — "cri-containerd-<64hex>.scope" ≈ 85 B; 64 truncates the ID
-#define ARGS_LEN         128 // argv[1:], space-joined, bounded — see MAX_ARGS in execsnoop.bpf.c
+#define ARGS_LEN         128 // argv[1:], one ARG_CHUNK-sized slot per arg — see execsnoop.bpf.c
 #define MAX_ARGS         4   // argv entries read past argv[0] — verifier requires a compile-time bound
-#define ARG_CHUNK        32  // max bytes read per arg — a compile-time constant, not computed
-                              // "remaining space", so the verifier can prove bounds (see execsnoop.bpf.c)
+#define ARG_CHUNK        32  // max bytes read per arg; fixed slot size, not a computed remaining-space value
 
 // ── exec_event — execsnoop.bpf.c (tracepoint/syscalls/sys_enter_execve) ──────
 // Grows past the 512-byte BPF stack limit (see total below) — held in a per-CPU
@@ -43,7 +42,7 @@ struct exec_event {
 	char  exec_path[EXEC_PATH_LEN]; // offset 24  — path as invoked (execve arg 0); T1036/T1059/T1105/T1613
 	char  cgroup[CGROUP_LEN];       // offset 280 — leaf cgroup name; replaces /proc/<pid>/cgroup read
 	__u32 has_tty;                  // offset 408 — 1 = controlling terminal attached (interactive); T1059
-	char  args[ARGS_LEN];           // offset 412 — argv[1:], space-joined, bounded; T1105/T1036
+	char  args[ARGS_LEN];           // offset 412 — argv[1:], fixed-size slots (not joined); T1105/T1036
 	__u32 pad;                      // offset 540 — explicit padding (keeps size an 8-multiple)
 	// total: 408+4+128+4 = 544 bytes
 };

@@ -56,16 +56,11 @@ int tracepoint__syscalls__sys_enter_execve(struct trace_event_raw_sys_enter* ctx
 	// an attacker's shell); NULL = no terminal (health checks, entrypoints, cron). T1059.
 	event->has_tty = BPF_CORE_READ(task, signal, tty) != NULL;
 
-	// argv[1:] into fixed-size, NUL-padded slots — ctx->args[1] is execve's argv array
-	// (a userspace char**); argv[0] is already exec_path, skip it. One ARG_CHUNK-sized
-	// slot per argument, slot i at a COMPILE-TIME CONSTANT offset (i-1)*ARG_CHUNK: with
-	// #pragma unroll, `i` is a distinct constant in each unrolled copy of this loop, so
-	// every array access below is at a statically-known index — nothing for the
-	// verifier to infer, unlike a loop-carried running offset (which it couldn't prove
-	// bounded through the conditional increments, even though the arithmetic was safe).
-	// Not space-joined into one string: harmless for the substring ("contains") match
-	// this field exists for — a flag like "-e" is still found wherever its slot lands;
-	// NUL gaps between slots just mean adjacent args are never accidentally concatenated.
+	// argv[1:] into fixed-size, NUL-padded slots — ctx->args[1] is execve's argv array;
+	// argv[0] is already exec_path, skip it. Slot i is at compile-time-constant offset
+	// (i-1)*ARG_CHUNK — required for the verifier to prove bounds (a runtime-tracked
+	// offset could not, even with masking; see git history). Not space-joined into one
+	// string: harmless for the substring match this field exists for.
 	const char **argv = (const char **) BPF_CORE_READ(ctx, args[1]);
 	#pragma unroll
 	for (int i = 1; i < MAX_ARGS; i++) {

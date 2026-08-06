@@ -163,7 +163,17 @@ type compiledDetection struct {
 	exceptions       []compiledMatch // OR-ed: any spec matching suppresses the rule
 	message          string
 	response         alert.Action // requested response (rules/*.yaml response:); ActionNone = alert only
+
+	// serviceUnresolvedLevel/Message: process rules only. Empty level = no downgrade.
+	// See isServiceUnresolved and checkProcessRules.
+	serviceUnresolvedLevel   alert.Level
+	serviceUnresolvedMessage string
 }
+
+// severityRank orders severities so checkProcessRules can compare a candidate match's
+// effective severity against the best one found so far (see below — declared severity
+// order alone isn't enough once service_unresolved_severity can downgrade a match).
+var severityRank = map[alert.Level]int{alert.Critical: 4, alert.High: 3, alert.Medium: 2, alert.Low: 1}
 
 // excepted reports whether any exception spec matches the event.
 func (c *compiledDetection) excepted(in matchInput) bool {
@@ -222,13 +232,15 @@ func (d *YAMLDetector) compileDetections(dets []rules.DetectionRule) []compiledD
 			response = alert.ActionNone
 		}
 		compiled = append(compiled, compiledDetection{
-			name:             det.Name,
-			level:            det.Severity,
-			requireContainer: det.RequireContainer,
-			match:            d.compileMatch(det.Match),
-			exceptions:       exceptions,
-			message:          det.Message,
-			response:         response,
+			name:                     det.Name,
+			level:                    det.Severity,
+			requireContainer:         det.RequireContainer,
+			match:                    d.compileMatch(det.Match),
+			exceptions:               exceptions,
+			message:                  det.Message,
+			response:                 response,
+			serviceUnresolvedLevel:   det.ServiceUnresolvedSeverity,
+			serviceUnresolvedMessage: det.ServiceUnresolvedMessage,
 		})
 	}
 	return compiled
@@ -471,6 +483,14 @@ func isContainerContext(res workload.ResolveResult) bool {
 	return res.Identity.Runtime == workload.RuntimeDocker || res.Identity.Runtime == workload.RuntimeK8s
 }
 
+// isServiceUnresolved reports whether res is a confirmed container whose real service
+// name isn't known yet — the daemon-cgroup placeholder (PendingContainerService) or a
+// short-id fallback (both start with "container-"; see pkg/workload). Used to downgrade
+// severity for process rules, which don't otherwise carry service (see checkProcessRules).
+func isServiceUnresolved(res workload.ResolveResult) bool {
+	return strings.HasPrefix(res.Identity.Service, "container-")
+}
+
 // isGloballyExcepted checks if event matches any Layer 2 pre-filter exception.
 // Gate 1: Validate parent_context (init or infrastructure)
 // Gate 2: If no file_prefixes, match on process only (don't require file match)
@@ -604,10 +624,22 @@ func (d *YAMLDetector) checkProcessRules(event processor.ProcessEvent, res workl
 	// (CRITICAL → LOW). Container-gated rules only fire for verified containers
 	// (state resolved, runtime docker/k8s); require_container: false rules
 	// (T1036) also cover host and state=unknown processes.
+	//
+	// Doesn't return on first match: service_unresolved_severity can downgrade a
+	// match's effective severity below its declared one, so a later, lower-declared
+	// rule could still produce a stronger effective alert. Tracks the best (highest
+	// effective severity) match instead, breaking early once no remaining rule's
+	// declared severity (its ceiling) could beat it.
 	isVerifiedContainer := isContainerContext(res)
+	unresolvedService := isServiceUnresolved(res)
 	in := matchInput{comm: comm, hasTty: event.HasTty != 0, args: string(event.Args[:])}
+	var best *alert.Alert
+	var bestRank int
 	for i := range d.processDetections {
 		det := &d.processDetections[i]
+		if best != nil && severityRank[det.level] <= bestRank {
+			break
+		}
 		if det.requireContainer && !isVerifiedContainer {
 			continue
 		}
@@ -617,9 +649,20 @@ func (d *YAMLDetector) checkProcessRules(event processor.ProcessEvent, res workl
 		if det.excepted(in) {
 			continue
 		}
-		a := newProcessAlert(event, res, comm, det.level, det.name, det.message)
+		level, message := det.level, det.message
+		if unresolvedService && det.serviceUnresolvedLevel != "" {
+			level, message = det.serviceUnresolvedLevel, det.serviceUnresolvedMessage
+		}
+		if best != nil && severityRank[level] <= bestRank {
+			continue
+		}
+		a := newProcessAlert(event, res, comm, level, det.name, message)
 		a.ResponseAction = det.response
-		return a
+		best = a
+		bestRank = severityRank[level]
+	}
+	if best != nil {
+		return best
 	}
 
 	if res.State == workload.StateUnknown {
