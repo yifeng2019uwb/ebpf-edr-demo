@@ -11,9 +11,10 @@ change more often than this overview.
 ```
 ebpf-edr-demo/
 ├── kernel/                     # eBPF C sensors — telemetry only, no detection logic
-│   ├── execsnoop.bpf.c         # process exec   → ProcessEvent
-│   ├── opensnoop.bpf.c         # file open      → FileEvent
-│   └── lsm-connect.bpf.c       # socket connect → NetEvent
+│   ├── execsnoop.bpf.c         # process exec        → exec_event
+│   ├── lsm-file.bpf.c          # file open (LSM)     → file_event
+│   ├── lsm-connect.bpf.c       # socket connect (LSM)→ net_event
+│   └── event.h                 # shared C structs (mirrored 1:1 in internal/processor)
 ├── cmd/
 │   ├── edr-monitor/            # the agent: load eBPF → enrich → detect → respond → alert
 │   └── alert-router/           # web UI that consumes the Redis alert stream
@@ -41,7 +42,7 @@ ebpf-edr-demo/
 ```
 kernel sensor  ──►  rawCh  ──►  enrich
  (execsnoop /                     │ parse binary event (internal/processor)
-  opensnoop /                     │ resolve workload: mnt_ns → {runtime, service, state}
+  lsm-file /                      │ resolve workload: mnt_ns → {runtime, service, state}
   lsm-connect)                    │ pending namespaces retry within a bounded window
                                   ▼
                              enrichedCh  ──►  YAMLDetector.Detect
@@ -72,7 +73,7 @@ Key properties:
 | Component | What it does | Detail doc |
 |-----------|--------------|-----------|
 | eBPF sensors | capture exec / file-open / connect events | `kernel/*.bpf.c` |
-| Workload resolver | `mnt_ns → identity`, host fast-path, ancestry cache for parent verification | [DESIGN-PROCESS-ANCESTRY-CACHE.md](DESIGN-PROCESS-ANCESTRY-CACHE.md) |
+| Workload resolver | `mnt_ns → identity` via one runtime-agnostic engine (`pkg/workload/resolver_engine.go`), host fast-path, ancestry cache for parent verification | [DESIGN-PROCESS-ANCESTRY-CACHE.md](DESIGN-PROCESS-ANCESTRY-CACHE.md) |
 | Detection rules & policy | layers, per-rule attack→detection, exceptions, gating | [DETECTION-RULES-AND-POLICY.md](DETECTION-RULES-AND-POLICY.md), [MITRE-COVERAGE.md](MITRE-COVERAGE.md) |
 | Response | `kill_process` / `block_ip` via `response:` on YAML detections | `rules/*.yaml`, `pkg/detector/response.go` |
 | Alert sinks | file (+stdout), Supabase (persist), Redis (live, drops LOW) | `pkg/alertsink/` |

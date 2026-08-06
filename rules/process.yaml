@@ -1,5 +1,5 @@
 # Process detections — execsnoop (tracepoint sys_enter_execve).
-# Sees: comm (full exec path), pid, ppid, uid, mnt_ns_id on every execve().
+# Sees: exec_path (path as invoked), pid, ppid, uid, mnt_ns_id, has_tty, args, cgroup per execve().
 #
 # This file is the SOURCE OF TRUTH for process rule matching, severity, and
 # check order. The detector (pkg/detector/yaml_detector.go) evaluates these

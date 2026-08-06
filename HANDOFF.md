@@ -34,6 +34,7 @@ For multi-step work: STOP after each step for user review before starting the ne
 | MITRE technique table + responses | `docs/MITRE-COVERAGE.md` |
 | Throughput / perf state + targets | `docs/PERFORMANCE.md` |
 | Setup / build / deploy / validate / sinks | `docs/SETUP.md` |
+| Behavior module (baseline/deviation scoring) — DRAFT | `docs/BEHAVIOR-MODULE-DESIGN.md` |
 | Open issues / next steps | this file |
 
 **Ground truth (YAML rules + Go engine):** matching, severity, order, and `response:` are

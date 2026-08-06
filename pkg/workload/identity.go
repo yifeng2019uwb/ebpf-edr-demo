@@ -85,6 +85,6 @@ type ResolveResult struct {
 }
 
 type WorkloadResolver interface {
-	Resolve(event interface{}) ResolveResult // EnrichedEvent from pipeline package (avoids circular import)
+	Resolve(event interface{}) ResolveResult // a raw *processor event (implements ResolveInfo); interface{} avoids a circular import
 	Start() error
 }

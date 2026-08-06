@@ -1,5 +1,6 @@
-# File detections — opensnoop (tracepoint sys_enter_openat / sys_exit_openat).
-# Sees: filename, comm, pid, ppid, uid, mnt_ns_id on every successful openat().
+# File detections — lsm-file sensor (lsm.s/file_open for successful opens,
+# do_sys_openat2 kprobe for denials).
+# Sees: filename, comm, pid, ppid, uid, mnt_ns_id, f_mode, cgroup per open.
 #
 # This file is the SOURCE OF TRUTH for file rule matching, severity, and check
 # order. The detector evaluates entries in file order — keep them sorted

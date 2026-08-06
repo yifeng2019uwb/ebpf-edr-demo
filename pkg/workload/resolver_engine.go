@@ -1,14 +1,14 @@
 //go:build linux
 
-// resolver_engine.go — the runtime-agnostic workload resolver (new design).
+// resolver_engine.go — the runtime-agnostic workload resolver.
 //
-// This file is self-contained and does NOT touch the existing DockerResolver /
-// K8sResolver; main.go will switch to the Engine later. The Engine owns everything
+// The Engine is the sole resolver (the former per-runtime DockerResolver/K8sResolver
+// are gone; main.go resolves every event through it). It owns everything
 // runtime-agnostic (the cache, in-flight dedup, host fast path, cgroup→(id,runtime)
 // dispatch); per-runtime metadata lookup is delegated to a RuntimeClient.
 //
 // Layering: pipeline Enricher → WorkloadResolver (interface) → Engine (this) →
-// RuntimeClient (docker / cri). See the design discussion in HANDOFF.
+// RuntimeClient (docker / cri).
 package workload
 
 import (

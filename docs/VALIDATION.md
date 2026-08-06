@@ -1,325 +1,89 @@
-# Validation Guide — eBPF EDR Detection Rules
+# Validation
 
-Manual test procedure to verify each detection rule fires correctly against real container behavior.
-Run on the GCP Docker VM while the EDR agent is running.
+Two automated scripts are the source of truth — they carry the exact attack commands and expected
+alerts, self-documented inline:
 
-Automated: `sudo ./validate.sh` runs the 12 automated tests with concurrent integration
-traffic. Only the T1611 host-reads-container-overlay test remains manual-only (rule disabled
-pending its allowlist — see HANDOFF deferred issues). Note: this doc's T1–T13 sections use the
-ORIGINAL numbering; validate.sh's tests are numbered 1–12 in its own order.
+- **`validate.sh`** — Docker VM, 12 tests, run against the order-processor stack.
+- **`validate-do-k8s.sh`** — DigitalOcean K8s, 11 tests (V2–V12), run against the health-ai stack.
 
----
+This doc is the map: how to run them, what each test covers, and how results are read. When a command
+changes, it changes in the script, not here.
 
-## Test Strategy
-
-Attack tests run while the full order-processor integration test suite runs concurrently in the
-background. This validates two things at once:
-
-1. **Attack detection** — each threat rule fires at the correct severity with the correct response action
-2. **No false positives** — normal API traffic does not produce CRITICAL or HIGH alerts
-
----
-
-## Prerequisites
+## How to run
 
 ```bash
-# EDR agent running
-sudo ./ebpf-edr --runtime=docker
-
-# All order-processor containers running
-docker ps
-
-# Three terminals
-tail -f alerts/alert.log          # Terminal 1: watch alerts live
-tail -f /tmp/integ_tests.log      # Terminal 2: watch integration tests
-sudo ./validate.sh                # Terminal 3: run the 12 automated tests
+sudo ./validate.sh                          # Docker VM (agent + order-processor containers running)
+./validate-do-k8s.sh [--context <ctx>]      # DO K8s (agent DaemonSet + health-ai deployed)
 ```
 
----
-
-## Test Cases
-
-### T1 — Shell Spawn in Container
-
-**MITRE**: T1059.004 · T1609 — Command & Scripting: Unix Shell / Container Administration Command
-
-**Threat**: Attacker achieved RCE inside a container and spawned an interactive shell.
-
-**Command**:
-```bash
-docker exec order-processor-user_service bash -c "id"
-```
-
-**Expected**:
-```
-level=CRITICAL rule=T1059_unix_shell_execution service=user_service comm=/usr/bin/bash
-```
-
----
-
-### T2 — Network Staging Tool in Container
-
-**MITRE**: T1105 · T1095 — Ingress Tool Transfer / Non-Application Layer Protocol
-
-**Threat**: Attacker runs `nc` or `wget` to stage tools or exfiltrate data.
-
-**Command**:
-```bash
-docker exec order-processor-auth_service nc -w 2 1.1.1.1 80
-```
-
-**Expected**:
-```
-level=HIGH rule=T1105_ingress_tool_transfer service=auth_service comm=nc
-```
-
-**Note**: validate.sh copies `nc` from host if not present in container. If neither nc/wget is in the container nor `nc` on the host, the test is silently skipped. Rule correctness confirmed by GKE V8 (wget in auth-service image).
-
----
-
-### T3 — OS Credential Dumping
-
-**MITRE**: T1003.008 — OS Credential Dumping: /etc/shadow
-
-**Threat**: Attacker reads password hashes to crack credentials offline.
-
-**Command**:
-```bash
-docker exec order-processor-order_service cat /etc/shadow
-```
-
-**Expected**:
-```
-level=HIGH rule=T1003_008_os_credential_dumping service=order_service filename=/etc/shadow action=kill_process
-```
-
----
-
-### T4 — Private Key Access
-
-**MITRE**: T1552.004 — Unsecured Credentials: Private Keys
-
-**Threat**: Attacker reads an SSH private key from inside a container.
-
-**Command**:
-```bash
-docker cp /tmp/test_id_rsa order-processor-user_service:/tmp/id_rsa
-docker exec order-processor-user_service cat /tmp/id_rsa
-```
-
-**Expected**:
-```
-level=HIGH rule=T1552_004_private_keys service=user_service filename=/tmp/id_rsa action=kill_process
-```
-
----
-
-### T5 — Unauthorized External Connect + Block Verification
-
-**MITRE**: T1041 · T1048 — Exfiltration Over C2 / Alternative Protocol
-
-**Threat**: Compromised container connects to attacker C2 or exfiltrates data.
-
-**Test includes 3-step verification:**
-
-```
-Step 1: connect to 8.8.8.8 → T1041 alert fires + IP added to blocked_ips BPF map
-Step 2: connect to 8.8.8.8 again → EPERM (blocked at kernel before TCP handshake)
-Step 3: connect to private IP → no EPERM (private IPs never blocked)
-```
-
-**Expected (Step 1)**:
-```
-level=HIGH rule=T1041_exfiltration_over_c2 service=auth_service dst=8.8.8.8:80 action=block_ip
-```
-
-**Expected (Step 2)**: `[Errno 1] Operation not permitted` — no alert (blocked at kernel, no event emitted)
-
-**Expected (Step 3)**: connection refused or timeout — NOT EPERM
-
----
-
-### T6 — Authorized External Connection (No Alert)
-
-**Threat model**: Verify the allowlist works — `inventory_service` is permitted to call CoinGecko.
-
-**Expected**: No alert. HIGH alert would indicate the allowlist is broken.
-
----
-
-### T7 — Host Reads Container Filesystem
-
-**MITRE**: T1611 — Escape to Host
-
-**Threat**: Attacker on the host reads secrets directly from container overlay — bypassing container isolation.
-
-**Command**:
-```bash
-MERGED=$(docker inspect order-processor-order_service --format '{{.GraphDriver.Data.MergedDir}}')
-cat "${MERGED}/etc/hostname"
-```
-
-**Expected**:
-```
-level=CRITICAL rule=T1611_escape_to_host_fs service=host filename=/var/lib/docker/overlay2/.../merged/etc/hostname action=kill_process
-```
-
----
-
-### T8 — System Information Discovery
-
-**MITRE**: T1082 — System Information Discovery
-
-**Threat**: Attacker enumerates user accounts for privilege escalation targets.
-
-**Command**:
-```bash
-docker exec order-processor-insights_service cat /etc/passwd
-```
-
-**Expected**:
-```
-level=MEDIUM rule=T1082_system_info_discovery service=insights_service filename=/etc/passwd
-```
-
-**Note**: MEDIUM because `/etc/passwd` is world-readable. `bash` is whitelisted (reads at startup); `cat` is not.
-
----
-
-### T9 — Binary Masquerading
-
-**MITRE**: T1036 — Masquerading
-
-**Threat**: Attacker drops a malicious binary named after a legitimate process and runs it from `/tmp`.
-
-**Command**:
-```bash
-docker exec order-processor-order_service cp /bin/cat /tmp/sshd
-docker exec order-processor-order_service /tmp/sshd /etc/hostname
-```
-
-**Expected**:
-```
-level=HIGH rule=T1036_masquerading service=order_service comm=/tmp/sshd
-```
-
-**Note**: Two separate `docker exec` calls — avoids `/bin/sh` wrapper which would trigger T1059.
-Masquerading check runs before the process whitelist (`/tmp/sshd` fires even though `sshd` is whitelisted).
-
----
-
-### T10 — Cron Modification
-
-**MITRE**: T1053.003 — Scheduled Task/Job: Cron
-
-**Threat**: Attacker modifies cron to establish persistence inside a container.
-
-**Command**:
-```bash
-echo "* * * * * root /tmp/evil" > /tmp/test_crontab
-docker cp /tmp/test_crontab order-processor-user_service:/etc/crontab
-docker exec order-processor-user_service cat /etc/crontab
-```
-
-**Expected**:
-```
-level=HIGH rule=T1053_003_scheduled_task_cron service=user_service filename=/etc/crontab
-```
-
----
-
-### T11 — Clear Command History
-
-**MITRE**: T1070.003 — Indicator Removal: Clear Command History
-
-**Threat**: Attacker covers tracks by accessing or clearing shell history.
-
-**Command**:
-```bash
-echo "rm -rf /important" > /tmp/bash_hist
-docker cp /tmp/bash_hist order-processor-insights_service:/tmp/.bash_history
-docker exec order-processor-insights_service cat /tmp/.bash_history
-```
-
-**Expected**:
-```
-level=MEDIUM rule=T1070_003_clear_command_history service=insights_service filename=/tmp/.bash_history
-```
-
-### T12 — Credentials in Files
-
-**MITRE**: T1552.001 — Unsecured Credentials: Credentials in Files
-
-**Threat**: Attacker finds an unencrypted `.env` file inside a container containing database passwords or API keys.
-
-**Command**:
-```bash
-echo "DB_PASSWORD=super_secret_password" > /tmp/app.env
-docker cp /tmp/app.env order-processor-user_service:/tmp/app.env
-docker exec order-processor-user_service cat /tmp/app.env
-```
-
-**Expected**:
-```
-level=HIGH rule=T1552_001_credentials_in_files service=user_service filename=/tmp/app.env
-```
-
-**Why it fires**: `/tmp/app.env` matches the `.env` suffix in `t1552CredentialFileSuffixes`. Docker cp places the file; docker exec cat opens it — `lsm/file_open` fires on the successful open.
-
----
-
-### T13 — Container Resource Discovery
-
-**MITRE**: T1613 — Container and Resource Discovery
-
-**Threat**: Attacker inside a container runs a container management tool (`docker`, `kubectl`, `crictl`) to enumerate the surrounding container environment and discover lateral movement targets.
-
-**Command**:
-```bash
-docker cp $(which docker) order-processor-auth_service:/usr/local/bin/docker
-docker exec order-processor-auth_service /usr/local/bin/docker ps
-```
-
-**Expected**:
-```
-level=HIGH rule=T1613_container_resource_discovery service=auth_service comm=/usr/local/bin/docker
-```
-
-**Note**: The `docker ps` command fails at runtime (no socket mounted in container) but the execve fires the process event before any I/O. `/usr/local/bin/docker` matches the `/docker` suffix in `t1613ContainerMgmtTools`.
-
----
-
-## Results Checklist
-
-**Attack detection:**
-
-- [x] T1  — CRITICAL `T1059_unix_shell_execution`
-- [ ] T2  — HIGH `T1105_ingress_tool_transfer` — in `validate.sh` (T11: host binary staged as `wget` via docker cp, exec fires the rule)
-- [x] T3  — HIGH `T1003_008_os_credential_dumping` + kill_process
-- [x] T4  — HIGH `T1552_004_private_keys` + kill_process
-- [x] T5  — HIGH `T1041_exfiltration_over_c2` + block_ip (EPERM on retry verified)
-- [ ] T6  — No alert (inventory_service allowlisted — correct) — in `validate.sh` (T12, `expect_no_alert`; SKIPs if container not running)
-- [ ] T7  — CRITICAL `T1611_escape_to_host_fs` — not in `validate.sh` (rule disabled pending allowlist)
-- [x] T8  — MEDIUM `T1082_system_info_discovery`
-- [x] T9  — HIGH `T1036_masquerading`
-- [x] T10 — HIGH `T1053_003_scheduled_task_cron`
-- [x] T11 — MEDIUM `T1070_003_clear_command_history`
-- [x] T12 — HIGH `T1552_001_credentials_in_files` `.env` file (user_service)
-- [x] T13 — HIGH `T1613_container_resource_discovery` docker in container (auth_service)
-
-**False positive check — confirmed clean:**
-
-- [x] No CRITICAL alerts from normal API traffic
-- [x] No HIGH alerts from normal API traffic
-- [x] Integration tests pass (services remain healthy under EDR observation)
-
----
-
-## Out of Scope
-
-| Scenario | Why excluded |
-|----------|-------------|
-| SSH login detection | Host-level auth — outside container threat model |
-| Container escape via kernel exploit | Requires real CVE — impractical to simulate safely |
-| Scripting interpreter (python -c) | High FP risk — Python service processes are legitimate |
-| Network service scanning (burst) | Requires stateful detection — sliding window counter |
+Both run attack cases while normal traffic runs concurrently, validating two things at once:
+**detection** (each rule fires at the right severity/response) and **no false positives** (normal
+traffic produces no CRITICAL/HIGH). Each prints `PASS` / `FAIL` / `SKIP` and a summary.
+
+Alerts are matched by tailing the alert log (Docker) or `kubectl logs` (K8s), scoped to a timestamp
+captured at test start — so a run never matches stale alerts from a previous run.
+
+## Docker matrix — `validate.sh`
+
+Tests are spread across services to confirm the resolver identifies each one.
+
+| # | Technique | Service | Expected | Response |
+|---|-----------|---------|----------|----------|
+| T1 | T1059.004 / T1609 shell spawn | user_service | CRITICAL `T1059_unix_shell_execution` | — |
+| T2 | T1003.008 `/etc/shadow` | order_service | CRITICAL `T1003_008_os_credential_dumping` | kill_process |
+| T3 | T1552.004 SSH key (`/tmp/id_rsa`) | user_service | HIGH `T1552_004_private_keys` | kill_process |
+| T4 | T1041 / T1048 external connect + block | auth_service | HIGH `T1041_exfiltration_over_c2` | block_ip |
+| T5 | T1082 `/etc/passwd` | insights_service | MEDIUM `T1082_system_info_discovery` | — |
+| T6 | T1036 masquerade (`/tmp/sshd`) | order_service | HIGH `T1036_masquerading` | — |
+| T7 | T1053.003 `/etc/crontab` | user_service | HIGH `T1053_003_scheduled_task_cron` | — |
+| T8 | T1070.003 `/tmp/.bash_history` | insights_service | MEDIUM `T1070_003_clear_command_history` | — |
+| T9 | T1552.001 `.env` (`/tmp/app.env`) | user_service | HIGH `T1552_001_credentials_in_files` | — |
+| T10 | T1613 container-mgmt tool (docker) | auth_service | HIGH `T1613_container_resource_discovery` | — |
+| T11 | T1105 / T1095 ingress tool (wget) | auth_service | HIGH `T1105_ingress_tool_transfer` | — |
+| T12 | allowlist check — external connect | inventory_service | **no alert** (T1041 suppressed) | — |
+
+Behaviors worth knowing when reading the script:
+- **T1 uses `docker exec -t`** — T1059 now gates on `tty_required`, so an attached pseudo-TTY is
+  needed to fire (a non-interactive `sh -c` is intentionally *not* flagged).
+- **File tests (T3, T7, T8, T9) stage the file with `docker cp`, then `docker exec cat`** — creating
+  it via a shell would spawn bash (T1059) and, for kill-response rules, get killed before the write.
+- **T11 uses wget** (a `download_tools` suffix match) staged via `docker cp` — nc/ncat would need a
+  reverse-shell flag (`-e`) to fire under the tightened rule, so wget is the simpler trigger.
+- **T4 also verifies kernel blocking**: reconnect to the same IP must return `EPERM`, a private IP
+  must not. (Only effective once the `blocked_ips` map is compiled — otherwise alert-only.)
+
+## K8s matrix — `validate-do-k8s.sh` (namespace `health-ai`)
+
+| # | Technique | Service | Expected |
+|---|-----------|---------|----------|
+| V2 | T1059 shell spawn | provider-service | CRITICAL `T1059_unix_shell_execution` |
+| V3 | T1003.008 `/etc/shadow` | auth-service | CRITICAL `T1003_008_os_credential_dumping` (killed) |
+| V4 | T1041 external connect (8.8.8.8) | gateway | HIGH `T1041_exfiltration_over_c2` |
+| V5 | allowlist passive check | ai-service | **no HIGH** for allowed external connect |
+| V6 | normal-traffic FP check | gateway | **no CRITICAL** from real traffic |
+| V7 | T1552.004 SSH key (`/root/.ssh/id_rsa`) | provider-service | CRITICAL `T1552_004_private_keys` (killed) |
+| V8 | T1105 network recon tool (external connect) | auth-service | HIGH `T1041_exfiltration_over_c2` — SKIP if wget/nc absent |
+| V9 | T1082 `/etc/passwd` | gateway | MEDIUM `T1082_system_info_discovery` |
+| V10 | reverse shell | auth-service | CRITICAL `T1059` **and** HIGH `T1041` |
+| V11 | T1552.001 `.env` (`/tmp/app.env`) | provider-service | HIGH `T1552_001_credentials_in_files` |
+| V12 | T1613 container-mgmt tool (kubectl) | gateway | HIGH `T1613_container_resource_discovery` |
+
+## Not automated
+
+- **T1611 host-reads-container-overlay** (`T1611_escape_to_host_fs`) — the rule is disabled pending
+  its host allowlist (see HANDOFF deferred issues), so no script exercises it. When re-enabled, the
+  manual trigger is a host read of a container's overlay merged dir:
+
+  ```bash
+  MERGED=$(docker inspect order-processor-order_service --format '{{.GraphDriver.Data.MergedDir}}')
+  cat "${MERGED}/etc/hostname"   # expect (when active): CRITICAL T1611_escape_to_host_fs
+  ```
+
+## Out of scope
+
+| Scenario | Why |
+|----------|-----|
+| SSH login detection | Host-level auth — outside the container threat model |
+| Container escape via kernel CVE | Requires a real exploit — impractical to simulate safely |
+| Scripting interpreter (`python -c`) | High FP risk on legitimate Python services |
+| Network service scanning (burst) | Needs stateful sliding-window detection |
