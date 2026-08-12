@@ -34,6 +34,9 @@ logs/
 # Ignore .env file with secrets (track .env.example instead)
 infra/.env
 
+# --- Test / Coverage Output ---
+coverage.out
+
 # --- Temporary Files ---
 *.tmp
 *.bak

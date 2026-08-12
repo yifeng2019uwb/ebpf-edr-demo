@@ -18,6 +18,7 @@ import (
 
 	"ebpf-edr-demo/internal/alert"
 	"ebpf-edr-demo/internal/config"
+	"ebpf-edr-demo/internal/dedup"
 	"ebpf-edr-demo/internal/processor"
 	"ebpf-edr-demo/pkg/alertsink"
 	"ebpf-edr-demo/pkg/bpf"
@@ -36,43 +37,20 @@ const (
 	enrichedChCap = 32768 // post-enrichment buffer
 	alertChCap    = 8096  // alerts are rare, but may have many Low/Info telemetry
 
-	// fileDedupWindow deduplicates file events from the same process within this window.
-	// Why: multi-threaded processes open the same file once per thread (N threads = N openat
-	// events from the sensor). From the detection perspective the file open happened once;
-	// threads share file descriptors & RAM. Keep only the first occurrence within the window.
+	// fileDedupWindow collapses repeated opens of the same file by the same process
+	// within this window (internal/dedup explains why).
 	fileDedupWindow = time.Second
+
+	// fileDedupSweepInterval evicts expired dedup entries. Kept near fileDedupWindow:
+	// entries older than the window can never suppress anything again, so a longer
+	// interval only raises how many dead entries are held at once.
+	fileDedupSweepInterval = 10 * time.Second
 
 	cacheCleanUpWorkerInterval = 5 * time.Minute
 
 	// Graceful shutdown timings
-	shutdownWaitInterval = 100 * time.Millisecond // time for goroutines to finish between channel closes
+	shutdownWaitInterval = 100 * time.Millisecond // drain time between pipeline stages
 )
-
-// fileDedupKey is {process, path} — deliberately NO comm. The sensor's pid is the
-// tgid (same for every thread of a process), but its comm is the THREAD name
-// (bpf_get_current_comm), so differently-named threads of one process opening the
-// same file used to produce distinct keys and double-fire alerts ~80ms apart.
-// Filename is the CString form, NOT the raw [N]byte: trailing bytes after the
-// null differ between events for the same open, defeating byte-array dedup.
-type fileDedupKey struct {
-	Pid      uint32
-	Filename string
-}
-
-const fileDedupShards = 32 // shard count: distributes lock contention across cores
-
-type fileDedupShard struct {
-	mu   sync.Mutex
-	seen map[fileDedupKey]time.Time
-}
-
-var fileDedupShards_array [fileDedupShards]fileDedupShard
-
-func init() {
-	for i := range fileDedupShards_array {
-		fileDedupShards_array[i].seen = make(map[fileDedupKey]time.Time)
-	}
-}
 
 type pendingEntry struct {
 	ev        pipeline.EnrichedEvent
@@ -85,15 +63,16 @@ func main() {
 	// Load configuration from environment
 	cfg := config.Load()
 
-	// Alert Sink Initialization
+	// Alert Sink Initialization. Both the handler and the loader are closed explicitly
+	// in the shutdown sequence at the end of main, which has to order them against the
+	// pipeline goroutines — so no defer here (a defer would close them a second time,
+	// and log.Fatalf below skips defers anyway).
 	handler := initAlertHandler(cfg)
-	defer handler.Close()
 
 	loader, err := bpf.Load()
 	if err != nil {
 		log.Fatalf("loading eBPF programs: %v", err)
 	}
-	defer loader.Close()
 
 	// Create the runtime-agnostic resolver engine (multi-runtime: docker + k8s/cri,
 	// clients created lazily on first sight of a runtime's cgroup).
@@ -151,8 +130,10 @@ func main() {
 	ancestry.Bootstrap()
 	det.SetAncestryCache(ancestry)
 
+	fileDedup := dedup.New(fileDedupWindow)
+
 	// Start Readers
-	startEBPFReaders(loader, rawCh, &rawDropped)
+	readersDone := startEBPFReaders(loader, rawCh, &rawDropped)
 
 	// 3. Enricher Loop
 	startEnricherWorker(
@@ -165,6 +146,7 @@ func main() {
 		pendingBuf,
 		&enrichedDropped,
 		&resolvedEvents,
+		fileDedup,
 	)
 
 	// 4. Retry Pending Events
@@ -179,6 +161,7 @@ func main() {
 
 	// 5. Cache Cleanup
 	startCacheCleanupWorker(ancestry, engine)
+	startFileDedupSweeper(fileDedup)
 
 	// 6 Detector & Responder Routing
 	startDetectorAndResponder(enrichedCh, alertCh, det, responder, &alertDropped)
@@ -193,16 +176,26 @@ func main() {
 	log.Printf("shutdown: resolved=%d (dropped: raw=%d enriched=%d alert=%d unknown=%d)",
 		resolvedEvents.Load(), rawDropped.Load(), enrichedDropped.Load(), alertDropped.Load(), unknownNs.Load())
 
-	// Graceful shutdown: close channels in order (stops goroutines from top to bottom)
-	close(rawCh)                     // Stop event readers → enricher stops receiving
-	time.Sleep(shutdownWaitInterval) // Let enricher finish processing
-	close(enrichedCh)                // Stop enricher → detector stops receiving
-	time.Sleep(shutdownWaitInterval) // Let detector finish processing
-	close(alertCh)                   // Stop handler
-
-	// Close resources
-	handler.Close()
+	// Graceful shutdown, in dependency order. Closing a channel while a producer is
+	// still sending panics, so each stage stops its producers before closing:
+	//
+	//  1. Close the loader — the ring-buffer reads fail with os.ErrClosed and every
+	//     reader goroutine returns. Without this, readers keep sending into rawCh.
+	//  2. Wait for the readers to actually exit, then close rawCh. The enricher drains
+	//     what is buffered and leaves its range loop.
+	//  3. Give the enricher → detector → handler stages time to drain.
+	//
+	// enrichedCh and alertCh are deliberately left open: their producers are still
+	// running during the drain, so closing them would reintroduce the same panic, and
+	// nothing waits on them — the process is exiting. This makes the drain best-effort;
+	// events still in flight past the drain window are lost rather than flushed.
 	loader.Close()
+	readersDone.Wait()
+	close(rawCh)
+	time.Sleep(shutdownWaitInterval) // enricher → detector
+	time.Sleep(shutdownWaitInterval) // detector → alert handler
+
+	handler.Close()
 }
 
 // initAlertHandler: initializes and builds the complete slice of alert sinks
@@ -247,8 +240,10 @@ type eventReader struct {
 }
 
 // startEBPFReaders orchestrates the initialization and background worker loops
-// for reading raw samples from the eBPF ring buffers.
-func startEBPFReaders(loader *bpf.Loader, rawCh chan<- pipeline.RawEvent, rawDropped *atomic.Int64) {
+// for reading raw samples from the eBPF ring buffers. The returned WaitGroup
+// completes once every reader has stopped, which shutdown waits on before closing
+// rawCh — closing it while a reader is still sending would panic.
+func startEBPFReaders(loader *bpf.Loader, rawCh chan<- pipeline.RawEvent, rawDropped *atomic.Int64) *sync.WaitGroup {
 	readers := []eventReader{
 		{pipeline.SourceExecsnoop, logNameProcess, func() ([]byte, error) {
 			rec, err := loader.ProcessRd.Read()
@@ -273,9 +268,15 @@ func startEBPFReaders(loader *bpf.Loader, rawCh chan<- pipeline.RawEvent, rawDro
 		}},
 	}
 
+	var wg sync.WaitGroup
 	for _, cfg := range readers {
-		go startEventReader(cfg, rawCh, rawDropped)
+		wg.Add(1)
+		go func(cfg eventReader) {
+			defer wg.Done()
+			startEventReader(cfg, rawCh, rawDropped)
+		}(cfg)
 	}
+	return &wg
 }
 
 // startEnricherWorker runs the pipeline worker responsible for intercepting raw eBPF events,
@@ -291,6 +292,7 @@ func startEnricherWorker(
 	pendingBuf map[uint32][]pendingEntry,
 	enrichedDropped *atomic.Int64,
 	resolvedEvents *atomic.Int64,
+	fileDedup *dedup.Cache,
 ) {
 	go func() {
 		for raw := range rawCh {
@@ -312,29 +314,17 @@ func startEnricherWorker(
 				continue
 			}
 
+			// runc:[…] container-init events skip dedup: runc reads /etc/passwd +
+			// /etc/group for user lookup and then execs into the target binary under the
+			// SAME pid, so recording them would dedup-shadow the target's own first read
+			// of those files (T1082 would miss `cat /etc/passwd`). They are
+			// detector-whitelisted anyway (whitelisted_file_access_procs), so skipping
+			// dedup for them costs nothing.
 			if ev.Type == pipeline.FileEventType &&
 				!strings.HasPrefix(processor.CString(ev.File.Comm[:]), "runc:[") {
-				// Dedup file events: multi-threaded processes open the same file once per thread.
-				// Sharded locks (32 shards indexed by PID) reduce contention on multi-core systems.
-				// runc:[…] container-init events are excluded: runc reads /etc/passwd + /etc/group
-				// for user lookup and then execs into the target binary under the SAME pid, so
-				// recording them would dedup-shadow the target's own first read of those files
-				// (T1082 would miss `cat /etc/passwd`). They are detector-whitelisted anyway
-				// (whitelisted_file_access_procs), so skipping dedup for them costs nothing.
-				key := fileDedupKey{
-					Pid:      uint32(ev.File.Pid),
-					Filename: processor.CString(ev.File.Filename[:]),
-				}
-				shardIdx := uint32(ev.File.Pid) % fileDedupShards
-				shard := &fileDedupShards_array[shardIdx]
-				shard.mu.Lock()
-				last, seen := shard.seen[key]
-				if seen && time.Since(last) < fileDedupWindow {
-					shard.mu.Unlock()
+				if fileDedup.Seen(uint32(ev.File.Pid), processor.CString(ev.File.Filename[:]), time.Now()) {
 					continue
 				}
-				shard.seen[key] = time.Now()
-				shard.mu.Unlock()
 			}
 
 			// Pending workload: resolver couldn't identify container yet (State=Pending).
@@ -472,6 +462,21 @@ func startPendingRetryWorker(
 	}()
 }
 
+// startFileDedupSweeper evicts expired entries from the file-dedup cache. Kept on its
+// own short ticker rather than folded into startCacheCleanupWorker: dedup entries stop
+// being useful after fileDedupWindow (1s), so sweeping them on the 5-minute cache
+// interval would retain five minutes of dead keys — millions of them under load.
+func startFileDedupSweeper(fileDedup *dedup.Cache) {
+	go func() {
+		ticker := time.NewTicker(fileDedupSweepInterval)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			fileDedup.Sweep(time.Now())
+		}
+	}()
+}
+
 // startCacheCleanupWorker runs a background routine that periodically evicts
 // dead or expired entries from the process ancestry cache and the resolver's
 // workload cache (destroyed containers whose namespace no longer has a live process).
@@ -534,14 +539,14 @@ func startAlertHandlerWorker(alertCh <-chan alert.Alert, handler *alert.Handler)
 	}()
 }
 
+// enrich maps a raw record onto its event struct and resolves its workload.
+// No length check: each sensor reserves exactly sizeof(struct) and the ringbuf returns
+// a sample of exactly that length, so the only way it could be short is a drift between
+// kernel/event.h and internal/processor — a build problem, not a runtime one.
 func enrich(raw pipeline.RawEvent, r workload.WorkloadResolver) *pipeline.EnrichedEvent {
 	switch raw.Source {
 
 	case pipeline.SourceExecsnoop:
-		if len(raw.Data) < int(unsafe.Sizeof(processor.ProcessEvent{})) {
-			log.Printf("enrich: execsnoop event too small: %d bytes", len(raw.Data))
-			return nil
-		}
 		ev := (*processor.ProcessEvent)(unsafe.Pointer(&raw.Data[0]))
 		enriched := &pipeline.EnrichedEvent{
 			Type:      pipeline.ProcessEventType,
@@ -552,10 +557,6 @@ func enrich(raw pipeline.RawEvent, r workload.WorkloadResolver) *pipeline.Enrich
 		return enriched
 
 	case pipeline.SourceOpensnoop:
-		if len(raw.Data) < int(unsafe.Sizeof(processor.FileEvent{})) {
-			log.Printf("enrich: opensnoop event too small: %d bytes", len(raw.Data))
-			return nil
-		}
 		ev := (*processor.FileEvent)(unsafe.Pointer(&raw.Data[0]))
 		enriched := &pipeline.EnrichedEvent{
 			Type:      pipeline.FileEventType,
@@ -566,10 +567,6 @@ func enrich(raw pipeline.RawEvent, r workload.WorkloadResolver) *pipeline.Enrich
 		return enriched
 
 	case pipeline.SourceNetConnect:
-		if len(raw.Data) < int(unsafe.Sizeof(processor.NetEvent{})) {
-			log.Printf("enrich: lsm-connect event too small: %d bytes", len(raw.Data))
-			return nil
-		}
 		ev := (*processor.NetEvent)(unsafe.Pointer(&raw.Data[0]))
 		enriched := &pipeline.EnrichedEvent{
 			Type:      pipeline.NetEventType,

@@ -20,10 +20,13 @@ rebuild: generate build
 
 ## test — run unit tests for non-BPF packages and show coverage
 test:
-	go test -v -count=1 -coverprofile=coverage.out ./internal/... ./pkg/detector/...
+	go test -race -v -count=1 -coverprofile=coverage.out ./internal/... ./pkg/detector/... ./pkg/rules/... ./pkg/workload/...
 	go tool cover -func=coverage.out
 
 ## vet — run go vet on non-BPF packages (safe on any Linux host)
+## cmd/edr-monitor is excluded: it embeds the generated pkg/bpf/*.o objects, which are
+## gitignored, so it cannot be vetted from a fresh clone. Run `make generate` first,
+## then `go vet ./cmd/...` to include it.
 vet:
 	go vet ./internal/... ./pkg/detector/... ./pkg/workload/... ./pkg/pipeline/...
 
@@ -35,11 +38,12 @@ clean:
 run_ebpf:
 	@sudo bpftool link list | awk '/^[0-9]+: tracing/{id=$$1; sub(":","",id)} /lsm_mac/{print id}' | \
 	  xargs -I{} sudo bpftool link detach id {} 2>/dev/null || true
-	sudo env GOOGLE_CLOUD_PROJECT=ebpfagent ./bin/$(BINARY) --runtime=docker
+	sudo env GOOGLE_CLOUD_PROJECT=ebpfagent ./bin/$(BINARY)
 
 ## run-docker — run the EDR agent on the Docker VM (sets GOOGLE_CLOUD_PROJECT, must run as root)
+## The agent takes no flags — runtime is auto-detected per cgroup by pkg/workload.Engine.
 run-docker:
-	sudo env GOOGLE_CLOUD_PROJECT=ebpfagent ./bin/$(BINARY) --runtime=docker
+	sudo env GOOGLE_CLOUD_PROJECT=ebpfagent ./bin/$(BINARY)
 
 ## run-alert-router — run the Alert Router on laptop (open http://localhost:8888)
 run-alert-router:
