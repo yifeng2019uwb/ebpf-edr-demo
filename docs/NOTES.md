@@ -16,7 +16,7 @@
 - 🔲 Stateful detection (Phase 2: T1046 network scanning, T1059 scripting interpreter)
 - 🔲 Behavioral/anomaly detection (planned for Central Control Service)
 
-**Next Evaluation:** See [CAPABILITY_CONSIDERATIONS.md](../../CAPABILITY_CONSIDERATIONS.md) — checkpoint document for deciding which capabilities to add next (command-line args, DNS monitoring, behavioral baselines, anomaly detection, etc.)
+**Next Evaluation:** See [CAPABILITY_CONSIDERATIONS.md](CAPABILITY_CONSIDERATIONS.md) — checkpoint document for deciding which capabilities to add next (command-line args, DNS monitoring, behavioral baselines, anomaly detection, etc.). Superseded by the archive decision — see [HANDOFF.md](../HANDOFF.md).
 
 ---
 
@@ -76,8 +76,8 @@ Each alert line contains:
 ### Agent not starting
 
 ```bash
-# Check if eBPF programs load
-sudo ./ebpf-edr --runtime=docker
+# Check if eBPF programs load (the agent takes no flags)
+sudo ./ebpf-edr
 
 # Common errors:
 # - BPF verifier: unsupported instruction — Linux kernel too old
@@ -94,7 +94,9 @@ sudo ./ebpf-edr --runtime=docker
 
 ### High false positive rate
 
-See [DETECTION-POLICY.md](DETECTION-POLICY.md) — update whitelists in `pkg/detector/policy.go`
+See [DETECTION-RULES-AND-POLICY.md](DETECTION-RULES-AND-POLICY.md) — whitelists are YAML lists in
+`rules/common.yaml` (there is no `pkg/detector/policy.go`; the engine is
+`pkg/detector/yaml_detector.go`)
 
 ---
 

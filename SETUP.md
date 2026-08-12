@@ -17,7 +17,7 @@ go mod tidy
 make generate   # compile eBPF programs
 ```
 
-See: [DEPLOYMENT.md](DEPLOYMENT.md) for detailed environment setup
+See: [DEPLOYMENT.md](docs/DEPLOYMENT.md) for detailed environment setup
 
 ---
 
@@ -46,7 +46,7 @@ bash scripts/deploy-ebpf-k8s.sh
 - If agent code changed → `make docker-push-ghcr` then `bash scripts/deploy-ebpf-k8s.sh`
 - If only config/rules changed → just `bash scripts/deploy-ebpf-k8s.sh` (no rebuild needed)
 
-See: [DEPLOYMENT.md](DEPLOYMENT.md#digitalocean-kubernetes)
+See: [DEPLOYMENT.md](docs/DEPLOYMENT.md#digitalocean-kubernetes)
 
 ### Local Docker VM testing
 
@@ -55,7 +55,7 @@ make run-docker
 tail -f alerts/alert.log
 ```
 
-See: [DEPLOYMENT.md](DEPLOYMENT.md#local-docker-vm)
+See: [DEPLOYMENT.md](docs/DEPLOYMENT.md#local-docker-vm)
 
 ---
 
@@ -69,7 +69,7 @@ DATABASE_URL=postgres://...pooler.supabase.com:6543
 DATABASE_KEY=...
 ```
 
-See: [DEPLOYMENT.md](DEPLOYMENT.md#configuration)
+See: [DEPLOYMENT.md](docs/DEPLOYMENT.md#configuration)
 
 ---
 
@@ -94,10 +94,10 @@ rules/           → Detection rules in YAML
 
 | Change Type         | Command             | See                              |
 |---------------------|---------------------|---------------------------------|
-| BPF C code          | `make rebuild`      | [DEPLOYMENT.md](DEPLOYMENT.md)   |
-| Go code only        | `make build`        | [DEPLOYMENT.md](DEPLOYMENT.md)   |
+| BPF C code          | `make rebuild`      | [DEPLOYMENT.md](docs/DEPLOYMENT.md)   |
+| Go code only        | `make build`        | [DEPLOYMENT.md](docs/DEPLOYMENT.md)   |
 | Detection rules     | Edit `rules/*.yaml`  | [HANDOFF.md](HANDOFF.md)   |
-| DaemonSet config    | Edit `k8s/ebpf-edr-ds.yaml` | [DEPLOYMENT.md](DEPLOYMENT.md) |
+| DaemonSet config    | Edit `k8s/ebpf-edr-ds.yaml` | [DEPLOYMENT.md](docs/DEPLOYMENT.md) |
 
 ---
 
@@ -124,7 +124,7 @@ redis-cli -u redis://... SUBSCRIBE edr-alerts
 
 ## Documentation
 
-- **[DEPLOYMENT.md](DEPLOYMENT.md)** — Full deployment guide (K8s, Docker, config)
+- **[DEPLOYMENT.md](docs/DEPLOYMENT.md)** — Full deployment guide (K8s, Docker, config)
 - **[HANDOFF.md](HANDOFF.md)** — Session progress, architecture, known issues
 - **[rules/](rules/)** — Detection rules (self-documented): per-sensor detections in
   `process.yaml`/`file.yaml`/`network.yaml`, shared lists in `common.yaml`

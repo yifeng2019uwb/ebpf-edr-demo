@@ -21,7 +21,7 @@ this doc, when a command changes.
 
 ```bash
 make build     # cross-compile linux/amd64 → bin/ebpf-edr (any host)
-make test      # unit tests + coverage (internal/…, pkg/detector/…)
+make test      # unit tests (see the Makefile for the package list)
 make vet       # go vet on the non-BPF packages
 ```
 

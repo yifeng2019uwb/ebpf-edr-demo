@@ -23,9 +23,15 @@ event deserialization, zero-allocation line scanning, and the async resolver wor
 
 ---
 
-## What we measure today
+## What we measured
 
-Per event source, a 10s ticker in `startEventReader` (`cmd/edr-monitor/main.go`) logs a coarse
+> **The instrumentation described here no longer exists.** The 10s throughput ticker was removed
+> in the 2026-08-12 close-out along with the rest of the `DEBUG:` logging. The measurements below
+> are kept as the record of what was actually observed; to reproduce them you would need to
+> reinstate the counter in `startEventReader`. What remains at runtime is the one-line summary
+> printed on shutdown.
+
+Per event source, a 10s ticker in `startEventReader` (`cmd/edr-monitor/main.go`) logged a coarse
 throughput line to stdout:
 
 ```

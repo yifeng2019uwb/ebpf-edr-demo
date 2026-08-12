@@ -1,30 +1,24 @@
-# Project Handoff — Current Status
+# Project Handoff — Archived
 
-**Last Updated:** 2026-08-05
+**Last Updated:** 2026-08-12
 
-**Status:** Detection + response engine working on both Docker VM (`validate.sh`) and DO K8s
-(`validate-do-k8s.sh`). Trusted-app whitelist (service + scoped actions) is the main
-**not-yet-built** feature — see **Active design** below.
+**Status: closed.** The detection + response engine works and was validated on both the Docker VM
+(`validate.sh`) and DigitalOcean Kubernetes (`validate-do-k8s.sh`). Development stopped here
+deliberately — not because the remaining work was uninteresting, but because the DigitalOcean
+credit expires 2026-08-16 and with it the only real test environment. A runtime security agent
+cannot be changed responsibly without somewhere to run it, so the code was frozen at a working
+state rather than accumulating unvalidated changes.
 
-**Deadline: DO credit expires 2026-08-16.** Prioritizing finishing the rest of the project over
-polishing already-working parts — known, non-blocking gaps are deliberately left for later.
+Effort moved upstream instead: contributing to `cilium/ebpf` (the library this project already
+depends on) and reading Tetragon, where the same problems are solved at production scale.
 
-For multi-step work: STOP after each step for user review before starting the next.
-
-## Notes — pending discussion, not started
-
-- **Wire in `runtime.MemStats` periodic logging** — add a lightweight ticker (matching the
-  existing 10s DEBUG pattern in `startEventReader`, `cmd/edr-monitor/main.go`) logging
-  `Alloc`/`Sys`/`HeapObjects`/`NumGC`/goroutine count, so the next load test round produces
-  real heap composition data instead of struct-size estimates (see `docs/PERFORMANCE.md`).
-- **`StatePending` retry window (3s × 20 = 60s, `cmd/edr-monitor/main.go:32-34`)** — is 60s too
-  conservative? Covers K8s cold-start latency (image pull + init containers), not resolver
-  compute time; shortening trades faster resolution for more false CRITICAL
-  `unknown_namespace_process` alerts on legitimately slow-starting pods. Not decided.
+**This file is the record of what works, what does not, and why.** Known gaps below are stated
+plainly rather than hidden — several are things production EDRs solve differently, and the
+comparison is the most useful part of the project.
 
 ---
 
-## Doc map — read these, don't re-derive from code
+## Doc map
 
 | Need | Source of truth |
 |---|---|
@@ -32,148 +26,144 @@ For multi-step work: STOP after each step for user review before starting the ne
 | Detection rules + policy layers (per-rule) | `docs/DETECTION-RULES-AND-POLICY.md` |
 | Parent verification / ancestry cache | `docs/DESIGN-PROCESS-ANCESTRY-CACHE.md` |
 | MITRE technique table + responses | `docs/MITRE-COVERAGE.md` |
-| Throughput / perf state + targets | `docs/PERFORMANCE.md` |
-| Setup / build / deploy / validate / sinks | `docs/SETUP.md` |
-| Behavior module (baseline/deviation scoring) — DRAFT | `docs/BEHAVIOR-MODULE-DESIGN.md` |
-| Open issues / next steps | this file |
+| Throughput / perf state | `docs/PERFORMANCE.md` |
+| Setup / build / deploy / validate / sinks | `docs/SETUP.md`, `docs/DEPLOYMENT.md` |
+| Behavior module (baseline/deviation scoring) — DRAFT, never built | `docs/BEHAVIOR-MODULE-DESIGN.md` |
 
-**Ground truth (YAML rules + Go engine):** matching, severity, order, and `response:` are
-declared in `rules/process.yaml` / `file.yaml` / `network.yaml` (per-sensor detections);
-`rules/common.yaml` holds shared lists + Layer 1/2 config. `pkg/detector/yaml_detector.go` is
-the engine (plus Go-only pipeline logic: ppid==1 skip, ancestry walk, telemetry);
-`pkg/detector/response.go` executes responses. Resolver is `pkg/workload/`; sink/env config is
-`internal/config/config.go`.
-
-**Deploy flows:** health-ai `kubernetes/deploy.sh app-deploy`/`ebpf-deploy` refreshes the
-`ebpf-alerts` ConfigMap/Secret from this repo's `infra/.env` (`_ensure_ebpf_config`) and applies
-the local DS manifest. The standalone `scripts/deploy-ebpf-k8s.sh` does the same but curls the
-manifest from GitHub main — keep the two scripts' ConfigMap keys in sync.
-
-**Hard constraints (also in CLAUDE.md):** never run git; never edit `.bpf.c`; never edit
-`infra/.env` (secrets — user edits on the VM); no TODO / future-commitment comments.
+**Ground truth (YAML rules + Go engine):** matching, severity, order, and `response:` are declared
+in `rules/process.yaml` / `file.yaml` / `network.yaml` (per-sensor detections); `rules/common.yaml`
+holds shared lists + Layer 1/2 config. `pkg/detector/yaml_detector.go` is the engine (plus Go-only
+pipeline logic: ppid==1 skip, ancestry walk, telemetry); `pkg/detector/response.go` executes
+responses. Resolver is `pkg/workload/`; sink/env config is `internal/config/config.go`.
 
 ---
 
-## Recently completed (2026-08-03 → 2026-08-05) — validated via validate.sh/validate-do-k8s.sh
+## What works
 
-- **Resolver rewrite.** Single runtime-agnostic `Engine` (`pkg/workload/resolver_engine.go`),
-  replacing per-`--runtime` resolvers. Fixed permanent `Unknown` caching, no cache eviction,
-  DOKS `enrich()` never querying a client, and the cgroup-migration case
-  (`isContainerRuntimeDaemonCgroup`) — see code comments there for why, not repeated here.
-- **Rule redesign vs Falco/Tetragon.** Added `has_tty`/`args` to `exec_event`
-  (`execsnoop.bpf.c`/`event.h`), tightened `T1059`/`T1105`/`T1036` (`rules/process.yaml`
-  comments explain each). Still-open gaps documented as comments in `rules/*.yaml`, no code:
-  `T1611`/`T1053.003` need `Fmode & FMODE_WRITE` gating, `T1070.003` needs `O_TRUNC`/
-  `unlink`/`rename`, `T1003.008`'s credential path list is incomplete, network hook could add
-  `l4proto`.
+- **Three kernel sensors** — `execsnoop.bpf.c` (`tracepoint/syscalls/sys_enter_execve`),
+  `lsm-file.bpf.c` (`lsm.s/file_open`, plus `do_sys_openat2` k/kretprobes for the denial path),
+  `lsm-connect.bpf.c` (`lsm/socket_connect`).
+- **Declarative detection.** Rules, severities, exceptions, and responses live in YAML; tuning a
+  rule needs no Go or kernel change. The loader fail-fasts on unknown severities, out-of-order
+  detections, unknown list references, and invalid responses.
+- **Runtime-agnostic workload resolution.** One `Engine` (`pkg/workload/resolver_engine.go`)
+  resolves Docker and CRI containers by mount namespace, with cache eviction and a `/proc` prewarm
+  that sidesteps the cgroup-migration race.
+- **Response actions.** `kill_process` works. `block_ip` is alert-only (see below).
+- **Alert sinks.** File (always), Redis pub/sub (live dashboard, drops LOW), Postgres/Supabase
+  (persistence).
 
-**Still open (not blocking, parallel-track — revisit opportunistically before 8/16):**
-- **Short-id fallback can still stick permanently** if `RuntimeClient.Enrich` fails once —
-  blocks the trusted-app whitelist below (`service_in` needs a real name, not a short-id).
-- **`DEBUG:` log lines kept intentionally** — personal project, no strict log hygiene needed.
+## Known limitations
 
----
+These are real and unfixed. Each notes how a production EDR handles it.
 
-## Implemented but NOT yet live-validated
+- **PID-reuse race in `kill_process`.** The responder calls `syscall.Kill(a.Pid, SIGKILL)` on a pid
+  read from an event that may be up to 60s old (see the pending buffer below). Nothing verifies the
+  pid still refers to the process that generated the event, so on a churning node the signal can
+  land on an unrelated process. *Tetragon keys process identity on an `ExecId` derived from pid +
+  start time, so a recycled pid never matches.* The cheap fix here would be to refuse to act on any
+  alert older than a few hundred ms.
+- **Unbounded pending buffer.** `pendingBuf` (`cmd/edr-monitor/main.go`) holds events whose
+  namespace has not resolved yet, for up to 60s, with no size cap; each entry pins its raw event
+  allocation. A burst or a K8s cold start can accumulate a large number of them. The retry worker
+  also holds `pendingMu` across an entire tick while calling `syscall.Kill(pid, 0)` per entry, so a
+  large buffer stalls the enricher and kernel events get dropped.
+- **Alert dispatch is synchronous and untimed.** One goroutine writes to every sink in series with
+  `context.Background()` — no timeout — and the Supabase sink does one un-batched `INSERT` per
+  alert. A slow or hung database blocks the whole alert path until `alertCh` fills and alerts are
+  dropped. Sinks should each own a goroutine and a bounded queue.
+- **Detection is per-event, with no state.** Rules match a single event; there is no correlation,
+  sequencing, or behavioral baseline. `docs/BEHAVIOR-MODULE-DESIGN.md` sketches one; it was never
+  built.
+- **`block_ip` kernel side is not compiled.** The `blocked_ips` LPMTrie in `kernel/lsm-connect.bpf.c`
+  is commented out, so the responder logs and skips — network rules are alert-only. Activation
+  steps are in `pkg/detector/response.go`.
+- **GKE service CIDR is not covered.** `rules/common.yaml` `private_ranges` lists RFC 1918,
+  loopback, and link-local. GKE ClusterIPs are `34.118.x.x`, outside all of them, so
+  ClusterIP-to-ClusterIP traffic on GKE fires `T1041` as external exfiltration. There used to be
+  Go code auto-detecting this CIDR from GCP metadata, but it wrote to a variable nothing read; it
+  was deleted 2026-08-12. The fix is one entry in `private_ranges`, not Go code. DOKS is unaffected
+  (its service CIDR is inside RFC 1918).
+- **Trusted-application whitelisting is unsolved.** `customer_applications` matches on `comm`, not
+  on the application, so an app whose `comm` is `python` cannot be whitelisted meaningfully. This
+  is not academic: it caused the agent to SIGKILL cilium on DOKS (T1552_004 on its Hubble
+  `server.key`), and the DaemonSet was pulled on 2026-07-10 as a result. A narrow fix landed for
+  one case (`T1552_004` excepts `service_in: own_tls_cert_services`), but the general problem — a
+  per-service action profile rather than a global name list — was never designed. **Do not
+  redeploy to a cilium cluster without addressing this.**
+- **kube-system pods do not resolve on a cold node.** They come back as `service=k8s-pod-<hash>`
+  with an empty namespace, because resolution needs a CNI that cilium itself provides — so
+  `ignore_namespaces: [kube-system]` does not catch them.
+- **Short-id fallback is sticky.** If `RuntimeClient.Enrich` fails once, the namespace caches a
+  `container-<shortid>` service name and never retries.
+- **Event structs are hand-mirrored.** `internal/processor` duplicates `kernel/event.h` by hand and
+  nothing enforces that they match. bpf2go already emits a BTF-derived `processExecEvent`
+  (`pkg/bpf/process_x86_bpfel.go`) that cannot drift — it is simply unused, because importing it
+  would make `internal/processor` and the detector linux-only and untestable off a BPF host. A
+  compile-time size assertion in `pkg/bpf` would close the gap for `exec_event` at zero runtime
+  cost. *Tetragon generates its event types from BTF rather than keeping a parallel copy.*
+- **Unexplained OOMKill (2026-07-14, exit 137).** One EDR pod ran out of memory ~9h15m into a load
+  test. The most likely cause — a file-dedup map that never evicted — was fixed on 2026-08-12
+  (`internal/dedup`), but this was never re-run against load, so the fix is unconfirmed against the
+  original symptom.
+- **The network rules and the ancestry walk have no unit tests.** `cmd/edr-monitor` has none at
+  all — it cannot be tested off a BPF host, which is part of why the dedup cache was extracted to
+  `internal/dedup`. Run `make test` for the current state rather than trusting any figure here.
+- **`validate.sh` T1611 overlay test is disabled**, pending the host-reads-container-overlay rule
+  and its allowlist design.
 
-- **Process-rule severity downgrade for unresolved service (2026-08-05)** — `T1059`, both
-  `T1105` entries, `T1613` (not `T1036`); see comments in `rules/process.yaml`,
-  `pkg/rules/loader.go`, `pkg/detector/yaml_detector.go` for what/why. **Verified unit-level
-  only** (`Detect()` called directly with a mocked unresolved service) — not yet confirmed
-  against a real running agent/alert pipeline.
+## Performance
 
----
-
-## Active design — trusted-application whitelist (agreed direction, NOT yet built)
-
-**Problem.** `customer_applications` matches on comm, not the app: localstack reading its own
-TLS cert has `comm=python`, so `T1552_004` fires and `kill_process` SIGKILLs it — adding
-`localstack` to the whitelist does nothing. Same class of bug killed cilium on K8s.
-
-**Agreed model:** identify by resolved **service** (not comm), scoped to **known actions only**
-(not blanket trust) — e.g. localstack may read its own `*.pem/.key` and call AWS, nothing else
-outside that profile is exempted. Options weighed: global service skip (too coarse, rejected),
-per-rule `service_in` exception (reuses the existing, tested primitive — **chosen
-mechanism**), path exception (narrowest, whack-a-mole per app). Direction = `service_in`
-expressed as a per-service action profile — design the profile shape before coding, do NOT
-quick-patch.
-
-**First narrow use, DONE (2026-08-05) — not the full redesign.**
-`T1552_004_private_keys` excepts `service_in: own_tls_cert_services` for localstack's cert
-read (see `rules/common.yaml`/`file.yaml` comments for why). Process rules still don't carry
-`service` at all — only file/network rules do.
-
-**Out of scope: cilium.** Resolves to `service=k8s-pod-<hash>`, empty namespace (resolver
-can't identify kube-system pods before CNI is up) — needs a namespace-resolution fix first.
-
----
-
-## Plan — next steps
-
-1. **K8s load test — paused, not closed out (2026-07-14).** order-processor capped at ~300
-   req/s (LocalStack's own routing layer was the bottleneck; swapping to
-   `amazon/dynamodb-local` gave ~4x throughput but still short of the 50k/5k target — see
-   `docs/PERFORMANCE.md` Attempt 2). eBPF agent itself handled the load fine (no crashes, no
-   kill_process incidents) — one EDR pod OOMKilled ~9h15m in, see Deferred issues below.
-   Next candidate if resumed: a synthetic load generator in a VM, not another REST app on K8s.
-2. **Activate `block_ip` kernel side — AFTER any load test** (active blocking would skew
-   traffic). Needs `lsm-connect.bpf.c` map uncomment + `go generate` on the Linux VM — the
-   sanctioned exception to the no-BPF-edits rule (see `pkg/detector/response.go`).
-3. **Opportunistic, no schedule:** items in Deferred / known issues below.
-
----
-
-## Deferred / known issues (documented, none blocking)
-
-- **EDR pod OOMKilled after ~9h15m uptime (2026-07-14, exit 137) — cause unconfirmed, not
-  root-caused.** No crash-loop/panic, just ran out of memory during a load-test burst
-  (~45-47k events/10s). Decision: treat as resource sizing (bump DaemonSet limits to match
-  actual expected event rate) rather than root-causing now — not confirmed to be a leak.
-- **`block_ip` kernel side not compiled** (= Plan item 2). `blocked_ips` LPMTrie map in
-  `kernel/lsm-connect.bpf.c` is commented out — responder skips with a log line (alert-only).
-- **`validate.sh` T1611 overlay test out** — blocked on the disabled T1611
-  host-reads-container-overlay rule and its allowlist design.
-- **File-dedup shard maps never evict** — `fileDedupShards_array` (main.go) has no sweep;
-  entries ({pid, filename} → time) accumulate forever. Tiny/slow growth. Fix: periodic sweep
-  dropping entries older than `fileDedupWindow`.
-- **`network_init.go` privateNets is dead code** — populated but never read; `private_ranges`
-  YAML list is the real check. Remove or wire when touched next.
-- **EDR DaemonSet removed from DO K8s once (2026-07-10)** — was SIGKILLing cilium (T1552_004 on
-  its Hubble `server.key`), blocking node scheduling. Re-add only after the trusted-app
-  whitelist fix, else it re-kills cilium on the next Hubble cert rotation.
-- **cilium namespace resolution** — kube-system pods resolve to `service=k8s-pod-<hash>`, empty
-  namespace (resolver needs CNI that cilium itself provides — chicken/egg on a cold node), so
-  `ignore_namespaces: [kube-system]` doesn't catch them. See Active design "out of scope" note.
-- **Short-id fallback caches permanently** — see "Recently completed" above.
-
-**Dedup gotcha (keep in mind when touching the enricher):** `fileDedupKey` is {Pid, Filename}
-— deliberately no comm (sensor comm is the THREAD name; including it caused double alerts).
-`runc:[…]` events are excluded from the dedup map: runc reads /etc/passwd + /etc/group during
-docker-exec setup and then execs the target under the SAME pid, so recording them would
-dedup-shadow the target's own first read (T1082 missed `cat /etc/passwd`).
+Load testing was paused, not completed (`docs/PERFORMANCE.md`). The order-processor test workload
+capped at ~300 req/s — LocalStack's own routing was the bottleneck, and swapping to
+`amazon/dynamodb-local` gave ~4x but still fell short of the 50k/5k target. The eBPF agent itself
+handled the offered load without crashes or spurious `kill_process` incidents. The agent's own
+ceiling was never actually measured, so no throughput claim should be made from this.
 
 ---
 
-## Future ideas (not built, no commitment to build)
+## Close-out changes (2026-08-12)
 
-**Behavioral & anomaly detection.** Baseline normal behavior from historical Supabase alert
-data, score deviations instead of only matching YAML rules. Not started; persistence
-infrastructure (Supabase, both environments) is ready — that's the input this would use.
-Input source, confirmed 2026-08-05: the LOW/info-level alert stream specifically — individually
-noisy, low-confidence events are exactly the raw material this needs, not a byproduct to
-filter out. The `service_unresolved_severity` downgrade (see "Implemented but NOT yet
-live-validated" above) is a direct contributor — it turns what would otherwise be a full-severity
-alert or a silently dropped event into a LOW-severity record, feeding this future input rather
-than being discarded either way.
+Only changes verifiable without a live environment were made — compiler, `go vet`, and unit tests.
+Anything whose correctness depends on runtime behavior under load was documented above instead.
 
-**Exception scaling** (found 2026-08-05, via localstack's `T1036` false positive). A
-service-name-keyed exception list doesn't scale: grows unboundedly (whack-a-mole per app), and
-goes stale the moment an image's startup behavior changes. Customer-authored exception rules
-are rejected outright, not just deferred — a compromised workload could blind its own
-detection. Middle path worth remembering: key the exception profile by **container image
-digest**, derive it from **observed behavior during a bounded learning window**, not authored
-by anyone — a new digest has no profile yet, so it falls back to strict detection (safe
-default) instead of silently mismatching a stale entry. Narrower than the anomaly-detection
-idea above (a bounded per-workload baseline, not general statistical scoring). Real
-infrastructure (learning-mode state machine, per-digest storage) — bigger than a rule tweak,
-solo-dev time/cost doesn't currently support it.
+- **File-dedup cache extracted to `internal/dedup` and given a sweep.** The old sharded maps in
+  `main.go` were keyed by `{pid, filename}` and never evicted; because pids keep changing, nothing
+  was ever overwritten and the maps grew for the process lifetime. Now swept on a 10s ticker, with
+  unit tests covering the window, sharding, growth bound, and concurrent access under `-race`.
+- **Shutdown no longer panics.** `close(rawCh)` used to race the ring-buffer readers, which are
+  never signalled — sending on a closed channel panics, so SIGTERM on a busy node produced a stack
+  trace instead of a clean exit. Now the loader closes first (readers exit on `os.ErrClosed`),
+  shutdown waits on their `WaitGroup`, and only then closes `rawCh`. `enrichedCh`/`alertCh` are
+  deliberately left open — their producers are still draining, and closing them would reintroduce
+  the same race. The drain is best-effort: in-flight events past the window are lost, not flushed.
+- **Dead code removed.** `network_init.go` (whole file, see the GKE note above), the `-runtime`
+  flag's orphaned constants, `extractPPidFromStatus`, `NewYAMLDetector`, a `lastLogged` map that
+  was written but never read, and the ancestry cache's write-only hit/miss counters.
+- **Logging trimmed.** All 18 `DEBUG:` lines are gone — per-event traces, resolve/detect timing,
+  and the 10s event counters. Error and degradation paths kept their logs.
+- **Makefile.** `make test` now runs with `-race` and includes `pkg/rules` + `pkg/workload`;
+  the dead `--runtime=docker` argument was removed from the run targets.
+
+**Not done, deliberately:** the PID-reuse guard, the pending-buffer cap, and async alert dispatch.
+All three change runtime behavior under load, which is exactly what can no longer be validated.
+
+---
+
+## Notes for anyone reading the code
+
+**Dedup key.** `internal/dedup` keys on `{pid, filename}` — deliberately no `comm`. The sensor's
+pid is the tgid (same for every thread), but its `comm` is the THREAD name
+(`bpf_get_current_comm`), so including it made differently-named threads of one process produce
+distinct keys and double-fire alerts ~80ms apart. `runc:[…]` events skip dedup entirely: runc reads
+`/etc/passwd` + `/etc/group` during docker-exec setup and then execs the target under the SAME pid,
+so recording them would dedup-shadow the target's own first read (T1082 would miss
+`cat /etc/passwd`).
+
+**Severity downgrade for unresolved services.** `service_unresolved_severity` in the process rules
+emits a reduced severity when a confirmed container has no real service name yet. This was verified
+at unit level only (`Detect()` with a mocked unresolved service), never against a running pipeline.
+
+**Build constraint.** `cmd/edr-monitor` embeds the generated `pkg/bpf/*.o` objects, which are
+gitignored. From a fresh clone it cannot be built or vetted until `make generate` runs on a Linux
+host with clang. `make vet` excludes it for this reason.
