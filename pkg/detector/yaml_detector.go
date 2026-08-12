@@ -185,12 +185,6 @@ func (c *compiledDetection) excepted(in matchInput) bool {
 	return false
 }
 
-// NewYAMLDetector creates a detector with no runtime awareness.
-// Use NewYAMLDetectorWithRuntime for runtime-specific whitelisting.
-func NewYAMLDetector(db *rules.RulesDB) *YAMLDetector {
-	return NewYAMLDetectorWithRuntime(db, "")
-}
-
 // NewYAMLDetectorWithRuntime creates a detector aware of the workload runtime.
 // Runtime affects whitelist matching for processes in unknown namespaces.
 func NewYAMLDetectorWithRuntime(db *rules.RulesDB, runtime workload.Runtime) *YAMLDetector {
@@ -681,7 +675,6 @@ func (d *YAMLDetector) checkProcessRules(event processor.ProcessEvent, res workl
 		// Parent-based and name-agnostic — safety is who spawned the process, not what
 		// it is called (closes the "attacker renames their tool to curl" gap).
 		if d.isParentTrusted(event.Ppid) {
-			// log.Printf("DEBUG: Suppressing state=unknown process %s (ppid %d has trusted ancestry)", comm, event.Ppid)
 			return nil
 		}
 

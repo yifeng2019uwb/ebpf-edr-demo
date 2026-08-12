@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -37,8 +36,6 @@ type AncestryEntry struct {
 type AncestryCache struct {
 	mu      sync.RWMutex
 	entries map[uint32]AncestryEntry
-	hits    atomic.Int64
-	misses  atomic.Int64
 }
 
 func NewAncestryCache() *AncestryCache {
@@ -117,11 +114,6 @@ func (c *AncestryCache) Lookup(pid uint32) (AncestryEntry, bool) {
 	c.mu.RLock()
 	e, ok := c.entries[pid]
 	c.mu.RUnlock()
-	if ok {
-		c.hits.Add(1)
-	} else {
-		c.misses.Add(1)
-	}
 	return e, ok
 }
 
@@ -145,9 +137,7 @@ func (c *AncestryCache) Sweep() {
 		}
 		delete(c.entries, pid)
 	}
-	size := len(c.entries)
 	c.mu.Unlock()
-	log.Printf("DEBUG: ancestry cache: %d entries, lookups hit=%d miss=%d", size, c.hits.Load(), c.misses.Load())
 }
 
 // processAlive reports whether /proc/<pid> still exists.

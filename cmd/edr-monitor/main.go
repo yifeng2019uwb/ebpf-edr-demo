@@ -42,8 +42,7 @@ const (
 	// threads share file descriptors & RAM. Keep only the first occurrence within the window.
 	fileDedupWindow = time.Second
 
-	cacheCleanUpWorkerInterval     = 5 * time.Minute
-	debugResolveDetecCheckInterval = 200 * time.Microsecond
+	cacheCleanUpWorkerInterval = 5 * time.Minute
 
 	// Graceful shutdown timings
 	shutdownWaitInterval = 100 * time.Millisecond // time for goroutines to finish between channel closes
@@ -152,14 +151,8 @@ func main() {
 	ancestry.Bootstrap()
 	det.SetAncestryCache(ancestry)
 
-	// Load GKE-specific service CIDRs only if detected in GKE environment.
-	// Avoids unnecessary metadata server calls on Docker/bare-metal.
-	if string(rulesDB.Env) == envGCP {
-		detector.AddGKEServiceCIDR()
-	}
-
 	// Start Readers
-	startEBPFReaders(loader, rawCh, &rawDropped, &resolvedEvents)
+	startEBPFReaders(loader, rawCh, &rawDropped)
 
 	// 3. Enricher Loop
 	startEnricherWorker(
@@ -255,7 +248,7 @@ type eventReader struct {
 
 // startEBPFReaders orchestrates the initialization and background worker loops
 // for reading raw samples from the eBPF ring buffers.
-func startEBPFReaders(loader *bpf.Loader, rawCh chan<- pipeline.RawEvent, rawDropped *atomic.Int64, resolvedEvents *atomic.Int64) {
+func startEBPFReaders(loader *bpf.Loader, rawCh chan<- pipeline.RawEvent, rawDropped *atomic.Int64) {
 	readers := []eventReader{
 		{pipeline.SourceExecsnoop, logNameProcess, func() ([]byte, error) {
 			rec, err := loader.ProcessRd.Read()
@@ -281,7 +274,7 @@ func startEBPFReaders(loader *bpf.Loader, rawCh chan<- pipeline.RawEvent, rawDro
 	}
 
 	for _, cfg := range readers {
-		go startEventReader(cfg, rawCh, rawDropped, resolvedEvents)
+		go startEventReader(cfg, rawCh, rawDropped)
 	}
 }
 
@@ -503,26 +496,14 @@ func startDetectorAndResponder(
 	responder *detector.Responder,
 	alertDropped *atomic.Int64,
 ) {
-	lastLogged := make(map[uint32]string) // debug: log a namespace's workload only when it changes
 	go func() {
 		for ev := range enrichedCh {
-			ns := mntNsIDOf(ev)
-			key := string(ev.Workload.State) + "|" + string(ev.Workload.Identity.Runtime) + "|" + ev.Workload.Identity.Service
-			if lastLogged[ns] != key {
-				lastLogged[ns] = key
-			}
-			detectStart := time.Now()
 			a := det.Detect(ev)
-			detectTime := time.Since(detectStart)
-			if detectTime > debugResolveDetecCheckInterval {
-				log.Printf("DEBUG: det.Detect took %v (slow detection)", detectTime)
-			}
-
 			if a == nil {
 				continue
 			}
-			log.Printf("DEBUG: Detect FIRED rule=%s level=%s service=%s comm=%s filename=%s dstIP=%s responseAction=%s",
-				a.Rule, a.Level, a.Workload.Identity.Service, a.Comm, a.Filename, a.DstIP, a.ResponseAction)
+			// Fired alerts are logged by the file sink (pkg/alertsink/file_sink.go),
+			// which writes the same line to stdout and to the alert log.
 
 			// Execute response BEFORE sending alert to avoid data race:
 			// If we send alert first, then modify a.ResponseAction, handler goroutine
@@ -567,13 +548,7 @@ func enrich(raw pipeline.RawEvent, r workload.WorkloadResolver) *pipeline.Enrich
 			Process:   ev,
 			Timestamp: time.Now(),
 		}
-		start := time.Now()
 		enriched.Workload = r.Resolve(ev)
-		resolveTime := time.Since(start)
-		if resolveTime > debugResolveDetecCheckInterval {
-			log.Printf("DEBUG: resolve process took %v", resolveTime)
-		}
-
 		return enriched
 
 	case pipeline.SourceOpensnoop:
@@ -587,12 +562,7 @@ func enrich(raw pipeline.RawEvent, r workload.WorkloadResolver) *pipeline.Enrich
 			File:      ev,
 			Timestamp: time.Now(),
 		}
-		start := time.Now()
 		enriched.Workload = r.Resolve(ev)
-		resolveTime := time.Since(start)
-		if resolveTime > debugResolveDetecCheckInterval {
-			log.Printf("DEBUG: resolve file took %v", resolveTime)
-		}
 		return enriched
 
 	case pipeline.SourceNetConnect:
@@ -606,13 +576,7 @@ func enrich(raw pipeline.RawEvent, r workload.WorkloadResolver) *pipeline.Enrich
 			Net:       ev,
 			Timestamp: time.Now(),
 		}
-		start := time.Now()
 		enriched.Workload = r.Resolve(ev)
-		resolveTime := time.Since(start)
-		if resolveTime > debugResolveDetecCheckInterval {
-			log.Printf("DEBUG: resolve net took %v", resolveTime)
-		}
-
 		return enriched
 	}
 
@@ -726,20 +690,6 @@ func isIsolatedWorkload(pidStr string) bool {
 	return strings.Contains(content, "docker-") || strings.Contains(content, "kubepods")
 }
 
-// extractPPidFromStatus parses ppid from /proc/[pid]/status content
-func extractPPidFromStatus(status string) uint32 {
-	for _, line := range strings.Split(status, "\n") {
-		if strings.HasPrefix(line, "PPid:") {
-			parts := strings.Fields(line)
-			if len(parts) >= 2 {
-				ppid, _ := strconv.ParseUint(parts[1], 10, 32)
-				return uint32(ppid)
-			}
-		}
-	}
-	return 0
-}
-
 // shouldSkipLayer1 checks if event should be skipped by Layer 1 fast-path filter
 // eBPF kernel code already validates data size, so no length checks needed
 // Returns true if event matches Layer 1 filters (ppid==0 or pid in safe list)
@@ -779,28 +729,7 @@ func shouldSkipLayer1(raw pipeline.RawEvent, safeInfraPIDs map[uint32]string) bo
 	return false // Process normally (fall through to Layer 2)
 }
 
-func startEventReader(cfg struct {
-	source  pipeline.Source
-	logName string
-	read    func() ([]byte, error)
-}, rawCh chan<- pipeline.RawEvent, rawDropped *atomic.Int64, resolvedEvents *atomic.Int64) {
-	var eventCount atomic.Int64
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
-
-	// log the number of events and resolved events in last 10s for debugging
-	var prevResolvedEvents int64
-	go func() {
-		for range ticker.C {
-			count := eventCount.Load()
-			currentResolved := resolvedEvents.Load()
-			resolvedDelta := currentResolved - prevResolvedEvents
-			prevResolvedEvents = currentResolved
-			log.Printf("DEBUG: %s produced %d events, resolved=%d in last 10s", cfg.logName, count, resolvedDelta)
-			eventCount.Store(0)
-		}
-	}()
-
+func startEventReader(cfg eventReader, rawCh chan<- pipeline.RawEvent, rawDropped *atomic.Int64) {
 	for {
 		data, err := cfg.read()
 		if err != nil {
@@ -811,7 +740,6 @@ func startEventReader(cfg struct {
 			time.Sleep(time.Second)
 			continue
 		}
-		eventCount.Add(1)
 
 		select {
 		case rawCh <- pipeline.RawEvent{Source: cfg.source, Data: append([]byte(nil), data...)}:

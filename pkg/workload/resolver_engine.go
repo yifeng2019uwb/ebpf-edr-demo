@@ -323,8 +323,6 @@ func (e *Engine) Resolve(event interface{}) ResolveResult {
 	}
 
 	// One in-flight resolution per namespace (dedup).
-	log.Printf("DEBUG: uncached event ns=%d ", mntNsID)
-
 	if _, inflight := e.resolving.LoadOrStore(mntNsID, true); inflight {
 		return e.result(StatePending, WorkloadIdentity{Runtime: RuntimeUnknown})
 	}
@@ -336,7 +334,6 @@ func (e *Engine) asyncResolve(mntNsID, pid uint32, cgroupLeaf string) {
 	defer e.resolving.Delete(mntNsID)
 	e.lookupSem <- struct{}{}
 	defer func() { <-e.lookupSem }()
-	log.Printf("DEBUG: asyncResolve ns=%d pid=%d cgroupLeaf=%s ", mntNsID, pid, cgroupLeaf)
 
 	// Container ID + runtime: prefer the kernel-captured leaf (race-free, valid even
 	// after the process exits); fall back to a procfs read only when the leaf is absent.
@@ -361,8 +358,8 @@ func (e *Engine) asyncResolve(mntNsID, pid uint32, cgroupLeaf string) {
 		// now (runtime known from which daemon matched, not guessed); name stays pending,
 		// same tradeoff already accepted for the short-id fallback below.
 		if rt2, ok := isContainerRuntimeDaemonCgroup(cgroupLeaf); ok {
-			log.Printf("DEBUG: asyncResolve ns=%d pid=%d cgroupLeaf=%q is daemon cgroup (runtime=%s, migration in progress) — resolving as container, name pending",
-				mntNsID, pid, cgroupLeaf, rt2)
+			log.Printf("resolver engine: ns=%d cgroup %q is the %s daemon's own cgroup (migration in progress) — resolved as container, service name pending",
+				mntNsID, cgroupLeaf, rt2)
 			res := e.result(StateResolved, WorkloadIdentity{Runtime: rt2, Service: PendingContainerService})
 			// "pending", not empty — reads as intentionally unknown, not broken data.
 			res.Meta.Container = PendingMetaValue
@@ -373,7 +370,6 @@ func (e *Engine) asyncResolve(mntNsID, pid uint32, cgroupLeaf string) {
 
 		// Genuinely unrelated to any container runtime (e.g. exim4.service) — cache so
 		// repeated activity in this namespace doesn't re-trigger resolution every event.
-		log.Printf("DEBUG: asyncResolve ns=%d pid=%d cgroupLeaf=%q -> unparseable, caching Unknown", mntNsID, pid, cgroupLeaf)
 		e.store(mntNsID, e.result(StateResolved, WorkloadIdentity{Runtime: RuntimeUnknown}))
 		return
 	}
@@ -390,8 +386,8 @@ func (e *Engine) asyncResolve(mntNsID, pid uint32, cgroupLeaf string) {
 	// No client yet, or lookup failed → keep the container visible with a short-ID name.
 	// Detection still works (gating keys on mnt_ns_id + container id); only the name is
 	// degraded until the runtime client connects.
-	log.Printf("DEBUG: asyncResolve ns=%d containerID=%s ENRICH FAILED, falling back to short-id runtime=%s",
-		mntNsID, containerID, rt)
+	log.Printf("resolver engine: metadata lookup failed for container %s (ns=%d, runtime=%s) — falling back to short-id service name",
+		containerID, mntNsID, rt)
 	e.store(mntNsID, e.shortIDResult(rt, containerID))
 }
 

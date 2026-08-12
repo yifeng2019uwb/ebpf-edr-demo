@@ -49,22 +49,22 @@ func (c *CriClient) Enrich(ctx context.Context, containerID string) (WorkloadIde
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
-		log.Printf("DEBUG: crictl ps --id %s failed: %v, stderr=%s", containerID, err, stderr.Bytes())
+		log.Printf("cri client: crictl ps --id %s failed: %v, stderr=%s", containerID, err, stderr.Bytes())
 		return WorkloadIdentity{}, WorkloadMeta{}, false
 	}
 	var list criContainerList
 	if err := json.Unmarshal(out, &list); err != nil {
-		log.Printf("DEBUG: crictl ps --id %s: json.Unmarshal failed: %v, output=%s", containerID, err, out)
+		log.Printf("cri client: crictl ps --id %s: json.Unmarshal failed: %v, output=%s", containerID, err, out)
 		return WorkloadIdentity{}, WorkloadMeta{}, false
 	}
 	if len(list.Containers) == 0 {
-		log.Printf("DEBUG: crictl ps --id %s: 0 containers returned", containerID)
+		log.Printf("cri client: crictl ps --id %s: 0 containers returned", containerID)
 		return WorkloadIdentity{}, WorkloadMeta{}, false
 	}
 	labels := list.Containers[0].Labels
 	name := labels[k8sContainerNameLabel]
 	if name == "" {
-		log.Printf("DEBUG: crictl ps --id %s: no %s label, labels=%v", containerID, k8sContainerNameLabel, labels)
+		log.Printf("cri client: crictl ps --id %s: no %s label, labels=%v", containerID, k8sContainerNameLabel, labels)
 		return WorkloadIdentity{}, WorkloadMeta{}, false
 	}
 	return WorkloadIdentity{Runtime: RuntimeK8s, Service: name},

@@ -38,7 +38,7 @@ func (d *DockerClient) Runtime() Runtime { return RuntimeDocker }
 func (d *DockerClient) Enrich(ctx context.Context, containerID string) (WorkloadIdentity, WorkloadMeta, bool) {
 	inspect, err := d.cli.ContainerInspect(ctx, containerID)
 	if err != nil {
-		log.Printf("DEBUG: docker ContainerInspect(%s) failed: %v", containerID, err)
+		log.Printf("docker client: ContainerInspect(%s) failed: %v", containerID, err)
 		return WorkloadIdentity{}, WorkloadMeta{}, false
 	}
 	name := strings.TrimPrefix(inspect.Name, "/")
