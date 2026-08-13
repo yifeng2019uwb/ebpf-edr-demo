@@ -10,7 +10,6 @@ bin/
 # --- eBPF Generated Files ---
 # Ignore compiled BPF object files — Go wrappers (*_bpfel.go, *_bpfeb.go) are tracked
 # so CI can build without needing clang installed.
-*.o
 infra/ebpf_edr_infra
 
 # --- Dependency Management ---
