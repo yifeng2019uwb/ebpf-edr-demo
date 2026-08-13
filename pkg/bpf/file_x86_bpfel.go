@@ -13,6 +13,21 @@ import (
 	"github.com/cilium/ebpf"
 )
 
+type fileFileEvent struct {
+	_         structs.HostLayout
+	MntNsId   uint64
+	EventTime uint64
+	Pid       int32
+	Ppid      int32
+	Uid       uint32
+	F_mode    uint32
+	Ret       int32
+	Pad       uint32
+	Comm      [16]int8
+	Filename  [256]int8
+	Cgroup    [128]int8
+}
+
 type fileOpenat2Args struct {
 	_        structs.HostLayout
 	Filename uint64
@@ -77,6 +92,9 @@ type fileMapSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type fileVariableSpecs struct {
+	UnusedExecEvent *ebpf.VariableSpec `ebpf:"__unused_exec_event"`
+	UnusedFileEvent *ebpf.VariableSpec `ebpf:"__unused_file_event"`
+	UnusedNetEvent  *ebpf.VariableSpec `ebpf:"__unused_net_event"`
 }
 
 // fileObjects contains all objects after they have been loaded into the kernel.
@@ -114,6 +132,9 @@ func (m *fileMaps) Close() error {
 //
 // It can be passed to loadFileObjects or ebpf.CollectionSpec.LoadAndAssign.
 type fileVariables struct {
+	UnusedExecEvent *ebpf.Variable `ebpf:"__unused_exec_event"`
+	UnusedFileEvent *ebpf.Variable `ebpf:"__unused_file_event"`
+	UnusedNetEvent  *ebpf.Variable `ebpf:"__unused_net_event"`
 }
 
 // filePrograms contains all programs after they have been loaded into the kernel.

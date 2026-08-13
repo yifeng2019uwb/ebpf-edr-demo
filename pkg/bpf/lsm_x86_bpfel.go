@@ -8,9 +8,24 @@ import (
 	_ "embed"
 	"fmt"
 	"io"
+	"structs"
 
 	"github.com/cilium/ebpf"
 )
+
+type lsmNetEvent struct {
+	_         structs.HostLayout
+	MntNsId   uint64
+	EventTime uint64
+	DstIp     uint32
+	DstPort   uint16
+	Pad1      uint16
+	Pid       int32
+	Ppid      int32
+	Uid       uint32
+	Pad2      uint32
+	Comm      [16]int8
+}
 
 // loadLsm returns the embedded CollectionSpec for lsm.
 func loadLsm() (*ebpf.CollectionSpec, error) {
@@ -68,6 +83,9 @@ type lsmMapSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type lsmVariableSpecs struct {
+	UnusedExecEvent *ebpf.VariableSpec `ebpf:"__unused_exec_event"`
+	UnusedFileEvent *ebpf.VariableSpec `ebpf:"__unused_file_event"`
+	UnusedNetEvent  *ebpf.VariableSpec `ebpf:"__unused_net_event"`
 }
 
 // lsmObjects contains all objects after they have been loaded into the kernel.
@@ -103,6 +121,9 @@ func (m *lsmMaps) Close() error {
 //
 // It can be passed to loadLsmObjects or ebpf.CollectionSpec.LoadAndAssign.
 type lsmVariables struct {
+	UnusedExecEvent *ebpf.Variable `ebpf:"__unused_exec_event"`
+	UnusedFileEvent *ebpf.Variable `ebpf:"__unused_file_event"`
+	UnusedNetEvent  *ebpf.Variable `ebpf:"__unused_net_event"`
 }
 
 // lsmPrograms contains all programs after they have been loaded into the kernel.

@@ -84,6 +84,9 @@ type processMapSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type processVariableSpecs struct {
+	UnusedExecEvent *ebpf.VariableSpec `ebpf:"__unused_exec_event"`
+	UnusedFileEvent *ebpf.VariableSpec `ebpf:"__unused_file_event"`
+	UnusedNetEvent  *ebpf.VariableSpec `ebpf:"__unused_net_event"`
 }
 
 // processObjects contains all objects after they have been loaded into the kernel.
@@ -121,6 +124,9 @@ func (m *processMaps) Close() error {
 //
 // It can be passed to loadProcessObjects or ebpf.CollectionSpec.LoadAndAssign.
 type processVariables struct {
+	UnusedExecEvent *ebpf.Variable `ebpf:"__unused_exec_event"`
+	UnusedFileEvent *ebpf.Variable `ebpf:"__unused_file_event"`
+	UnusedNetEvent  *ebpf.Variable `ebpf:"__unused_net_event"`
 }
 
 // processPrograms contains all programs after they have been loaded into the kernel.

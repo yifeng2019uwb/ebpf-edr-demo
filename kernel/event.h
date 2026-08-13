@@ -91,4 +91,10 @@ struct lpm_key {
 	__u32 addr;
 };
 
+// Add this at the bottom of kernel/event.h:
+// Forces clang to retain BTF metadata for bpf2go auto-generation.
+struct exec_event *__unused_exec_event __attribute__((unused));
+struct file_event *__unused_file_event __attribute__((unused));
+struct net_event  *__unused_net_event  __attribute__((unused));
+
 #endif /* __EVENT_H */
