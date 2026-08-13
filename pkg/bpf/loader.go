@@ -27,9 +27,9 @@ type Loader struct {
 	NetRd     *ringbuf.Reader
 
 	// kernel resources — closed by Close()
-	processObjs processObjects
-	fileObjs    fileObjects
-	lsmObjs     lsmObjects
+	processObjs ProcObjects
+	fileObjs    FsObjects
+	lsmObjs     SockObjects
 	links       []link.Link
 }
 
@@ -44,16 +44,16 @@ func Load() (*Loader, error) {
 
 	// ── Load eBPF object collections ──────────────────────────────────────────
 
-	if err := loadProcessObjects(&l.processObjs, nil); err != nil {
+	if err := LoadProcObjects(&l.processObjs, nil); err != nil {
 		return nil, fmt.Errorf("loading process objects: %w", err)
 	}
 
-	if err := loadFileObjects(&l.fileObjs, nil); err != nil {
+	if err := LoadFsObjects(&l.fileObjs, nil); err != nil {
 		l.processObjs.Close()
 		return nil, fmt.Errorf("loading file objects: %w", err)
 	}
 
-	if err := loadLsmObjects(&l.lsmObjs, nil); err != nil {
+	if err := LoadSockObjects(&l.lsmObjs, nil); err != nil {
 		l.processObjs.Close()
 		l.fileObjs.Close()
 		return nil, fmt.Errorf("loading lsm objects: %w", err)
