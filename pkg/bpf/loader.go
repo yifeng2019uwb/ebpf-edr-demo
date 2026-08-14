@@ -13,10 +13,10 @@ import (
 
 // ProcessEventBurstSize is the perf buffer size for process events.
 // Sized to absorb container startup bursts: typical container spawns 200-300 processes rapidly.
-// 256KB buffer can hold ~1770 ProcessEvent structs (144 bytes each), providing safe headroom
+// 256KB buffer can hold ~940 ProcessEvent structs (544 bytes each), providing safe headroom
 // for concurrent process creation without kernel dropping/truncating events.
 // If "rawCh full" warnings appear, increase this constant.
-const ProcessEventBurstSize = 256 * 1024
+const ProcessEventBurstSize = 512 * 1024
 
 // Loader holds all loaded BPF objects, kernel attachments, and event readers.
 // Call Close() to detach all probes and release kernel resources.
