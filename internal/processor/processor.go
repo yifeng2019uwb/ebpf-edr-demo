@@ -1,70 +1,34 @@
-// Package processor defines the event structs that map 1:1 onto the C structs
-// produced by each eBPF kernel program, plus byte-conversion helpers.
+// Package processor defines the event types that raw kernel bytes are mapped
+// onto, plus byte-conversion helpers.
 //
-// Field order, types, and padding must EXACTLY match kernel/event.h:
-//
-//	ProcessEvent  ↔  struct exec_event
+//	ProcessEvent  ↔  struct exec_event  (kernel/event.h)
 //	FileEvent     ↔  struct file_event
 //	NetEvent      ↔  struct net_event
 //
-// Go maps raw kernel bytes directly onto these structs — there is no
-// serialization layer, so the layout must be byte-perfect.
+// Each is a defined type over the bpf2go-generated struct. Those layouts are
+// derived from the compiled object's BTF, so they cannot drift from the C
+// definition — which is why there is no hand-written mirror here any more.
+// Per-field documentation lives in kernel/event.h.
+//
+// Defined types rather than aliases: the workload resolver dispatches on the
+// ResolveInfo method, and methods cannot be attached to another package's type.
 package processor
 
 import (
 	"bytes"
 	"net"
+	"unsafe"
 
-	"ebpf-edr-demo/pkg"
+	"ebpf-edr-demo/pkg/bpf"
 )
 
-// ── Event structs ─────────────────────────────────────────────────────────────
+// ── Event types ───────────────────────────────────────────────────────────────
 
-// ProcessEvent matches event.h struct exec_event.
-// sizeof = 4+4+4+4+8+256+128+4+128+4 = 544 bytes, no implicit padding.
-type ProcessEvent struct {
-	Pid       int32                 // offset 0   — process ID (from kernel tgid)
-	Ppid      int32                 // offset 4   — parent process ID
-	Uid       int32                 // offset 8   — user ID (0=root)
-	MntNsId   uint32                // offset 12  — mount namespace ID — identifies container
-	EventTime uint64                // offset 16  — bpf_ktime_get_ns() (monotonic; convert via boot offset)
-	ExecPath  [pkg.ExecPathLen]byte // offset 24  — path as invoked (execve arg 0)
-	Cgroup    [pkg.CgroupLen]byte   // offset 280 — leaf cgroup name
-	HasTty    uint32                // offset 408 — 1 = controlling terminal attached (interactive)
-	Args      [pkg.ArgsLen]byte     // offset 412 — argv[1:], space-joined, bounded
-	Pad       uint32                // offset 540 — explicit padding (keeps size an 8-multiple)
-}
-
-// FileEvent matches event.h struct file_event.
-// sizeof = 8+8+4+4+4+4+4+4+16+256+128 = 440 bytes, no implicit padding.
-type FileEvent struct {
-	MntNsId   uint64                   // offset 0   — mount namespace ID
-	EventTime uint64                   // offset 8   — bpf_ktime_get_ns() (monotonic; convert via boot offset)
-	Pid       int32                    // offset 16  — process ID
-	Ppid      int32                    // offset 20  — parent process ID
-	Uid       uint32                   // offset 24  — user ID
-	Fmode     uint32                   // offset 28  — FMODE_READ(0x1)/FMODE_WRITE(0x2); 0 on denial path
-	Ret       int32                    // offset 32  — 0 = success (lsm hook); -EACCES/-EPERM = denied (kprobe)
-	Pad       uint32                   // offset 36  — explicit padding
-	Comm      [pkg.TaskCommLen]byte    // offset 40  — process name
-	Filename  [pkg.MaxFilenameLen]byte // offset 56  — canonical path (success) or raw user string (denial)
-	Cgroup    [pkg.CgroupLen]byte      // offset 312 — leaf cgroup name
-}
-
-// NetEvent matches event.h struct net_event.
-// sizeof = 8+8+4+2+2+4+4+4+4+16 = 56 bytes, no implicit padding.
-type NetEvent struct {
-	MntNsId   uint64                // offset 0  — mount namespace ID
-	EventTime uint64                // offset 8  — bpf_ktime_get_ns() (monotonic; convert via boot offset)
-	DstIp     uint32                // offset 16 — destination IP (network byte order)
-	DstPort   uint16                // offset 20 — destination port (network byte order)
-	Pad1      uint16                // offset 22 — explicit padding
-	Pid       int32                 // offset 24
-	Ppid      int32                 // offset 28
-	Uid       uint32                // offset 32
-	Pad2      uint32                // offset 36 — explicit padding
-	Comm      [pkg.TaskCommLen]byte // offset 40
-}
+type (
+	ProcessEvent bpf.ProcExecEvent
+	FileEvent    bpf.FsFileEvent
+	NetEvent     bpf.SockNetEvent
+)
 
 // ── Resolver input ────────────────────────────────────────────────────────────
 
@@ -87,14 +51,32 @@ func (e *NetEvent) ResolveInfo() (mntNsID, pid uint32, cgroupLeaf string, hasCgr
 
 // ── Converters ────────────────────────────────────────────────────────────────
 
-// CString converts a fixed-size BPF byte array to a Go string using C semantics.
+// CString converts a fixed-size BPF character array to a Go string using C semantics.
+// Takes []int8 because bpf2go renders C `char` arrays as int8; reinterpreting them as
+// bytes is layout-identical and allocation-free.
 // Uses IndexByte to find the first null byte — correct for BPF buffers where
 // bpf_ringbuf_reserve does NOT zero-initialize, so bytes after the null are garbage.
-func CString(b []byte) string {
-	if i := bytes.IndexByte(b, 0); i >= 0 {
-		return string(b[:i])
+func CString(b []int8) string {
+	if len(b) == 0 {
+		return ""
 	}
-	return string(b)
+	s := unsafe.Slice((*byte)(unsafe.Pointer(&b[0])), len(b))
+	if i := bytes.IndexByte(s, 0); i >= 0 {
+		return string(s[:i])
+	}
+	return string(s)
+}
+
+// RawString converts a fixed-size BPF character array to a Go string keeping the
+// whole buffer, nulls included. exec_event.args packs argv[1:] into fixed
+// NUL-padded slots, so stopping at the first null (as CString does) would drop
+// every argument after the first. Copies, so the result does not alias the
+// ring-buffer sample it came from.
+func RawString(b []int8) string {
+	if len(b) == 0 {
+		return ""
+	}
+	return string(unsafe.Slice((*byte)(unsafe.Pointer(&b[0])), len(b)))
 }
 
 // NetIP converts DstIp (network byte order stored as little-endian uint32)

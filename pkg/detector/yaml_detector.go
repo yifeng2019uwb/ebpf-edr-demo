@@ -626,7 +626,7 @@ func (d *YAMLDetector) checkProcessRules(event processor.ProcessEvent, res workl
 	// declared severity (its ceiling) could beat it.
 	isVerifiedContainer := isContainerContext(res)
 	unresolvedService := isServiceUnresolved(res)
-	in := matchInput{comm: comm, hasTty: event.HasTty != 0, args: string(event.Args[:])}
+	in := matchInput{comm: comm, hasTty: event.HasTty != 0, args: processor.RawString(event.Args[:])}
 	var best *alert.Alert
 	var bestRank int
 	for i := range d.processDetections {
@@ -791,7 +791,7 @@ func newFileAlert(event processor.FileEvent, res workload.ResolveResult, comm, f
 		Level: level, Rule: rule, Message: msg,
 		Pid: event.Pid, Ppid: event.Ppid, Uid: int32(event.Uid),
 		Comm: comm, Workload: res, Filename: filename,
-		Cgroup: processor.CString(event.Cgroup[:]), Fmode: event.Fmode, Ret: event.Ret,
+		Cgroup: processor.CString(event.Cgroup[:]), Fmode: event.F_mode, Ret: event.Ret,
 		EventTime:      event.EventTime,
 		ResponseAction: alert.ActionNone,
 	}

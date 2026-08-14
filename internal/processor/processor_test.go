@@ -4,22 +4,31 @@ import (
 	"testing"
 )
 
+// i8 renders a string as the []int8 that bpf2go produces for C char arrays.
+func i8(s string) []int8 {
+	b := make([]int8, len(s))
+	for i := range s {
+		b[i] = int8(s[i])
+	}
+	return b
+}
+
 func TestCString(t *testing.T) {
 	tests := []struct {
 		name  string
-		input []byte
+		input string
 		want  string
 	}{
-		{"null terminated", []byte("bash\x00garbage"), "bash"},
-		{"no null byte", []byte("bash"), "bash"},
-		{"empty string at start", []byte("\x00abc"), ""},
-		{"full path", []byte("/usr/bin/python3\x00"), "/usr/bin/python3"},
-		{"empty slice", []byte{}, ""},
+		{"null terminated", "bash\x00garbage", "bash"},
+		{"no null byte", "bash", "bash"},
+		{"empty string at start", "\x00abc", ""},
+		{"full path", "/usr/bin/python3\x00", "/usr/bin/python3"},
+		{"empty slice", "", ""},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := CString(tt.input)
+			got := CString(i8(tt.input))
 			if got != tt.want {
 				t.Fatalf("CString(%q) = %q, want %q", tt.input, got, tt.want)
 			}

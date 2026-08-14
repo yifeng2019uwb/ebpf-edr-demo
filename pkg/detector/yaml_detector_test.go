@@ -141,11 +141,18 @@ func newTestDetector(t *testing.T) *YAMLDetector {
 	return NewYAMLDetectorWithRuntime(db, workload.RuntimeDocker)
 }
 
+// setStr writes s into a BPF character array, which bpf2go renders as int8.
+func setStr(dst []int8, s string) {
+	for i := 0; i < len(s) && i < len(dst); i++ {
+		dst[i] = int8(s[i])
+	}
+}
+
 func processEvent(comm string, ppid int32) processor.ProcessEvent {
 	var ev processor.ProcessEvent
 	ev.Pid = 100
 	ev.Ppid = ppid
-	copy(ev.ExecPath[:], comm)
+	setStr(ev.ExecPath[:], comm)
 	return ev
 }
 
@@ -153,8 +160,8 @@ func fileEvent(comm, filename string, ppid int32) processor.FileEvent {
 	var ev processor.FileEvent
 	ev.Pid = 100
 	ev.Ppid = ppid
-	copy(ev.Comm[:], comm)
-	copy(ev.Filename[:], filename)
+	setStr(ev.Comm[:], comm)
+	setStr(ev.Filename[:], filename)
 	return ev
 }
 
